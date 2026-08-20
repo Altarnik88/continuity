@@ -28,17 +28,20 @@ export const REPO_METADATA_EXACT = Object.freeze([
   '.gitignore',
   'LICENSE',
   'README.md',
+  'README.ru.md',
   'SECURITY.md',
   ...PUBLIC_DIAGRAM_FILES,
   'package-lock.json',
   'package.json',
 ]);
+export const LOCALIZED_README_FILES = Object.freeze(['README.ru.md']);
 export const REQUIRED_REPO_METADATA = Object.freeze([
   '.gitattributes',
   '.github/workflows/ci.yml',
   '.gitignore',
   'LICENSE',
   'README.md',
+  'README.ru.md',
   'SECURITY.md',
   ...PUBLIC_DIAGRAM_FILES,
   'examples/snapshot.minimal.json',
@@ -61,6 +64,7 @@ export const DISTRIBUTABLE_FILES = Object.freeze([
   'continuity',
   'LICENSE',
   'README.md',
+  'README.ru.md',
   'SECURITY.md',
   ...PUBLIC_DIAGRAM_FILES,
   'examples',
@@ -369,7 +373,9 @@ export function assertRepositoryBoundaries(root, files = listRepositoryFiles(roo
     const absolute = path.join(resolvedRoot, ...file.split('/'));
     if (PUBLIC_TEXT_EXTENSIONS.has(extension) || PUBLIC_TEXT_EXACT.has(file)) {
       const text = readFileSync(absolute, 'utf8');
-      if (/[\u0400-\u052f]/u.test(text)) fail(`public repository text contains Cyrillic (${file})`);
+      if (!LOCALIZED_README_FILES.includes(file) && /[\u0400-\u052f]/u.test(text)) {
+        fail(`public repository text contains Cyrillic (${file})`);
+      }
     }
     if (file.startsWith(`${SKILL_PREFIX}scripts/`) && extension === '.mjs') {
       const source = readFileSync(absolute, 'utf8');
