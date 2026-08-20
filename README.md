@@ -1,8 +1,8 @@
 # Continuity
 
-Continuity is a local, source-backed continuity Skill for coding agents. It preserves a bounded record of project goals, constraints, work, evidence, verification, freshness, and user acceptance across sessions without turning old notes into truth.
+Continuity is a local, source-backed continuity Skill for coding agents. It preserves a bounded record of project goals, constraints, work, evidence, verification, freshness, and user acceptance across sessions without turning old notes into current truth. Its append-only journal is authoritative for what Continuity recorded; live sources, Git state, and the user remain authoritative for the project itself.
 
-The complete distributable Skill is the [`continuity/`](continuity/) directory. It is self-contained: it needs Node.js 22+ and Git, but no other Skill, background process, network service, model installation, or global runtime copy.
+The complete distributable Skill is the [`continuity/`](continuity/) directory. It is self-contained: it needs Node.js 22+ and Git, but no other Skill, planner, Coordinator, background process, network service, model installation, or global runtime copy.
 
 ## Install
 
@@ -36,12 +36,14 @@ The default runtime store is `<repository>/.continuity`. The Skill installation 
 
 - `HISTORY.ndjson` is the bounded, append-only, hash-chained journal.
 - `CURRENT.json` is a rebuildable projection, not an independent authority.
+- Input may come directly from the user or from any planning tool that supplies a ready goal, criteria, and plan. External planners are optional inputs, not dependencies.
+- Continuity owns the authoritative journal and validates its goals, criteria, TaskAccumulator, derived ready set, WorkPacket and assignment records, actors, context rollover, attempts, evidence, failures, backlog, and handoff state.
 - `inspect`, `inspect ready`, and `inspect wave` are read-only and recompute freshness from live Git state and evidence.
 - Execution, verification, freshness, and user acceptance are separate states. None implies another.
-- A Coordinator may consume the protocol, but is optional and is never launched by Continuity.
+- An optional Coordinator in the agent environment consumes Continuity outputs, selects available models and actors, distributes packets, launches executors and independent verifiers, integrates their results, and replans when required.
 - Graphify support is optional navigation metadata. It never authorizes evidence, verification, freshness, or acceptance.
 
-Continuity starts no daemon, opens no network connection, and runs no interview flow.
+Continuity itself launches no planner, Coordinator, daemon, network client, model, executor, or verifier, and runs no interview flow. It may invoke required local Git commands to read repository state. A Coordinator writes continuity state only through the helper's validated commands.
 
 ## Security and limitations
 

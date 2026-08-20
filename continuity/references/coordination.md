@@ -5,11 +5,13 @@ Contract version: `1`
 
 The identifier is retained as a stable compatibility value for existing protocol consumers. It is not the product name or a dependency on another Skill.
 
-Continuity owns goals, criteria, TaskAccumulator, decisions, actors, attempts, results, evidence, verification, freshness, user acceptance, failures, blockers, conflicts, lessons, context handoff, backlog, the append-only journal, and the rebuilt projection.
+Input may come directly from the user or from any planning tool that supplies a ready goal, criteria, and plan grounded in the user's intent. A planning tool is optional and is not a Continuity dependency. Missing input remains an explicit plan gap.
 
-Coordinator owns the dependency graph, ready set, work packets, agent selection, load balancing, waves, file ownership, context replacement, integration, independent verification launch, and repair/replan policy.
+Continuity owns the authoritative append-only journal and the validated state recorded or derived from it: goals, criteria, TaskAccumulator and dependency data, decisions, derived ready sets and waves, WorkPacket and assignment records, actors, context rollover, attempts, results, evidence, verification, freshness, user acceptance, failures, blockers, conflicts, lessons, backlog, handoff, and the rebuildable projection.
 
-Continuity does not run a daemon, network client, interview, or Graphify process. There is no top-level `coordinate` command. Coordinator never writes journal bytes except through this helper, and it launches nothing.
+An optional Coordinator in the agent environment consumes those outputs. It chooses from available models and actors, distributes validated WorkPackets, launches executors and independent verifiers, manages load and file ownership in the execution environment, integrates results, and applies repair or replan policy.
+
+Continuity does not launch a planner, Coordinator, daemon, network client, model, executor, verifier, interview, or Graphify process. It may invoke required local Git commands to read repository state. There is no top-level `coordinate` command. A Coordinator never writes journal bytes directly; every continuity write goes through this helper. External planners and Coordinators are optional consumers, not dependencies.
 
 ## Operations
 
@@ -39,19 +41,19 @@ Multi-event recipes preflight every draft against the projected intermediate sta
 
 ## Required cycle
 
-1. Coordinator reads `inspect ready`.
-2. Continuity returns the active goal, required criteria, available tasks, dependencies, previous attempts, failed/forbidden approaches, blockers, ownership, live freshness, required capabilities, and the exact next action per task.
-3. Coordinator forms WorkPackets (`inspect wave` or local `buildWorkPackets`).
-4. Coordinator records `assign --assignee` for one actor.
-5. The actor records `start`, then a structured `report` / `result` / `fail`.
-6. Continuity validates and appends. Executor text is not authorizing evidence.
-7. Coordinator records `verify` with a different actor when required.
-8. Continuity rebuilds the projection on write. Read-only inspect does not repair a missing projection; use `rebuild`.
-9. Coordinator builds the next wave from the new ready set.
+1. The user or an optional planning tool supplies a ready goal, criteria, and plan through validated helper input.
+2. Coordinator reads `inspect ready` when external coordination is in use.
+3. Continuity returns the active goal, required criteria, available tasks, dependencies, previous attempts, failed/forbidden approaches, blockers, ownership, live freshness, required capabilities, and the exact next action per task.
+4. Continuity derives candidate WorkPackets through `inspect wave` or local `buildWorkPackets`; Coordinator selects and distributes a packet.
+5. Coordinator selects an available actor/model, records `assign --assignee` through the helper, and actually launches the executor in the agent environment.
+6. The actor records `start`, then a structured `report` / `result` / `fail` through the helper.
+7. Continuity validates and appends. Executor text is not authorizing evidence.
+8. Coordinator launches a different eligible actor/run for independent verification when required, then records `verify` through the helper.
+9. Coordinator integrates the verified result or replans after failure. Continuity rebuilds the projection on write and derives the next ready set and wave. Read-only inspect does not repair a missing projection; use `rebuild`.
 
 ## Honest plan gaps
 
-`inspect ready` includes `plan.sufficient` and `plan.missing`. Missing `project`, `goal`, `criteria`, or `taskAccumulator` is reported. Continuity does not interview, invent a product goal, or start a specification session.
+`inspect ready` includes `plan.sufficient` and `plan.missing`. Missing `project`, `goal`, `criteria`, or `taskAccumulator` is reported. The user or any chosen planning tool may provide the missing ready input. Continuity does not interview, invent a product goal, or start a specification session.
 
 `interview.offered` is always `false`.
 

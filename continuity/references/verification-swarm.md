@@ -2,7 +2,7 @@
 
 Executor words are not evidence. `attempt.reported` cannot be authorizing.
 
-After a Result exists, Coordinator requests verification from a registered actor capable for the task and its risk that differs from both the Result actor and the Attempt owner. Its run must also differ from the executor run when run ids exist. Prefer a different model family when one is eligible; family difference is not itself evidence. Coordinator launches nothing; it only records the verify recipe through this helper.
+After a Result exists, an operator or an optional external Coordinator selects a registered actor capable for the task and its risk that differs from both the Result actor and the Attempt owner. Its run must also differ from the executor run when run ids exist. Prefer a different model family when one is eligible; family difference is not itself evidence. In a coordinated flow, Coordinator actually launches the independent verifier in the agent environment, then records the verify recipe through this helper. Continuity validates the record but launches no planner, Coordinator, daemon, network client, model, executor, or verifier; it may invoke required local Git commands to read repository state.
 
 ## Capability lanes
 
