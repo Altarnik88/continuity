@@ -1,0 +1,11 @@
+node_modules/
+.codex/
+.continuity/
+coverage/
+*.tmp
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+__pycache__/

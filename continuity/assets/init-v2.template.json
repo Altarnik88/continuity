@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "project": {
+    "projectId": "project-example",
+    "name": "Example project",
+    "identity": "Replace with a source-backed project identity",
+    "implementationBoundaries": ["Replace with an explicit implementation boundary"],
+    "operatingRules": ["Record only bounded durable facts"]
+  },
+  "finalGoal": {
+    "goalId": "goal-final",
+    "title": "Explicit final goal",
+    "outcome": "Replace with the outcome explicitly requested by the user",
+    "isFinal": true,
+    "authority": "user",
+    "basis": "user_stated",
+    "criterionIds": []
+  },
+  "actor": {
+    "kind": "coordinator",
+    "id": "actor-coordinator",
+    "role": "coordinator"
+  },
+  "occurredAt": "2000-01-01T00:00:00.000Z",
+  "evidenceRef": "evidence-user-goal"
+}

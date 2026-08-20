@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 3,
+  "project": {
+    "projectId": "project-example",
+    "name": "Example",
+    "identity": "Bounded example project",
+    "implementationBoundaries": ["Do not invent user acceptance"],
+    "operatingRules": ["Success requires evidence"]
+  },
+  "finalGoal": {
+    "goalId": "goal-final",
+    "title": "Keep truthful project continuity",
+    "outcome": "A new coding session can continue from inspect without guessing",
+    "isFinal": true,
+    "authority": "user",
+    "basis": "user_stated",
+    "criterionIds": ["criterion-honest"]
+  },
+  "criterion": {
+    "criterionId": "criterion-honest",
+    "ownerType": "goal",
+    "ownerId": "goal-final",
+    "condition": "Succeeded work has authorizing evidence",
+    "scope": "continuity",
+    "requiredEvidenceKinds": ["command", "test"],
+    "freshnessPolicy": { "kind": "source_digest" },
+    "waivableByUser": false
+  },
+  "actor": {
+    "kind": "user",
+    "id": "actor-user",
+    "role": "user"
+  },
+  "occurredAt": "2026-08-18T00:00:00.000Z"
+}

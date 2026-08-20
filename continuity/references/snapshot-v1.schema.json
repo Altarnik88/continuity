@@ -1,0 +1,166 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "snapshot-v1.schema.json",
+  "title": "Continuity snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "updatedAt",
+    "project",
+    "stableGoals",
+    "implementationBoundaries",
+    "operatingRules",
+    "activeWork",
+    "decisions",
+    "recentWork",
+    "validationEvidence",
+    "unresolvedItems",
+    "nextSteps",
+    "sourceRefs",
+    "workspace"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "updatedAt": { "$ref": "#/definitions/timestamp" },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "identity"],
+      "properties": {
+        "name": { "$ref": "#/definitions/name" },
+        "identity": { "$ref": "#/definitions/text" }
+      }
+    },
+    "stableGoals": { "$ref": "#/definitions/textArray" },
+    "implementationBoundaries": { "$ref": "#/definitions/textArray" },
+    "operatingRules": { "$ref": "#/definitions/textArray" },
+    "activeWork": { "$ref": "#/definitions/summaryArray" },
+    "decisions": { "$ref": "#/definitions/summaryArray" },
+    "recentWork": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/definitions/recentItem" }
+    },
+    "validationEvidence": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/definitions/validationItem" }
+    },
+    "unresolvedItems": { "$ref": "#/definitions/textArray" },
+    "nextSteps": { "$ref": "#/definitions/textArray" },
+    "sourceRefs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/definitions/sourceRef" }
+    },
+    "workspace": { "$ref": "#/definitions/workspace" }
+  },
+  "definitions": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "^[^\\u0000-\\u001F\\u007F\\u2028\\u2029]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[^\\u0000-\\u001F\\u007F\\u2028\\u2029]*$"
+    },
+    "shortText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[^\\u0000-\\u001F\\u007F\\u2028\\u2029]*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "repoPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)[^\\\\\\u0000-\\u001F\\u007F\\u2028\\u2029]+$"
+    },
+    "textArray": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/definitions/text" }
+    },
+    "pathArray": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/definitions/repoPath" }
+    },
+    "summaryItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "status", "sourceRefs"],
+      "properties": {
+        "summary": { "$ref": "#/definitions/text" },
+        "status": { "$ref": "#/definitions/shortText" },
+        "sourceRefs": { "$ref": "#/definitions/pathArray" }
+      }
+    },
+    "summaryArray": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/definitions/summaryItem" }
+    },
+    "recentItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "status", "checkedAt", "sourceRefs"],
+      "properties": {
+        "summary": { "$ref": "#/definitions/text" },
+        "status": { "$ref": "#/definitions/shortText" },
+        "checkedAt": { "$ref": "#/definitions/timestamp" },
+        "sourceRefs": { "$ref": "#/definitions/pathArray" }
+      }
+    },
+    "validationItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "scope", "checkedAt", "sourceRefs"],
+      "properties": {
+        "name": { "$ref": "#/definitions/shortText" },
+        "status": { "$ref": "#/definitions/shortText" },
+        "scope": { "$ref": "#/definitions/text" },
+        "checkedAt": { "$ref": "#/definitions/timestamp" },
+        "sourceRefs": { "$ref": "#/definitions/pathArray" }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "purpose", "contentSha256"],
+      "properties": {
+        "path": { "$ref": "#/definitions/repoPath" },
+        "purpose": { "$ref": "#/definitions/text" },
+        "contentSha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "branch", "dirty", "statusFingerprint", "capturedAt"],
+      "properties": {
+        "head": {
+          "anyOf": [
+            { "const": "unavailable" },
+            { "type": "string", "pattern": "^[a-f0-9]{40,64}$" }
+          ]
+        },
+        "branch": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "dirty": { "type": "boolean" },
+        "statusFingerprint": { "$ref": "#/definitions/sha256" },
+        "fingerprintPartial": { "type": "boolean" },
+        "capturedAt": { "$ref": "#/definitions/timestamp" }
+      }
+    }
+  }
+}

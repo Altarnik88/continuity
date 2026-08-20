@@ -1,0 +1,39 @@
+{
+  "name": "continuity",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Continuity: a bounded, evidence-sensitive project continuity skill. GitHub-distributed under MIT; not published to npm.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Altarnik88/continuity.git"
+  },
+  "homepage": "https://github.com/Altarnik88/continuity#readme",
+  "bugs": {
+    "url": "https://github.com/Altarnik88/continuity/issues"
+  },
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "files": [
+    "continuity",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "examples",
+    "package.json"
+  ],
+  "scripts": {
+    "test": "node scripts/test-continuity.mjs",
+    "validate": "node scripts/validate-package.mjs",
+    "test:package": "node scripts/test-package.mjs",
+    "test:forward": "node scripts/test-forward-acceptance.mjs",
+    "check": "npm run validate && npm test && npm run test:package && npm run test:forward",
+    "audit:dev": "npm audit --audit-level=high"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0"
+  }
+}
