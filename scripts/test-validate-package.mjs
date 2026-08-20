@@ -212,7 +212,7 @@ export const CASES = [
         const skills = path.join(installHome, 'skills');
         assert.equal(path.resolve(assertSkillsDest(installHome, skills)), path.resolve(skills));
         assert.throws(() => assertSkillsDest(installHome, path.join(installHome, '..', 'escape')), /unsafe path components|outside/);
-        assert.throws(() => assertTempInstallHome(repoRoot), /inside the temp directory/);
+        assert.throws(() => assertTempInstallHome(outside, { tmpdir: installHome }), /inside the temp directory/);
 
         mkdirSync(path.join(aliasTarget, 'folders'), { recursive: true });
         try {

@@ -835,20 +835,158 @@ function assertPreOpenOwnedReadBoundary(makeRoot) {
   }
 }
 
-function waitForChildExit(child) {
-  return new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code, signal) => resolve({ code, signal }));
-  });
+function observeChildSettlement(child) {
+  let outcome;
+  let resolve;
+  const promise = new Promise((settled) => { resolve = settled; });
+  const settle = (next) => {
+    if (outcome) return;
+    outcome = next;
+    resolve(next);
+  };
+  child.once('error', (error) => settle({ error }));
+  child.once('exit', (code, signal) => settle({ code, signal }));
+  if (child.exitCode !== null || child.signalCode !== null) {
+    settle({ code: child.exitCode, signal: child.signalCode });
+  }
+  return { promise, get outcome() { return outcome; } };
 }
 
-async function waitForBarrierReady(child, ready, stderr) {
-  const deadline = Date.now() + 15_000;
-  while (!existsSync(ready)) {
-    if (child.exitCode !== null) throw new Error(`race helper exited before READY: ${stderr()}`);
-    if (Date.now() >= deadline) throw new Error(`race helper did not reach synchronized barrier: ${stderr()}`);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+function rejectChildSettlement(outcome, pending, stderr) {
+  if (outcome.error) {
+    throw new Error(`race helper failed before valid READY (${pending}): ${outcome.error.message}; ${stderr()}`);
   }
+  if (outcome.signal !== null) {
+    throw new Error(`race helper was terminated by ${outcome.signal} before valid READY (${pending}): ${stderr()}`);
+  }
+  throw new Error(`race helper exited ${outcome.code} before valid READY (${pending}): ${stderr()}`);
+}
+
+function readPublishedBarrierReady(ready, point) {
+  let source;
+  try {
+    source = readFileSync(ready, 'utf8');
+  } catch (error) {
+    return { pending: `READY could not be read (${error?.code ?? error?.name ?? 'unknown error'})` };
+  }
+  if (!source.endsWith('\n')) return { pending: 'READY JSON terminator is absent' };
+
+  let details;
+  try {
+    details = JSON.parse(source);
+  } catch (error) {
+    throw new Error(`race helper published malformed READY JSON: ${error.message}`);
+  }
+  if (!details || Array.isArray(details) || Object.getPrototypeOf(details) !== Object.prototype) {
+    throw new Error('race helper published a non-object READY payload');
+  }
+  if (!Object.hasOwn(details, 'point') || details.point !== point) {
+    throw new Error('race helper published READY for the wrong synchronized barrier');
+  }
+  return { details };
+}
+
+async function waitForBarrierReady(settlement, ready, point, stderr, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  let pending = 'READY does not exist';
+  while (true) {
+    if (settlement.outcome) rejectChildSettlement(settlement.outcome, pending, stderr);
+    if (existsSync(ready)) {
+      const publication = readPublishedBarrierReady(ready, point);
+      if (publication.details) {
+        const settled = await Promise.race([
+          settlement.promise,
+          new Promise((resolve) => setImmediate(() => resolve(null))),
+        ]);
+        if (settled) rejectChildSettlement(settled, pending, stderr);
+        return publication.details;
+      }
+      pending = publication.pending;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`race helper did not publish valid READY (${pending}): ${stderr()}`);
+    }
+    const settled = await Promise.race([
+      settlement.promise,
+      new Promise((resolve) => setTimeout(() => resolve(null), 5)),
+    ]);
+    if (settled) rejectChildSettlement(settled, pending, stderr);
+  }
+}
+
+async function assertBarrierReadyPublicationProtocol() {
+  const barrier = mkdtempSync(path.join(os.tmpdir(), 'project-memory-ready-protocol-'));
+  const ready = path.join(barrier, 'ready.json');
+  const point = 'integration-ready-publication';
+  try {
+    const liveChild = { outcome: undefined, promise: new Promise(() => {}) };
+    writeFileSync(ready, `{"point":"${point}"`);
+    const pending = waitForBarrierReady(liveChild, ready, point, () => '', 1_000);
+    const expected = { point, target: 'complete-publication' };
+    writeFileSync(ready, `${JSON.stringify(expected)}\n`);
+    assert.deepEqual(
+      await pending,
+      expected,
+      'READY reader did not retry a demonstrably partial publication',
+    );
+
+    writeFileSync(ready, '{"point":]\n');
+    await assert.rejects(
+      waitForBarrierReady(liveChild, ready, point, () => '', 1_000),
+      /race helper published malformed READY JSON/,
+      'READY reader swallowed a malformed complete publication',
+    );
+
+    writeFileSync(ready, `{"point":"${point}"`);
+    await assert.rejects(
+      waitForBarrierReady(
+        { outcome: { code: 7, signal: null }, promise: Promise.resolve({ code: 7, signal: null }) },
+        ready,
+        point,
+        () => 'synthetic child failure',
+        1_000,
+      ),
+      /exited 7 before valid READY \(READY does not exist\): synthetic child failure/,
+      'READY reader swallowed a partial final publication after child exit',
+    );
+
+    const complete = `${JSON.stringify({ point, target: 'must-not-authorize-mutation' })}\n`;
+    const settledCases = [
+      {
+        outcome: { code: 9, signal: null },
+        message: /exited 9 before valid READY/,
+        label: 'exited child',
+      },
+      {
+        outcome: { code: null, signal: 'SIGTERM' },
+        message: /terminated by SIGTERM before valid READY/,
+        label: 'signaled child',
+      },
+      {
+        outcome: { error: new Error('synthetic spawn failure') },
+        message: /failed before valid READY.*synthetic spawn failure/,
+        label: 'errored child',
+      },
+    ];
+    for (const { outcome, message, label } of settledCases) {
+      writeFileSync(ready, complete);
+      let mutations = 0;
+      await assert.rejects(
+        waitForBarrierReady(
+          { outcome, promise: Promise.resolve(outcome) }, ready, point, () => '', 1_000,
+        ).then(() => { mutations += 1; }),
+        message,
+        `READY reader accepted a valid publication from an ${label}`,
+      );
+      assert.equal(mutations, 0, `${label} authorized the parent mutation`);
+    }
+  } finally {
+    rmSync(barrier, { recursive: true, force: true });
+  }
+}
+
+export async function runBarrierReadyPublicationProtocol() {
+  await assertBarrierReadyPublicationProtocol();
 }
 
 // Source-only instrumentation for spawned test children: production modules never
@@ -948,15 +1086,17 @@ async function runBarrierRace({
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
-    const exited = waitForChildExit(child);
-    await waitForBarrierReady(child, ready, () => stderr);
-    const details = JSON.parse(readFileSync(ready, 'utf8'));
+    const settlement = observeChildSettlement(child);
+    const details = await waitForBarrierReady(settlement, ready, point, () => stderr);
     if (forbidDirectoryDescent) writeFileSync(descentRootFile, `${details.target}\n`, { flag: 'wx' });
     await mutate(details);
     writeFileSync(release, 'release\n', { flag: 'wx' });
     let exitTimer;
     const result = await Promise.race([
-      exited,
+      settlement.promise.then((outcome) => {
+        if (outcome.error) throw outcome.error;
+        return { code: outcome.code, signal: outcome.signal };
+      }),
       new Promise((_, reject) => { exitTimer = setTimeout(() => reject(new Error('race helper did not exit after RELEASE')), 15_000); }),
     ]).finally(() => clearTimeout(exitTimer));
     const renameTraceCount = existsSync(renameTrace)
@@ -2494,6 +2634,16 @@ async function assertCleanupHardLinkRaces(makeRoot) {
   sameIdentity(lstatSync(v1TempFiles.current), v1TempCurrentIdentity, 'v1 projection-temp hard-link race CURRENT');
 }
 
+export async function runCleanupHardLinkRaces() {
+  const roots = [];
+  const makeRoot = (label) => { const root = makeRepository(label); roots.push(root); return root; };
+  try {
+    await assertCleanupHardLinkRaces(makeRoot);
+  } finally {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function assertDescriptorBoundAppendRaces(makeRoot) {
   for (const mode of ['growth', 'shrink', 'swap']) {
     const root = makeRoot(`integration-v2-append-${mode}`);
@@ -2577,6 +2727,7 @@ export async function run() {
   const roots = [];
   const makeRoot = (label) => { const root = makeRepository(label); roots.push(root); return root; };
   try {
+    await assertBarrierReadyPublicationProtocol();
     assertSemanticTreeIdentityFingerprint(makeRoot);
     assertRepositoryTruthFingerprint(makeRoot);
     assertPreOpenOwnedReadBoundary(makeRoot);
