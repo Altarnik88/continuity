@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   closeSync, existsSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, openSync,
-  linkSync, readSync, readlinkSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync,
+  linkSync, opendirSync, readSync, readlinkSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync,
 } from 'node:fs';
 import path from 'node:path';
 
@@ -216,21 +216,142 @@ function retainedIdentity(retained) {
 
 function pathOwnsRetained(file, retained, { directory = false, expectedLinks } = {}) {
   try {
-    if (typeof expectedLinks !== 'bigint' || expectedLinks < 1n) return false;
     const byPath = lstatSync(file, { bigint: true });
     const identity = retainedIdentity(retained);
-    const typeMatches = directory
-      ? byPath.isDirectory() && identity.isDirectory()
-      : byPath.isFile() && identity.isFile();
-    return typeMatches && byPath.nlink === expectedLinks
+    if (directory) {
+      // Directory nlink and allocated size are filesystem bookkeeping. APFS can
+      // change them when children are created or retired, so cleanup authority is
+      // the stable directory object identity and mode, plus the contents manifest
+      // verified separately below.
+      return byPath.isDirectory() && identity.isDirectory()
+        && byPath.dev === identity.dev && byPath.ino === identity.ino
+        && byPath.mode === identity.mode;
+    }
+    if (typeof expectedLinks !== 'bigint' || expectedLinks < 1n) return false;
+    return byPath.isFile() && identity.isFile() && byPath.nlink === expectedLinks
       && byPath.dev === identity.dev && byPath.ino === identity.ino;
   } catch {
     return false;
   }
 }
 
+function directoryEntryKind(details) {
+  if (details.isDirectory()) return 'directory';
+  if (details.isFile()) return 'file';
+  if (details.isSymbolicLink()) return 'symlink';
+  return 'other';
+}
+
+function listExpectedOwnedDirectoryEntries(directory, expectedEntries) {
+  const records = [];
+  const expectedByName = new Map();
+  for (const expected of expectedEntries) {
+    if (typeof expected?.relative !== 'string' || path.basename(expected.relative) !== expected.relative
+      || expected.kind !== 'file' || expectedByName.has(expected.relative)) return null;
+    expectedByName.set(expected.relative, expected);
+  }
+  const handle = opendirSync(directory);
+  try {
+    let entry;
+    while ((entry = handle.readSync()) !== null) {
+      const expected = expectedByName.get(entry.name);
+      // The initialization temporary is exactly two flat files. Refuse an
+      // unexpected name or type as soon as it is observed; never descend into an
+      // injected directory or enumerate an attacker-controlled subtree.
+      if (!expected || records.length >= expectedEntries.length) return null;
+      const absolute = path.join(directory, entry.name);
+      const identity = lstatSync(absolute, { bigint: true });
+      const kind = directoryEntryKind(identity);
+      if (kind !== expected.kind) return null;
+      records.push({ relative: entry.name, absolute, identity, kind });
+    }
+  } finally {
+    handle.closeSync();
+  }
+  if (records.length !== expectedEntries.length) return null;
+  return records.sort((left, right) => left.relative.localeCompare(right.relative, 'en'));
+}
+
+function sameOwnedFileIdentity(actual, expected) {
+  if (!actual.isFile() || !expected.isFile()
+    || actual.dev !== expected.dev || actual.ino !== expected.ino
+    || actual.mode !== expected.mode) return false;
+  return actual.nlink === expected.nlink && actual.size === expected.size;
+}
+
+function inspectOwnedDirectoryManifest(directory, retained, expectedEntries, label) {
+  if (!pathOwnsRetained(directory, retained, { directory: true })) {
+    throw new MemoryError(`${label} ownership changed`, 3);
+  }
+  let actual;
+  try {
+    actual = listExpectedOwnedDirectoryEntries(directory, expectedEntries);
+  } catch {
+    throw new MemoryError(`${label} ownership changed`, 3);
+  }
+  const expected = [...expectedEntries].sort((left, right) => left.relative.localeCompare(right.relative, 'en'));
+  if (!actual || actual.some((entry, index) => entry.relative !== expected[index].relative)) {
+    throw new MemoryError(`${label} ownership changed`, 3);
+  }
+  const manifest = [];
+  for (let index = 0; index < actual.length; index += 1) {
+    const entry = actual[index];
+    const specification = expected[index];
+    if (!specification.identity
+      || !sameOwnedFileIdentity(entry.identity, specification.identity)) {
+      throw new MemoryError(`${label} ownership changed`, 3);
+    }
+    if (!Buffer.isBuffer(specification.bytes) || specification.identity.nlink !== 1n) {
+      throw new MemoryError(`${label} ownership changed`, 3);
+    }
+    const bytes = readOwnedFileBounded(entry.absolute, specification.bytes.length, `${label} ${entry.relative}`);
+    if (!bytes.equals(specification.bytes)
+      || !sameOwnedFileIdentity(
+        lstatSync(entry.absolute, { bigint: true }), specification.identity,
+      )) throw new MemoryError(`${label} ownership changed`, 3);
+    manifest.push({
+      relative: entry.relative,
+      kind: 'file',
+      // Deletion authority comes from the descriptor-bound identity returned by
+      // creation, never from a later pathname scan.
+      identity: specification.identity,
+      bytes: Buffer.from(specification.bytes),
+    });
+  }
+  if (!pathOwnsRetained(directory, retained, { directory: true })) {
+    throw new MemoryError(`${label} ownership changed`, 3);
+  }
+  return manifest;
+}
+
+function directoryOwnsManifest(directory, retained, manifest) {
+  try {
+    if (!Array.isArray(manifest) || !pathOwnsRetained(directory, retained, { directory: true })) return false;
+    const actual = listExpectedOwnedDirectoryEntries(directory, manifest);
+    if (!actual) return false;
+    for (let index = 0; index < actual.length; index += 1) {
+      const entry = actual[index];
+      const expected = manifest[index];
+      if (entry.relative !== expected.relative || entry.kind !== expected.kind
+        || !sameOwnedFileIdentity(entry.identity, expected.identity)
+        || entry.identity.nlink !== 1n || !Buffer.isBuffer(expected.bytes)) return false;
+      const bytes = readOwnedFileBounded(entry.absolute, expected.bytes.length, `cleanup ${entry.relative}`);
+      if (!bytes.equals(expected.bytes)
+        || !sameOwnedFileIdentity(
+          lstatSync(entry.absolute, { bigint: true }), expected.identity,
+        )) return false;
+    }
+    return pathOwnsRetained(directory, retained, { directory: true });
+  } catch {
+    return false;
+  }
+}
+
 function assertRetainedPath(file, retained, label, options) {
-  if (!pathOwnsRetained(file, retained, options)) throw new MemoryError(`${label} ownership changed`, 3);
+  if (!pathOwnsRetained(file, retained, options)
+    || (options?.directory && !directoryOwnsManifest(file, retained, options.directoryManifest))) {
+    throw new MemoryError(`${label} ownership changed`, 3);
+  }
   return retainedIdentity(retained);
 }
 
@@ -251,8 +372,11 @@ function assertRetainedIdentity(file, retained, label) {
   }
 }
 
-function retireOwnedPath(file, retained, label, { directory = false, barrierPoint, expectedLinks } = {}) {
-  assertRetainedPath(file, retained, label, { directory, expectedLinks });
+function retireOwnedPath(file, retained, label, {
+  directory = false, directoryManifest, barrierPoint, expectedLinks,
+} = {}) {
+  const ownership = { directory, directoryManifest, expectedLinks };
+  assertRetainedPath(file, retained, label, ownership);
   if (barrierPoint) testBarrier(barrierPoint, { target: file });
   const retired = `${file}.retired-${process.pid}-${randomUUID()}`;
   try {
@@ -260,7 +384,8 @@ function retireOwnedPath(file, retained, label, { directory = false, barrierPoin
   } catch {
     throw new MemoryError(`${label} cleanup failed`, 3);
   }
-  if (!pathOwnsRetained(retired, retained, { directory, expectedLinks })) {
+  if (!pathOwnsRetained(retired, retained, ownership)
+    || (directory && !directoryOwnsManifest(retired, retained, directoryManifest))) {
     try {
       if (!existsSync(file)) renameSync(retired, file);
     } catch {
@@ -269,9 +394,19 @@ function retireOwnedPath(file, retained, label, { directory = false, barrierPoin
     throw new MemoryError(`${label} ownership changed`, 3);
   }
   try {
-    if (directory) rmSync(retired, { recursive: true, force: false });
+    if (directory) {
+      // Validate immediately before the only recursive removal. An injected,
+      // missing, replaced, relinked, or retargeted entry leaves the whole retired
+      // tree intact instead of extending cleanup authority to external material.
+      if (!directoryOwnsManifest(retired, retained, directoryManifest)) {
+        try { if (!existsSync(file)) renameSync(retired, file); } catch {}
+        throw new MemoryError(`${label} ownership changed`, 3);
+      }
+      rmSync(retired, { recursive: true, force: false });
+    }
     else unlinkSync(retired);
-  } catch {
+  } catch (error) {
+    if (error instanceof MemoryError) throw error;
     throw new MemoryError(`${label} cleanup failed`, 3);
   }
 }
@@ -323,7 +458,15 @@ function syncDirectory(directory) {
 
 function writeOwnedFile(file, bytes) {
   const fd = openSync(file, 'wx', 0o600);
-  try { assertFdOwned(file, fd, path.basename(file)); let offset = 0; while (offset < bytes.length) offset += writeSync(fd, bytes, offset, bytes.length - offset); fsyncSync(fd); assertFdOwned(file, fd, path.basename(file)); } finally { closeSync(fd); }
+  try {
+    assertFdOwned(file, fd, path.basename(file));
+    let offset = 0;
+    while (offset < bytes.length) offset += writeSync(fd, bytes, offset, bytes.length - offset);
+    fsyncSync(fd);
+    return assertFdOwned(file, fd, path.basename(file));
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function projectionBytes(state) {
@@ -364,6 +507,7 @@ export function initializeV2(root, input, options = {}) {
   const storeParent = path.dirname(files.store);
   const temporary = path.join(storeParent, `${path.basename(files.store)}.tmp-${process.pid}-${randomUUID()}`);
   let temporaryIdentity;
+  let temporaryManifest;
   let installed = false;
   try {
     assertMutationAllowed(root);
@@ -373,7 +517,14 @@ export function initializeV2(root, input, options = {}) {
     assertMutationAllowed(root);
     mkdirSync(temporary, { recursive: false, mode: 0o700 });
     temporaryIdentity = lstatSync(temporary, { bigint: true });
-    writeOwnedFile(path.join(temporary, 'HISTORY.ndjson'), historyBytes); writeOwnedFile(path.join(temporary, 'CURRENT.json'), currentBytes); syncDirectory(temporary);
+    const historyIdentity = writeOwnedFile(path.join(temporary, 'HISTORY.ndjson'), historyBytes);
+    const currentIdentity = writeOwnedFile(path.join(temporary, 'CURRENT.json'), currentBytes);
+    syncDirectory(temporary);
+    testBarrier('journal-init-temp-manifest', { target: temporary });
+    temporaryManifest = inspectOwnedDirectoryManifest(temporary, temporaryIdentity, [
+      { relative: 'CURRENT.json', kind: 'file', identity: currentIdentity, bytes: currentBytes },
+      { relative: 'HISTORY.ndjson', kind: 'file', identity: historyIdentity, bytes: historyBytes },
+    ], 'continuity initialization temporary');
     if (process.env.NODE_ENV === 'test' && process.env.PROJECT_MEMORY_TEST_FAIL_V2_INIT_TEMP === '1') {
       throw new MemoryError('simulated v2 initialization temporary failure', 3);
     }
@@ -386,8 +537,8 @@ export function initializeV2(root, input, options = {}) {
       try {
         retireOwnedPath(temporary, temporaryIdentity, 'continuity initialization temporary', {
           directory: true,
+          directoryManifest: temporaryManifest,
           barrierPoint: 'journal-init-temp-cleanup',
-          expectedLinks: temporaryIdentity.nlink,
         });
       } catch (error) {
         cleanupFailure = error instanceof MemoryError ? error : new MemoryError('continuity initialization temporary cleanup failed', 3);

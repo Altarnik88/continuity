@@ -224,13 +224,15 @@ function fakeHandler(calls, status) {
   };
 }
 
-function snapshotTree(root) {
+function snapshotTree(root, { omitRootEntries = [] } = {}) {
   if (!existsSync(root)) return [];
   const records = [];
+  const omitted = new Set(omitRootEntries);
   const visit = (directory, prefix = '') => {
     const entries = readdirSync(directory, { withFileTypes: true })
       .sort((left, right) => left.name.localeCompare(right.name, 'en'));
     for (const entry of entries) {
+      if (!prefix && omitted.has(entry.name)) continue;
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) {
@@ -248,13 +250,15 @@ function snapshotTree(root) {
   return records;
 }
 
-function snapshotTreeIdentities(root) {
+function snapshotTreeIdentities(root, { omitRootEntries = [] } = {}) {
   if (!existsSync(root)) return [];
   const records = [];
+  const omitted = new Set(omitRootEntries);
   const visit = (directory, prefix = '') => {
     const entries = readdirSync(directory, { withFileTypes: true })
       .sort((left, right) => left.name.localeCompare(right.name, 'en'));
     for (const entry of entries) {
+      if (!prefix && omitted.has(entry.name)) continue;
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
       const absolute = path.join(directory, entry.name);
       const details = lstatSync(absolute, { bigint: true });
@@ -276,6 +280,112 @@ function snapshotTreeIdentities(root) {
   };
   visit(root);
   return records;
+}
+
+function readGitSemanticState(root, args, { allowMissing = false } = {}) {
+  const result = spawnSync('git', ['-C', root, ...args], {
+    encoding: null,
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (result.error || (result.status !== 0 && !(allowMissing && result.status === 1))) {
+    throw new Error(`unable to read semantic Git state: git ${args.join(' ')}`);
+  }
+  return result.status === 0 ? result.stdout.toString('base64') : null;
+}
+
+function snapshotRepositoryTruth(root) {
+  // Git maintenance locks, index stat-cache refreshes, and pack representation are
+  // administrative implementation details. The no-effect contract concerns the
+  // exact worktree/store plus semantic Git truth: HEAD, symbolic HEAD, refs, staged
+  // entries, and index flags. Read-only Git observations disable optional locks.
+  return {
+    worktreeBytes: snapshotTree(root, { omitRootEntries: ['.git'] }),
+    worktreeIdentities: snapshotTreeIdentities(root, { omitRootEntries: ['.git'] }),
+    head: readGitSemanticState(root, ['rev-parse', '--verify', 'HEAD']),
+    symbolicHead: readGitSemanticState(root, ['symbolic-ref', '-q', 'HEAD'], { allowMissing: true }),
+    refs: readGitSemanticState(root, [
+      'for-each-ref', '--format=%(refname)%00%(objectname)%00%(symref)',
+    ]),
+    indexEntries: readGitSemanticState(root, ['ls-files', '--stage', '-z']),
+    indexFlags: readGitSemanticState(root, ['ls-files', '-v', '-z']),
+  };
+}
+
+function runGitFixture(root, args) {
+  execFileSync('git', ['-C', root, ...args], {
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+}
+
+function assertRepositoryTruthFingerprint(makeRoot) {
+  const root = makeRoot('integration-repository-truth-fingerprint');
+  const readme = path.join(root, 'README.md');
+  const readmeBytes = readFileSync(readme);
+  const baseline = snapshotRepositoryTruth(root);
+
+  // Use a unique administrative probe instead of contending with a real Git
+  // maintenance process for its well-known lock pathname.
+  const adminProbe = path.join(root, '.git', 'objects', 'continuity-semantic-probe.lock');
+  writeFileSync(adminProbe, 'synthetic transient Git-admin representation\n', { flag: 'wx' });
+  assert.deepEqual(
+    snapshotRepositoryTruth(root), baseline,
+    'transient Git-admin representation changed semantic repository truth',
+  );
+  unlinkSync(adminProbe);
+
+  writeFileSync(readme, '# Worktree mutation control\n');
+  assert.notDeepEqual(snapshotRepositoryTruth(root), baseline, 'worktree mutation escaped semantic repository truth');
+  writeFileSync(readme, readmeBytes);
+  assert.deepEqual(snapshotRepositoryTruth(root), baseline, 'worktree mutation control did not restore the baseline');
+
+  writeFileSync(readme, '# Staged index mutation control\n');
+  runGitFixture(root, ['add', '--', 'README.md']);
+  writeFileSync(readme, readmeBytes);
+  assert.notDeepEqual(snapshotRepositoryTruth(root), baseline, 'staged index mutation escaped semantic repository truth');
+  runGitFixture(root, ['reset', '-q', 'HEAD', '--', 'README.md']);
+  assert.deepEqual(snapshotRepositoryTruth(root), baseline, 'staged mutation control did not restore the baseline');
+
+  runGitFixture(root, ['update-index', '--assume-unchanged', 'README.md']);
+  assert.notDeepEqual(snapshotRepositoryTruth(root), baseline, 'index flag mutation escaped semantic repository truth');
+  runGitFixture(root, ['update-index', '--no-assume-unchanged', 'README.md']);
+  assert.deepEqual(snapshotRepositoryTruth(root), baseline, 'index flag control did not restore the baseline');
+
+  runGitFixture(root, ['branch', 'semantic-fingerprint-probe']);
+  assert.notDeepEqual(snapshotRepositoryTruth(root), baseline, 'ref mutation escaped semantic repository truth');
+  runGitFixture(root, ['branch', '-D', 'semantic-fingerprint-probe']);
+  assert.deepEqual(snapshotRepositoryTruth(root), baseline, 'ref mutation control did not restore the baseline');
+
+  const store = path.join(root, '.continuity');
+  const storeFile = path.join(store, 'sentinel.txt');
+  mkdirSync(store);
+  writeFileSync(storeFile, 'strict store bytes\n');
+  const storeBaseline = snapshotRepositoryTruth(root);
+  writeFileSync(storeFile, 'changed store bytes\n');
+  assert.notDeepEqual(snapshotRepositoryTruth(root), storeBaseline, 'store byte mutation escaped semantic repository truth');
+  writeFileSync(storeFile, 'strict store bytes\n');
+  const replacement = `${storeFile}.replacement`;
+  const displaced = `${storeFile}.displaced`;
+  writeFileSync(replacement, 'strict store bytes\n', { flag: 'wx' });
+  renameSync(storeFile, displaced);
+  renameSync(replacement, storeFile);
+  unlinkSync(displaced);
+  assert.notDeepEqual(
+    snapshotRepositoryTruth(root), storeBaseline,
+    'byte-equivalent store identity replacement escaped semantic repository truth',
+  );
+}
+
+export function runRepositoryTruthFingerprint() {
+  const roots = [];
+  const makeRoot = (label) => { const root = makeRepository(label); roots.push(root); return root; };
+  try {
+    assertRepositoryTruthFingerprint(makeRoot);
+    assertPreOpenOwnedReadBoundary(makeRoot);
+  } finally {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  }
 }
 
 function assertSemanticTreeIdentityFingerprint(makeRoot) {
@@ -714,12 +824,12 @@ function assertPreOpenOwnedReadBoundary(makeRoot) {
   const label = 'synthetic bounded target';
   const regular = path.join(root, 'regular.txt');
   writeFileSync(regular, 'bounded regular bytes\n');
-  let before = snapshotTree(root);
+  let before = snapshotRepositoryTruth(root);
   assert.deepEqual(readOwnedFileBounded(regular, 64, label), Buffer.from('bounded regular bytes\n'));
-  assert.deepEqual(snapshotTree(root), before, 'bounded regular read changed the repository tree');
+  assert.deepEqual(snapshotRepositoryTruth(root), before, 'bounded regular read changed semantic repository truth');
 
   const assertPreOpenReject = (target, kind) => {
-    before = snapshotTree(root);
+    before = snapshotRepositoryTruth(root);
     assert.throws(
       () => readOwnedFileBounded(target, 64, label),
       (error) => error instanceof MemoryError
@@ -727,7 +837,7 @@ function assertPreOpenOwnedReadBoundary(makeRoot) {
         && error.message === `${label} must be a regular file with exactly one hard link`,
       `${kind} did not fail at the pre-open type/link boundary`,
     );
-    assert.deepEqual(snapshotTree(root), before, `${kind} rejection changed the repository tree`);
+    assert.deepEqual(snapshotRepositoryTruth(root), before, `${kind} rejection changed semantic repository truth`);
   };
 
   const directory = path.join(root, 'directory-target');
@@ -774,11 +884,16 @@ async function waitForBarrierReady(child, ready, stderr) {
 }
 
 // Source-only instrumentation for spawned test children: production modules never
-// see this preload, and the wrapper records only a completed rename to the exact target.
-const renameTracePreload = `data:text/javascript,${encodeURIComponent(String.raw`
+// see this preload. It records completed target renames and can make any descent
+// below a synchronized disposable directory mutation-sensitive.
+const raceTracePreload = `data:text/javascript,${encodeURIComponent(String.raw`
   import fs from 'node:fs';
   import path from 'node:path';
   import { syncBuiltinESMExports } from 'node:module';
+  const originalAppendFileSync = fs.appendFileSync;
+  const originalOpendirSync = fs.opendirSync;
+  const originalReadFileSync = fs.readFileSync;
+  const originalReaddirSync = fs.readdirSync;
   const originalRenameSync = fs.renameSync;
   const canonicalPath = (value) => {
     const resolved = path.resolve(String(value));
@@ -793,22 +908,54 @@ const renameTracePreload = `data:text/javascript,${encodeURIComponent(String.raw
       try { tracesTarget = canonicalPath(args[1]) === canonicalPath(target); } catch {}
     }
     const result = originalRenameSync(...args);
-    if (tracesTarget) fs.appendFileSync(trace, 'renamed\n', 'utf8');
+    if (tracesTarget) originalAppendFileSync(trace, 'renamed\n', 'utf8');
     return result;
+  };
+  const normalizedPath = (value) => {
+    const resolved = path.resolve(String(value));
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  const guardDescent = (value) => {
+    const rootFile = process.env.PROJECT_MEMORY_TEST_DESCENT_ROOT_FILE;
+    const trace = process.env.PROJECT_MEMORY_TEST_DESCENT_TRACE;
+    const control = process.env.PROJECT_MEMORY_TEST_DESCENT_CONTROL;
+    if (process.env.NODE_ENV !== 'test' || !rootFile || !trace || !control || !fs.existsSync(rootFile)) return;
+    const root = normalizedPath(originalReadFileSync(rootFile, 'utf8').trim());
+    const candidate = normalizedPath(value);
+    originalAppendFileSync(control, 'directory-inspection-observed\n', 'utf8');
+    const relative = path.relative(root, candidate);
+    if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
+      originalAppendFileSync(trace, 'descended\n', 'utf8');
+      throw new Error('test observed forbidden temporary-directory descent');
+    }
+  };
+  fs.opendirSync = (value, ...args) => {
+    guardDescent(value);
+    return originalOpendirSync(value, ...args);
+  };
+  fs.readdirSync = (value, ...args) => {
+    guardDescent(value);
+    return originalReaddirSync(value, ...args);
   };
   syncBuiltinESMExports();
 `)}`;
 
-async function runBarrierRace({ point, command, args, env = {}, observeRenameTarget, mutate }) {
+async function runBarrierRace({
+  point, command, args, env = {}, observeRenameTarget, forbidDirectoryDescent = false, mutate,
+}) {
   const barrier = mkdtempSync(path.join(os.tmpdir(), 'project-memory-integration-race-'));
   const ready = path.join(barrier, 'ready.json');
   const release = path.join(barrier, 'release');
   const renameTrace = path.join(barrier, 'rename-trace.txt');
+  const descentRootFile = path.join(barrier, 'descent-root.txt');
+  const descentTrace = path.join(barrier, 'descent-trace.txt');
+  const descentControl = path.join(barrier, 'descent-control.txt');
+  const usePreload = Boolean(observeRenameTarget || forbidDirectoryDescent);
   let child;
   let stdout = '';
   let stderr = '';
   try {
-    child = spawn(command, observeRenameTarget ? ['--import', renameTracePreload, ...args] : args, {
+    child = spawn(command, usePreload ? ['--import', raceTracePreload, ...args] : args, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
@@ -821,6 +968,11 @@ async function runBarrierRace({ point, command, args, env = {}, observeRenameTar
           PROJECT_MEMORY_TEST_RENAME_TARGET: observeRenameTarget,
           PROJECT_MEMORY_TEST_RENAME_TRACE: renameTrace,
         } : {}),
+        ...(forbidDirectoryDescent ? {
+          PROJECT_MEMORY_TEST_DESCENT_ROOT_FILE: descentRootFile,
+          PROJECT_MEMORY_TEST_DESCENT_TRACE: descentTrace,
+          PROJECT_MEMORY_TEST_DESCENT_CONTROL: descentControl,
+        } : {}),
         ...env,
       },
     });
@@ -831,6 +983,7 @@ async function runBarrierRace({ point, command, args, env = {}, observeRenameTar
     const exited = waitForChildExit(child);
     await waitForBarrierReady(child, ready, () => stderr);
     const details = JSON.parse(readFileSync(ready, 'utf8'));
+    if (forbidDirectoryDescent) writeFileSync(descentRootFile, `${details.target}\n`, { flag: 'wx' });
     await mutate(details);
     writeFileSync(release, 'release\n', { flag: 'wx' });
     let exitTimer;
@@ -841,7 +994,15 @@ async function runBarrierRace({ point, command, args, env = {}, observeRenameTar
     const renameTraceCount = existsSync(renameTrace)
       ? readFileSync(renameTrace, 'utf8').split('\n').filter(Boolean).length
       : 0;
-    return { ...result, stdout, stderr, details, renameTraceCount };
+    const descentTraceCount = existsSync(descentTrace)
+      ? readFileSync(descentTrace, 'utf8').split('\n').filter(Boolean).length
+      : 0;
+    const descentControlCount = existsSync(descentControl)
+      ? readFileSync(descentControl, 'utf8').split('\n').filter(Boolean).length
+      : 0;
+    return {
+      ...result, stdout, stderr, details, renameTraceCount, descentTraceCount, descentControlCount,
+    };
   } finally {
     if (child && child.exitCode === null) child.kill();
     rmSync(barrier, { recursive: true, force: true });
@@ -1944,25 +2105,177 @@ export async function runProjectionRollbackRecoveryRaces() {
 
 async function assertCleanupIdentityRaces(makeRoot) {
   let result;
+  const runInitCleanupRace = async (suffix, mutate, raceOptions = {}) => {
+    const root = makeRoot(`integration-v2-init-temp-cleanup-${suffix}`);
+    const inputFile = path.join(root, `v2-init-${suffix}.json`);
+    writeFileSync(inputFile, `${JSON.stringify(initInput(`init-temp-cleanup-${suffix}`))}\n`);
+    const race = await runBarrierRace({
+      point: 'journal-init-temp-cleanup',
+      command: process.execPath,
+      args: journalChildArgs('initialize', root, inputFile),
+      env: { PROJECT_MEMORY_TEST_FAIL_V2_INIT_TEMP: '1' },
+      mutate,
+      ...raceOptions,
+    });
+    assert.equal(race.code, 3, `${suffix}\n${race.stderr}`);
+    assert.equal(existsSync(storePaths(root).store), false, `${suffix} installed a canonical store`);
+    return { race, root };
+  };
+
+  const provenanceRoot = makeRoot('integration-v2-init-temp-manifest-provenance');
+  const provenanceInput = path.join(provenanceRoot, 'v2-init-manifest-provenance.json');
+  writeFileSync(provenanceInput, `${JSON.stringify(initInput('init-temp-manifest-provenance'))}\n`);
+  let provenanceReplacement;
+  let provenanceDisplaced;
+  let provenanceReplacementIdentity;
+  const provenanceRace = await runBarrierRace({
+    point: 'journal-init-temp-manifest',
+    command: process.execPath,
+    args: journalChildArgs('initialize', provenanceRoot, provenanceInput),
+    mutate: ({ target }) => {
+      provenanceReplacement = path.join(target, 'CURRENT.json');
+      provenanceDisplaced = `${target}.CURRENT.externally-displaced-before-manifest`;
+      const bytes = readFileSync(provenanceReplacement);
+      renameSync(provenanceReplacement, provenanceDisplaced);
+      writeFileSync(provenanceReplacement, bytes, { flag: 'wx' });
+      provenanceReplacementIdentity = lstatSync(provenanceReplacement, { bigint: true });
+    },
+  });
+  assert.equal(provenanceRace.code, 3, provenanceRace.stderr);
+  assert.match(provenanceRace.stderr, /continuity initialization temporary ownership changed/);
+  sameIdentity(
+    lstatSync(provenanceReplacement, { bigint: true }), provenanceReplacementIdentity,
+    'same-byte pre-manifest replacement',
+  );
+  assert.equal(existsSync(provenanceDisplaced), true, 'pre-manifest rejection removed the descriptor-owned file');
+  const provenanceOwnedIdentity = lstatSync(provenanceDisplaced, { bigint: true });
+  assert.equal(
+    provenanceOwnedIdentity.dev === provenanceReplacementIdentity.dev
+      && provenanceOwnedIdentity.ino === provenanceReplacementIdentity.ino,
+    false,
+    'pre-manifest mutation did not substitute the descriptor-owned inode',
+  );
+  assert.deepEqual(
+    readFileSync(provenanceReplacement), readFileSync(provenanceDisplaced),
+    'same-byte pre-manifest mutation control did not preserve equal bytes',
+  );
+  assert.equal(existsSync(storePaths(provenanceRoot).store), false, 'pre-manifest replacement installed a canonical store');
+
+  const stableInit = await runInitCleanupRace('stable-owned-tree', () => undefined);
+  assert.match(stableInit.race.stderr, /simulated v2 initialization temporary failure/);
+  assert.equal(
+    existsSync(stableInit.race.details.target), false,
+    'stable owned initialization temporary was not retired',
+  );
+
+  let extraEntry;
+  const injectedEntry = await runInitCleanupRace('injected-entry', ({ target }) => {
+    extraEntry = path.join(target, 'externally-injected.txt');
+    writeFileSync(extraEntry, 'external injected bytes\n', { flag: 'wx' });
+  });
+  assert.match(injectedEntry.race.stderr, /continuity initialization temporary ownership changed/);
+  assert.equal(readFileSync(extraEntry, 'utf8'), 'external injected bytes\n');
+
+  let deepInjectedSentinel;
+  const injectedDirectory = await runInitCleanupRace('injected-deep-directory', ({ target }) => {
+    const deepInjected = path.join(
+      target, 'externally-injected-directory',
+      ...Array.from({ length: 24 }, (_, index) => `depth-${index}`),
+    );
+    mkdirSync(deepInjected, { recursive: true });
+    deepInjectedSentinel = path.join(deepInjected, 'sentinel.txt');
+    writeFileSync(deepInjectedSentinel, 'deep external sentinel\n');
+  }, { forbidDirectoryDescent: true });
+  assert.match(injectedDirectory.race.stderr, /continuity initialization temporary ownership changed/);
+  assert.equal(
+    injectedDirectory.race.descentTraceCount, 0,
+    'cleanup traversed an unexpected initialization temporary directory',
+  );
+  assert.ok(
+    injectedDirectory.race.descentControlCount >= 1,
+    'temporary-directory descent tracer missed the expected root inspection control',
+  );
+  assert.equal(readFileSync(deepInjectedSentinel, 'utf8'), 'deep external sentinel\n');
+
+  let replacedOwned;
+  let displacedOwned;
+  let replacementIdentity;
+  const replacedFile = await runInitCleanupRace('replaced-owned-file', ({ target }) => {
+    replacedOwned = path.join(target, 'CURRENT.json');
+    displacedOwned = `${target}.CURRENT.externally-displaced`;
+    const original = readFileSync(replacedOwned);
+    renameSync(replacedOwned, displacedOwned);
+    writeFileSync(replacedOwned, original, { flag: 'wx' });
+    replacementIdentity = lstatSync(replacedOwned, { bigint: true });
+  });
+  assert.match(replacedFile.race.stderr, /continuity initialization temporary ownership changed/);
+  sameIdentity(lstatSync(replacedOwned, { bigint: true }), replacementIdentity, 'replacement initialization file');
+  assert.equal(existsSync(displacedOwned), true, 'cleanup removed the displaced owned initialization file');
+
+  let changedOwned;
+  let changedOwnedBytes;
+  const changedFile = await runInitCleanupRace('changed-owned-file-bytes', ({ target }) => {
+    changedOwned = path.join(target, 'CURRENT.json');
+    changedOwnedBytes = readFileSync(changedOwned);
+    changedOwnedBytes[0] ^= 1;
+    writeFileSync(changedOwned, changedOwnedBytes);
+  });
+  assert.match(changedFile.race.stderr, /continuity initialization temporary ownership changed/);
+  assert.deepEqual(readFileSync(changedOwned), changedOwnedBytes, 'cleanup changed the externally modified owned-file bytes');
+
+  let retargetedOwned;
+  let displacedForLink;
+  let retargetedLink;
+  let firstLink;
+  let firstTargetSentinel;
+  let secondTargetSentinel;
+  const symlinkRetarget = await runInitCleanupRace('symlink-retarget', ({ target }) => {
+    retargetedOwned = path.join(target, 'HISTORY.ndjson');
+    displacedForLink = `${target}.HISTORY.externally-displaced`;
+    const firstTarget = path.join(path.dirname(target), 'external-link-target-a');
+    const secondTarget = path.join(path.dirname(target), 'external-link-target-b');
+    mkdirSync(firstTarget);
+    mkdirSync(secondTarget);
+    firstTargetSentinel = path.join(firstTarget, 'sentinel.txt');
+    secondTargetSentinel = path.join(secondTarget, 'sentinel.txt');
+    writeFileSync(firstTargetSentinel, 'first external target\n');
+    writeFileSync(secondTargetSentinel, 'second external target\n');
+    renameSync(retargetedOwned, displacedForLink);
+    symlinkSync(firstTarget, retargetedOwned, process.platform === 'win32' ? 'junction' : 'dir');
+    firstLink = readlinkSync(retargetedOwned);
+    unlinkSync(retargetedOwned);
+    symlinkSync(secondTarget, retargetedOwned, process.platform === 'win32' ? 'junction' : 'dir');
+    retargetedLink = readlinkSync(retargetedOwned);
+  });
+  assert.notEqual(retargetedLink, firstLink, 'symlink retarget control retained the original target');
+  assert.match(symlinkRetarget.race.stderr, /continuity initialization temporary ownership changed/);
+  assert.equal(readlinkSync(retargetedOwned), retargetedLink, 'cleanup changed the retargeted external link');
+  assert.equal(readFileSync(firstTargetSentinel, 'utf8'), 'first external target\n');
+  assert.equal(readFileSync(secondTargetSentinel, 'utf8'), 'second external target\n');
+  assert.equal(existsSync(displacedForLink), true, 'cleanup removed the file displaced by a symlink');
+
   const initRoot = makeRoot('integration-v2-init-temp-cleanup-race');
   const initFile = path.join(initRoot, 'v2-init-input.json');
   writeFileSync(initFile, `${JSON.stringify(initInput('init-temp-cleanup'))}\n`);
   let replacementDirectory;
+  let displacedDirectory;
   const initResult = await runBarrierRace({
     point: 'journal-init-temp-cleanup',
     command: process.execPath,
     args: journalChildArgs('initialize', initRoot, initFile),
     env: { PROJECT_MEMORY_TEST_FAIL_V2_INIT_TEMP: '1' },
     mutate: ({ target }) => {
-      const displaced = `${target}.externally-displaced`;
-      renameSync(target, displaced);
+      displacedDirectory = `${target}.externally-displaced`;
+      renameSync(target, displacedDirectory);
       mkdirSync(target);
       writeFileSync(path.join(target, 'replacement.txt'), 'external init replacement\n');
       replacementDirectory = target;
     },
   });
   assert.equal(initResult.code, 3, initResult.stderr);
+  assert.match(initResult.stderr, /continuity initialization temporary ownership changed/);
   assert.equal(readFileSync(path.join(replacementDirectory, 'replacement.txt'), 'utf8'), 'external init replacement\n');
+  assert.equal(existsSync(path.join(displacedDirectory, 'CURRENT.json')), true, 'cleanup removed the displaced owned directory');
   assert.equal(existsSync(storePaths(initRoot).store), false, 'failed v2 init installed a canonical store');
 
   for (const [label, point, command, args, env] of [
@@ -2076,6 +2389,16 @@ async function assertCleanupIdentityRaces(makeRoot) {
   assert.deepEqual(readFileSync(v1TempFiles.current), v1TempCurrent, 'v1 temp cleanup race changed CURRENT bytes');
   sameIdentity(lstatSync(v1TempFiles.current), v1TempIdentity, 'v1 cleanup prior CURRENT');
   assert.equal(readFileSync(v1TempReplacement, 'utf8'), 'v1 cleanup replacement\n');
+}
+
+export async function runCleanupIdentityRaces() {
+  const roots = [];
+  const makeRoot = (label) => { const root = makeRepository(label); roots.push(root); return root; };
+  try {
+    await assertCleanupIdentityRaces(makeRoot);
+  } finally {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  }
 }
 
 function assertHardLinkCleanupFailure(race, target, alias, label) {
@@ -2292,6 +2615,7 @@ export async function run() {
   const makeRoot = (label) => { const root = makeRepository(label); roots.push(root); return root; };
   try {
     assertSemanticTreeIdentityFingerprint(makeRoot);
+    assertRepositoryTruthFingerprint(makeRoot);
     assertPreOpenOwnedReadBoundary(makeRoot);
     await assertMainOptionValueBoundaries(makeRoot);
     await assertPublicOptionBoundaries(makeRoot);

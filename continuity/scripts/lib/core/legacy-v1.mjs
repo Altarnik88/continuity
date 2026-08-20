@@ -552,10 +552,15 @@ function retireOwnedPath(file, retained, label, { directory = false, barrierPoin
 }
 
 function assertStorePathSafe(root, target) {
-  const rootReal = realpathSync.native(root);
-  if (!isContained(rootReal, path.resolve(target))) throw new MemoryError('continuity store path escapes the repository');
-  const relative = path.relative(root, target);
-  let probe = root;
+  const lexicalRoot = path.resolve(root);
+  const absolute = path.resolve(target);
+  const rootReal = realpathSync.native(lexicalRoot);
+  const lexicalHit = isContained(lexicalRoot, absolute);
+  const canonicalHit = isContained(rootReal, absolute);
+  if (!lexicalHit && !canonicalHit) throw new MemoryError('continuity store path escapes the repository');
+  const walkRoot = lexicalHit ? lexicalRoot : rootReal;
+  const relative = path.relative(walkRoot, absolute);
+  let probe = walkRoot;
   for (const part of relative.split(path.sep).filter(Boolean)) {
     probe = path.join(probe, part);
     if (!existsSync(probe)) continue;

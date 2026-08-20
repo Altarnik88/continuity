@@ -173,6 +173,37 @@ function waitForChildExit(child, timeoutMs = 10000) {
   });
 }
 
+function waitForBarrierReady(child, ready, stderr, timeoutMs = 10000) {
+  if (existsSync(ready)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let interval;
+    let timeout;
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(interval);
+      clearTimeout(timeout);
+      child.off('error', onError);
+      child.off('exit', onExit);
+      if (error) reject(error); else resolve();
+    };
+    const check = () => {
+      if (existsSync(ready)) finish();
+      else if (child.exitCode !== null) finish(new Error(`child exited ${child.exitCode} before synchronized barrier: ${stderr()}`));
+    };
+    const onError = (error) => finish(error);
+    const onExit = (code) => finish(new Error(`child exited ${code} before synchronized barrier: ${stderr()}`));
+    child.on('error', onError);
+    child.on('exit', onExit);
+    check();
+    if (!settled) {
+      interval = setInterval(check, 5);
+      timeout = setTimeout(() => finish(new Error(`child did not reach synchronized barrier: ${stderr()}`)), timeoutMs);
+    }
+  });
+}
+
 function canonicalLegacy(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalLegacy).join(',')}]`;
   if (value && typeof value === 'object') {
@@ -572,6 +603,7 @@ function assertMarkerBarrier() {
 
 async function assertProjectionTempIdentityRace() {
   const root = makeRepository('truth-projection-temp-race');
+  const barrier = mkdtempSync(path.join(os.tmpdir(), 'project-memory-truth-projection-barrier-'));
   let helperProcess;
   try {
     const input = initInput('projection-temp-race');
@@ -585,67 +617,74 @@ async function assertProjectionTempIdentityRace() {
     );
     initializeV2(root, input, { clock: () => new Date(occurredAt) });
     const files = storePaths(root);
-    const resultFile = path.join(root, 'projection-race-result.json');
+    const ready = path.join(barrier, 'ready.json');
+    const release = path.join(barrier, 'release');
+    const journalModule = new URL('../../continuity/scripts/lib/core/journal-v2.mjs', import.meta.url).href;
     const helperScript = String.raw`
-      const fs = require('node:fs');
-      const path = require('node:path');
-      const directory = process.argv[1];
-      const resultFile = process.argv[2];
-      const prefix = 'CURRENT.json.tmp-';
-      let finished = false;
-      let watcher;
-      let poller;
-      function attack(name) {
-        const filename = String(name || '');
-        if (finished || !filename.startsWith(prefix) || filename.endsWith('.swapped')) return;
-        const target = path.join(directory, filename);
-        const displaced = target + '.swapped';
+      (async () => {
         try {
-          fs.renameSync(target, displaced);
-          fs.writeFileSync(target, 'external projection replacement\n', { flag: 'wx' });
-          fs.writeFileSync(resultFile, JSON.stringify({ target, displaced }));
-          finished = true;
-          watcher.close();
-          clearInterval(poller);
+          const { rebuildProjection } = await import(${JSON.stringify(journalModule)});
+          rebuildProjection(process.argv[1]);
         } catch (error) {
-          if (!['ENOENT', 'EEXIST', 'EPERM', 'EBUSY'].includes(error && error.code)) throw error;
+          process.stderr.write(String(error && error.message || error) + '\n');
+          process.exitCode = Number.isInteger(error && error.exitCode) ? error.exitCode : 1;
         }
-      }
-      watcher = fs.watch(directory, (_event, name) => attack(name));
-      poller = setInterval(() => {
-        for (const name of fs.readdirSync(directory)) attack(name);
-      }, 1);
-      process.stdout.write('READY\n');
+      })();
     `;
-    helperProcess = spawn(process.execPath, ['-e', helperScript, files.store, resultFile], {
-      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+    let helperStderr = '';
+    helperProcess = spawn(process.execPath, ['-e', helperScript, root], {
+      stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true,
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        PROJECT_MEMORY_TEST_BARRIER_POINT: 'journal-projection-before-rename',
+        PROJECT_MEMORY_TEST_BARRIER_DIR: barrier,
+      },
     });
-    await waitForChildLine(helperProcess, 'READY');
+    helperProcess.stderr.setEncoding('utf8');
+    helperProcess.stderr.on('data', (chunk) => { helperStderr += chunk; });
+    const exited = waitForChildExit(helperProcess);
+    await waitForBarrierReady(helperProcess, ready, () => helperStderr);
 
-    let observed;
-    for (let attempt = 0; attempt < 20 && !existsSync(resultFile); attempt += 1) {
-      const beforeBytes = readFileSync(files.current);
-      const beforeIdentity = lstatSync(files.current);
-      let error;
-      try { rebuildProjection(root); } catch (caught) { error = caught; }
-      if (!existsSync(resultFile)) continue;
-      observed = { beforeBytes, beforeIdentity, error };
-    }
-    assert.ok(observed, 'external helper did not substitute a projection temporary');
-    assert.ok(
-      observed.error instanceof MemoryError && observed.error.exitCode === 3,
-      `temp substitution did not fail closed: ${observed.error?.constructor?.name ?? 'no error'} ${observed.error?.exitCode ?? ''} ${observed.error?.message ?? ''}`,
-    );
-    assert.deepEqual(readFileSync(files.current), observed.beforeBytes, 'temp substitution changed canonical projection bytes');
+    const details = JSON.parse(readFileSync(ready, 'utf8'));
+    assert.equal(details.point, 'journal-projection-before-rename');
+    assert.ok(existsSync(details.temporary), 'barrier reported a missing projection temporary');
+    assert.equal(fs.realpathSync.native(details.current), fs.realpathSync.native(files.current));
+    assert.equal(fs.realpathSync.native(path.dirname(details.temporary)), fs.realpathSync.native(files.store));
+    assert.ok(details.rollback && existsSync(details.rollback), 'barrier reported a missing projection rollback link');
+    assert.equal(fs.realpathSync.native(path.dirname(details.rollback)), fs.realpathSync.native(files.store));
+
+    const beforeBytes = readFileSync(files.current);
+    const beforeIdentity = lstatSync(files.current);
+    const rollbackIdentity = lstatSync(details.rollback);
+    assert.equal(rollbackIdentity.dev, beforeIdentity.dev, 'barrier rollback link changed canonical projection device');
+    assert.equal(rollbackIdentity.ino, beforeIdentity.ino, 'barrier rollback link did not retain canonical projection identity');
+    assert.equal(rollbackIdentity.nlink, 2, 'barrier rollback link did not retain the expected two-link identity');
+    const temporaryBytes = readFileSync(details.temporary);
+    const temporaryIdentity = lstatSync(details.temporary);
+    assert.deepEqual(temporaryBytes, beforeBytes, 'rebuild temporary did not contain the canonical projection bytes');
+    const displaced = `${details.temporary}.externally-displaced`;
+    fs.renameSync(details.temporary, displaced);
+    writeFileSync(details.temporary, 'external projection replacement\n', { flag: 'wx' });
+    assert.deepEqual(readFileSync(displaced), temporaryBytes, 'helper did not displace the exact owned temporary');
+    assert.equal(readFileSync(details.temporary, 'utf8'), 'external projection replacement\n');
+    writeFileSync(release, 'release\n', { flag: 'wx' });
+
+    assert.equal(await exited, 3, `temp substitution did not fail closed: ${helperStderr}`);
+    assert.deepEqual(readFileSync(files.current), beforeBytes, 'temp substitution changed canonical projection bytes');
     const afterIdentity = lstatSync(files.current);
-    assert.equal(afterIdentity.dev, observed.beforeIdentity.dev, 'temp substitution changed canonical projection device');
-    assert.equal(afterIdentity.ino, observed.beforeIdentity.ino, 'temp substitution changed canonical projection identity');
-    const race = JSON.parse(readFileSync(resultFile, 'utf8'));
-    assert.equal(readFileSync(race.target, 'utf8'), 'external projection replacement\n', 'cleanup removed or changed an unowned replacement');
-    assert.deepEqual(readFileSync(race.displaced), observed.beforeBytes, 'the retained descriptor did not write the displaced owned temp');
+    assert.equal(afterIdentity.dev, beforeIdentity.dev, 'temp substitution changed canonical projection device');
+    assert.equal(afterIdentity.ino, beforeIdentity.ino, 'temp substitution changed canonical projection identity');
+    const displacedIdentity = lstatSync(displaced);
+    assert.equal(displacedIdentity.dev, temporaryIdentity.dev, 'helper displaced a different projection temporary device');
+    assert.equal(displacedIdentity.ino, temporaryIdentity.ino, 'helper displaced a different projection temporary identity');
+    assert.equal(readFileSync(details.temporary, 'utf8'), 'external projection replacement\n', 'cleanup removed or changed an unowned replacement');
+    assert.deepEqual(readFileSync(displaced), temporaryBytes, 'the retained descriptor did not preserve the displaced owned temp');
+    assert.equal(existsSync(details.rollback), false, 'temp substitution left projection rollback residue');
     assert.equal(existsSync(mutationLockPath(root)), false, 'temp substitution left lock residue');
   } finally {
     if (helperProcess && helperProcess.exitCode === null) helperProcess.kill();
+    rmSync(barrier, { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });
   }
 }
@@ -1378,6 +1417,62 @@ function makeLegacyGoldenRepository() {
   git(['commit', '-qm', 'fixture']);
   assert.equal(git(['rev-parse', 'HEAD']), '60bbb43234d3e8bc33e79a45f858d1531668b429');
   return root;
+}
+
+function assertLegacyStorePathAliasesAndEscapes() {
+  const root = makeLegacyGoldenRepository();
+  const outside = mkdtempSync(path.join(os.tmpdir(), 'project-memory-v1-path-outside-'));
+  const hadStoreOverride = Object.hasOwn(process.env, 'CONTINUITY_STORE_DIR');
+  const originalStoreOverride = process.env.CONTINUITY_STORE_DIR;
+  try {
+    delete process.env.CONTINUITY_STORE_DIR;
+    const initialized = runCli(helper, root, ['init']);
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const files = storePaths(root);
+    const stableStore = treeDigest(files.store);
+
+    if (process.platform === 'win32') {
+      const extendedPathAlias = `\\\\?\\${root}`;
+      const input = readLegacyInspectInput(extendedPathAlias);
+      assert.equal(input.store.schemaVersion, 1, 'legacy reader rejected a repository-bounded Windows path alias');
+      assert.equal(treeDigest(files.store), stableStore, 'Windows path-alias inspection changed the legacy store');
+    }
+
+    const outsideMarker = path.join(outside, 'outside-marker.json');
+    writeFileSync(outsideMarker, '{"outside":true}\n');
+    const outsideBefore = projectDigest(outside);
+    for (const [configured, pattern] of [
+      [outside, /bounded repository-relative directory/],
+      [`..${path.sep}${path.basename(outside)}`, /traversal segments/],
+    ]) {
+      process.env.CONTINUITY_STORE_DIR = configured;
+      const rootBefore = projectDigest(root);
+      assert.throws(
+        () => readLegacyInspectInput(root),
+        (error) => error instanceof MemoryError && error.exitCode === 3 && pattern.test(error.message),
+        `legacy reader accepted escaping store override ${configured}`,
+      );
+      assert.equal(projectDigest(root), rootBefore, 'escaping store override changed the repository');
+      assert.equal(projectDigest(outside), outsideBefore, 'escaping store override changed the outside target');
+    }
+
+    const linkedStore = path.join(root, 'linked-store');
+    symlinkSync(outside, linkedStore, process.platform === 'win32' ? 'junction' : 'dir');
+    process.env.CONTINUITY_STORE_DIR = 'linked-store';
+    const linkedRootBefore = projectDigest(root);
+    assert.throws(
+      () => readLegacyInspectInput(root),
+      (error) => /links or reparse points/.test(error.message),
+      'legacy reader followed a store reparse point outside the repository',
+    );
+    assert.equal(projectDigest(root), linkedRootBefore, 'reparse rejection changed the repository');
+    assert.equal(projectDigest(outside), outsideBefore, 'reparse rejection changed the outside target');
+  } finally {
+    if (hadStoreOverride) process.env.CONTINUITY_STORE_DIR = originalStoreOverride;
+    else delete process.env.CONTINUITY_STORE_DIR;
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
 }
 
 const V1_INSPECT_GOLDEN = {
@@ -4308,6 +4403,7 @@ export async function run() {
   assertCoordinatorHandoffSummary();
   assertHandoffDetailLinkage();
   assertHandoffStateCoupling();
+  assertLegacyStorePathAliasesAndEscapes();
   await assertLegacyDualSurface();
   assertGraphifyNotPresent();
   assertGraphifyCanonicalReceipt();
