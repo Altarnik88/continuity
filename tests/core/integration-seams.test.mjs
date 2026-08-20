@@ -226,6 +226,9 @@ function fakeHandler(calls, status) {
 
 function snapshotTree(root, { omitRootEntries = [] } = {}) {
   if (!existsSync(root)) return [];
+  if (!omitRootEntries.includes('.git') && existsSync(path.join(root, '.git'))) {
+    throw new Error('raw snapshot of a Git repository root is forbidden; use semantic repository truth');
+  }
   const records = [];
   const omitted = new Set(omitRootEntries);
   const visit = (directory, prefix = '') => {
@@ -252,6 +255,9 @@ function snapshotTree(root, { omitRootEntries = [] } = {}) {
 
 function snapshotTreeIdentities(root, { omitRootEntries = [] } = {}) {
   if (!existsSync(root)) return [];
+  if (!omitRootEntries.includes('.git') && existsSync(path.join(root, '.git'))) {
+    throw new Error('raw identity snapshot of a Git repository root is forbidden; use semantic repository truth');
+  }
   const records = [];
   const omitted = new Set(omitRootEntries);
   const visit = (directory, prefix = '') => {
@@ -323,6 +329,16 @@ function assertRepositoryTruthFingerprint(makeRoot) {
   const root = makeRoot('integration-repository-truth-fingerprint');
   const readme = path.join(root, 'README.md');
   const readmeBytes = readFileSync(readme);
+  assert.throws(
+    () => snapshotTree(root),
+    /raw snapshot of a Git repository root is forbidden/,
+    'repository-root byte snapshots bypassed semantic Git truth',
+  );
+  assert.throws(
+    () => snapshotTreeIdentities(root),
+    /raw identity snapshot of a Git repository root is forbidden/,
+    'repository-root identity snapshots bypassed semantic Git truth',
+  );
   const baseline = snapshotRepositoryTruth(root);
 
   // Use a unique administrative probe instead of contending with a real Git
@@ -400,11 +416,11 @@ function assertSemanticTreeIdentityFingerprint(makeRoot) {
   writeFileSync(stableFile, 'stable identity bytes\n');
   symlinkSync(firstTarget, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir');
 
-  const relative = (file) => path.relative(root, file).split(path.sep).join('/');
+  const relative = (file) => path.relative(fixture, file).split(path.sep).join('/');
   const findIdentity = (snapshot, file) => snapshot.find(([entry]) => entry === relative(file));
-  const beforeBytes = snapshotTree(root);
-  const beforeIdentities = snapshotTreeIdentities(root);
-  const directoryIdentity = findIdentity(beforeIdentities, fixture);
+  const beforeBytes = snapshotTree(fixture);
+  const beforeIdentities = snapshotTreeIdentities(fixture);
+  const directoryIdentity = findIdentity(beforeIdentities, firstTarget);
   const fileIdentity = findIdentity(beforeIdentities, stableFile);
   const linkIdentity = findIdentity(beforeIdentities, linkedDirectory);
   assert.equal(directoryIdentity?.[1], 'directory', 'semantic fingerprint lost the directory type');
@@ -421,8 +437,8 @@ function assertSemanticTreeIdentityFingerprint(makeRoot) {
   renameSync(stableFile, displaced);
   renameSync(replacement, stableFile);
   unlinkSync(displaced);
-  assert.deepEqual(snapshotTree(root), beforeBytes, 'byte-equivalent file replacement changed the byte snapshot');
-  const replacedIdentities = snapshotTreeIdentities(root);
+  assert.deepEqual(snapshotTree(fixture), beforeBytes, 'byte-equivalent file replacement changed the byte snapshot');
+  const replacedIdentities = snapshotTreeIdentities(fixture);
   const replacedFileIdentity = findIdentity(replacedIdentities, stableFile);
   assert.equal(
     replacedFileIdentity[2] === fileIdentity[2] && replacedFileIdentity[3] === fileIdentity[3],
@@ -432,7 +448,7 @@ function assertSemanticTreeIdentityFingerprint(makeRoot) {
 
   unlinkSync(linkedDirectory);
   symlinkSync(secondTarget, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir');
-  const retargetedLinkIdentity = findIdentity(snapshotTreeIdentities(root), linkedDirectory);
+  const retargetedLinkIdentity = findIdentity(snapshotTreeIdentities(fixture), linkedDirectory);
   assert.notEqual(
     retargetedLinkIdentity.at(-1),
     linkIdentity.at(-1),
@@ -478,24 +494,6 @@ function observeLockOpen(topology, action) {
   return { error, lockMaterializations, result };
 }
 
-function snapshotGitAdmin(topology) {
-  return [...new Set([topology.gitDirectory, topology.commonDirectory])].map((directory) => ({
-    directory,
-    bytes: snapshotTree(directory),
-    identities: snapshotTreeIdentities(directory),
-  }));
-}
-
-function assertGitAdminUnchanged(before, label) {
-  for (const snapshot of before) {
-    assert.deepEqual(snapshotTree(snapshot.directory), snapshot.bytes, `${label} changed Git-admin bytes`);
-    assert.deepEqual(
-      snapshotTreeIdentities(snapshot.directory), snapshot.identities,
-      `${label} changed Git-admin identities`,
-    );
-  }
-}
-
 function assertTerminalActorAppendPreflight(makeRoot) {
   const rows = [
     {
@@ -518,12 +516,7 @@ function assertTerminalActorAppendPreflight(makeRoot) {
         `${row.eventType} ${actorKind} fixture is not otherwise state-valid`,
       );
       const topology = gitAdminTopology(root);
-      const rootBeforeBytes = snapshotTree(root);
-      const rootBeforeIdentities = snapshotTreeIdentities(root);
-      const adminRoots = [...new Set([topology.gitDirectory, topology.commonDirectory])];
-      const adminBefore = adminRoots.map((directory) => ({
-        directory, bytes: snapshotTree(directory), identities: snapshotTreeIdentities(directory),
-      }));
+      const rootBefore = snapshotRepositoryTruth(root);
       assert.equal(existsSync(topology.lock), false, `${row.eventType} ${actorKind} fixture began with lock residue`);
 
       const originalOpenSync = fs.openSync;
@@ -548,21 +541,10 @@ function assertTerminalActorAppendPreflight(makeRoot) {
 
       assert.equal(lockMaterializations, 0, `${row.eventType} ${actorKind} materialized the Git-admin lock`);
       assert.equal(existsSync(topology.lock), false, `${row.eventType} ${actorKind} left Git-admin lock residue`);
-      assert.deepEqual(snapshotTree(root), rootBeforeBytes, `${row.eventType} ${actorKind} changed repository bytes`);
       assert.deepEqual(
-        snapshotTreeIdentities(root), rootBeforeIdentities,
-        `${row.eventType} ${actorKind} changed repository identities`,
+        snapshotRepositoryTruth(root), rootBefore,
+        `${row.eventType} ${actorKind} changed semantic repository truth`,
       );
-      for (const before of adminBefore) {
-        assert.deepEqual(
-          snapshotTree(before.directory), before.bytes,
-          `${row.eventType} ${actorKind} changed Git-admin bytes`,
-        );
-        assert.deepEqual(
-          snapshotTreeIdentities(before.directory), before.identities,
-          `${row.eventType} ${actorKind} changed Git-admin identities`,
-        );
-      }
     }
   }
   assert.deepEqual(
@@ -590,9 +572,7 @@ function assertD19PublicAppendSnapshot(makeRoot) {
   });
   const forbiddenDescriptor = Object.getOwnPropertyDescriptor(forbidden.value, 'actor');
   const forbiddenTopology = gitAdminTopology(forbiddenRoot);
-  const forbiddenBeforeBytes = snapshotTree(forbiddenRoot);
-  const forbiddenBeforeIdentities = snapshotTreeIdentities(forbiddenRoot);
-  const forbiddenAdminBefore = snapshotGitAdmin(forbiddenTopology);
+  const forbiddenBefore = snapshotRepositoryTruth(forbiddenRoot);
   const forbiddenAttempt = observeLockOpen(forbiddenTopology, () => appendV2(forbiddenRoot, forbidden.value));
   assert.equal(
     forbiddenAttempt.lockMaterializations,
@@ -612,12 +592,10 @@ function assertD19PublicAppendSnapshot(makeRoot) {
     'appendV2 replaced the forbidden caller-owned actor accessor',
   );
   assert.equal(existsSync(forbiddenTopology.lock), false, 'forbidden snapshot left Git-admin lock residue');
-  assert.deepEqual(snapshotTree(forbiddenRoot), forbiddenBeforeBytes, 'forbidden snapshot changed repository bytes');
   assert.deepEqual(
-    snapshotTreeIdentities(forbiddenRoot), forbiddenBeforeIdentities,
-    'forbidden snapshot changed repository identities',
+    snapshotRepositoryTruth(forbiddenRoot), forbiddenBefore,
+    'forbidden snapshot changed semantic repository truth',
   );
-  assertGitAdminUnchanged(forbiddenAdminBefore, 'forbidden snapshot');
 
   const allowedRoot = makeRoot('integration-d19-append-allowed-snapshot');
   const allowedDraft = prepareTerminalActorAppend(allowedRoot, 'goal.achieved');
@@ -659,9 +637,7 @@ function assertD19MarkerAfterSnapshotBarrier(makeRoot) {
         writeFileSync(files.migrationMarker, markerBytes);
         afterMarker = {
           markerIdentity: lstatSync(files.migrationMarker, { bigint: true }),
-          rootBytes: snapshotTree(root),
-          rootIdentities: snapshotTreeIdentities(root),
-          admin: snapshotGitAdmin(topology),
+          repositoryTruth: snapshotRepositoryTruth(root),
         };
       },
     },
@@ -683,12 +659,10 @@ function assertD19MarkerAfterSnapshotBarrier(makeRoot) {
   sameIdentity(lstatSync(files.history, { bigint: true }), historyIdentity, 'marker race HISTORY');
   assert.deepEqual(readFileSync(files.current), currentBefore, 'marker race changed CURRENT bytes');
   sameIdentity(lstatSync(files.current, { bigint: true }), currentIdentity, 'marker race CURRENT');
-  assert.deepEqual(snapshotTree(root), afterMarker.rootBytes, 'marker race changed repository bytes after marker creation');
   assert.deepEqual(
-    snapshotTreeIdentities(root), afterMarker.rootIdentities,
-    'marker race changed repository identities after marker creation',
+    snapshotRepositoryTruth(root), afterMarker.repositoryTruth,
+    'marker race changed semantic repository truth after marker creation',
   );
-  assertGitAdminUnchanged(afterMarker.admin, 'marker race');
   assert.equal(existsSync(topology.lock), false, 'marker race left Git-admin lock residue');
 }
 
@@ -755,13 +729,10 @@ function assertD19MalformedRootPreflight(makeRoot) {
   for (const row of rows) {
     const observer = hostileDraftObserver();
     const topology = gitAdminTopology(row.root);
-    const rootBeforeBytes = snapshotTree(row.root);
-    const rootBeforeIdentities = snapshotTreeIdentities(row.root);
-    const adminBefore = snapshotGitAdmin(topology);
+    const rootBefore = snapshotRepositoryTruth(row.root);
     const outsideBefore = row.outside.map((directory) => ({
       directory,
-      bytes: snapshotTree(directory),
-      identities: snapshotTreeIdentities(directory),
+      truth: snapshotRepositoryTruth(directory),
     }));
     assert.throws(
       () => appendV2(row.root, observer.value),
@@ -773,17 +744,14 @@ function assertD19MalformedRootPreflight(makeRoot) {
       { get: 0, ownKeys: 0, getOwnPropertyDescriptor: 0, getPrototypeOf: 0 },
       `${row.label} inspected caller draft before malformed-root rejection`,
     );
-    assert.deepEqual(snapshotTree(row.root), rootBeforeBytes, `${row.label} changed project bytes`);
     assert.deepEqual(
-      snapshotTreeIdentities(row.root), rootBeforeIdentities,
-      `${row.label} changed project identities`,
+      snapshotRepositoryTruth(row.root), rootBefore,
+      `${row.label} changed semantic project truth`,
     );
-    assertGitAdminUnchanged(adminBefore, row.label);
     for (const before of outsideBefore) {
-      assert.deepEqual(snapshotTree(before.directory), before.bytes, `${row.label} changed outside bytes`);
       assert.deepEqual(
-        snapshotTreeIdentities(before.directory), before.identities,
-        `${row.label} changed outside identities`,
+        snapshotRepositoryTruth(before.directory), before.truth,
+        `${row.label} changed outside repository truth`,
       );
     }
   }
@@ -1046,12 +1014,9 @@ async function assertD20RetainedInLockMarkerRace(makeRoot) {
   const historyIdentity = lstatSync(files.history, { bigint: true });
   const currentBefore = readFileSync(files.current);
   const currentIdentity = lstatSync(files.current, { bigint: true });
-  const rootBeforeBytes = snapshotTree(root);
-  const rootBeforeIdentities = snapshotTreeIdentities(root);
-  const adminBefore = snapshotGitAdmin(topology);
   const markerBytes = Buffer.from(`${JSON.stringify(preparedMigrationMarker())}\n`);
-  const markerRelative = path.relative(root, files.migrationMarker).split(path.sep).join('/');
   let markerIdentity;
+  let afterMarkerTruth;
 
   const race = await runBarrierRace({
     point: 'journal-append-after-lock',
@@ -1088,6 +1053,7 @@ async function assertD20RetainedInLockMarkerRace(makeRoot) {
       sameIdentity(lstatSync(files.current, { bigint: true }), currentIdentity, 'pre-marker CURRENT');
       writeFileSync(files.migrationMarker, markerBytes, { flag: 'wx', mode: 0o600 });
       markerIdentity = lstatSync(files.migrationMarker, { bigint: true });
+      afterMarkerTruth = snapshotRepositoryTruth(root);
     },
   });
 
@@ -1118,14 +1084,11 @@ async function assertD20RetainedInLockMarkerRace(makeRoot) {
     [],
     'retained in-lock rejection left a retired lock occupant',
   );
-  const withoutMarker = (snapshot) => snapshot.filter(([relative]) => relative !== markerRelative);
-  assert.deepEqual(withoutMarker(snapshotTree(root)), rootBeforeBytes, 'retained in-lock rejection changed repository bytes');
   assert.deepEqual(
-    withoutMarker(snapshotTreeIdentities(root)),
-    rootBeforeIdentities,
-    'retained in-lock rejection changed repository identities',
+    snapshotRepositoryTruth(root),
+    afterMarkerTruth,
+    'retained in-lock rejection changed semantic repository truth',
   );
-  assertGitAdminUnchanged(adminBefore, 'retained in-lock marker rejection');
 }
 
 export async function runD20RetainedInLockMarkerRace() {
@@ -1575,7 +1538,7 @@ function assertInspectSchema() {
 async function assertPublicOptionBoundaries(makeRoot) {
   const root = makeRoot('integration-public-option-bags');
   const input = initInput('public-option-bags');
-  const before = snapshotTree(root);
+  const before = snapshotRepositoryTruth(root);
   const aliases = ['fileSystem', 'filesystem', 'fs', 'freshness', 'freshnessEvaluator', 'evaluateFreshness'];
 
   assert.throws(
@@ -1709,7 +1672,10 @@ async function assertPublicOptionBoundaries(makeRoot) {
   cliMetaReads = 0;
   assert.equal(await Reflect.apply(main, null, [['--root', root, 'inspect'], uninspectableCli, {}]), 3);
   assert.equal(cliMetaReads, 0, 'main exact arity rejection inspected io');
-  assert.deepEqual(snapshotTree(root), before, 'public option rejection changed the repository tree');
+  assert.deepEqual(
+    snapshotRepositoryTruth(root), before,
+    'public option rejection changed semantic repository truth',
+  );
 }
 
 async function assertMainOptionValueBoundaries(makeRoot) {
@@ -1728,9 +1694,8 @@ async function assertMainOptionValueBoundaries(makeRoot) {
     assert.equal(result.stdout, '', `${label} emitted success output`);
     assert.equal(result.stderr, 'continuity: ERROR: main options are invalid\n', `${label} leaked a lower-layer error`);
   };
-  const assertTreeUnchanged = (root, beforeBytes, beforeIdentities, label) => {
-    assert.deepEqual(snapshotTree(root), beforeBytes, `${label} changed repository bytes`);
-    assert.deepEqual(snapshotTreeIdentities(root), beforeIdentities, `${label} changed repository identities`);
+  const assertTreeUnchanged = (root, before, label) => {
+    assert.deepEqual(snapshotRepositoryTruth(root), before, `${label} changed semantic repository truth`);
   };
 
   const dataRoot = makeRoot('integration-main-data-option-values');
@@ -1738,8 +1703,7 @@ async function assertMainOptionValueBoundaries(makeRoot) {
   writeFileSync(dataInput, `${JSON.stringify(initInput('d15-data-values'))}\n`);
   const dataPaths = storePaths(dataRoot);
   const dataLock = gitAdminTopology(dataRoot).lock;
-  const dataBeforeBytes = snapshotTree(dataRoot);
-  const dataBeforeIdentities = snapshotTreeIdentities(dataRoot);
+  const dataBefore = snapshotRepositoryTruth(dataRoot);
   for (const invalidKey of ['clock', 'git']) {
     let clockCalls = 0; let gitReads = 0;
     const result = await invoke(
@@ -1763,7 +1727,7 @@ async function assertMainOptionValueBoundaries(makeRoot) {
     assert.equal(gitReads, 0, `own data ${invalidKey} read the sibling git accessor`);
     assert.equal(existsSync(dataPaths.store), false, `own data ${invalidKey} created the store`);
     assert.equal(existsSync(dataLock), false, `own data ${invalidKey} created the mutation lock`);
-    assertTreeUnchanged(dataRoot, dataBeforeBytes, dataBeforeIdentities, `own data ${invalidKey}`);
+    assertTreeUnchanged(dataRoot, dataBefore, `own data ${invalidKey}`);
   }
 
   let invalidClockReads = 0;
@@ -1782,7 +1746,7 @@ async function assertMainOptionValueBoundaries(makeRoot) {
   assert.equal(invalidClockReads, 1, 'selected clock accessor was not resolved exactly once');
   assert.equal(existsSync(dataPaths.store), false, 'selected clock accessor created the store');
   assert.equal(existsSync(dataLock), false, 'selected clock accessor created the mutation lock');
-  assertTreeUnchanged(dataRoot, dataBeforeBytes, dataBeforeIdentities, 'selected clock accessor');
+  assertTreeUnchanged(dataRoot, dataBefore, 'selected clock accessor');
 
   const lazyRoot = makeRoot('integration-main-lazy-git-option');
   const lazyInput = path.join(lazyRoot, 'd15-lazy-init.json');
@@ -1812,8 +1776,7 @@ async function assertMainOptionValueBoundaries(makeRoot) {
   const legacyRoot = makeRoot('integration-main-selected-git-option');
   const legacyInit = runCli(helper, legacyRoot, ['init']);
   assert.equal(legacyInit.status, 0, legacyInit.stderr);
-  const legacyBeforeBytes = snapshotTree(legacyRoot);
-  const legacyBeforeIdentities = snapshotTreeIdentities(legacyRoot);
+  const legacyBefore = snapshotRepositoryTruth(legacyRoot);
   let selectedGitReads = 0; let legacyClockCalls = 0;
   const invalidGit = await invoke(legacyRoot, ['inspect', '--json'], (io) => {
     io.clock = () => { legacyClockCalls += 1; return new Date('2026-08-16T00:00:00.000Z'); };
@@ -1825,7 +1788,7 @@ async function assertMainOptionValueBoundaries(makeRoot) {
   assertGenericOptionError(invalidGit, 'selected git accessor');
   assert.equal(selectedGitReads, 1, 'selected git accessor was not resolved exactly once');
   assert.equal(legacyClockCalls, 0, 'git accessor rejection invoked the legacy clock');
-  assertTreeUnchanged(legacyRoot, legacyBeforeBytes, legacyBeforeIdentities, 'selected git accessor');
+  assertTreeUnchanged(legacyRoot, legacyBefore, 'selected git accessor');
 }
 
 async function assertProjectionIdentityRaces(makeRoot) {
@@ -2926,11 +2889,7 @@ export async function run() {
     const linkedRoot = path.join(linkedPrimaryRoot, 'linked-worktree');
     execFileSync('git', ['-C', linkedPrimaryRoot, 'worktree', 'add', '-q', '--detach', linkedRoot, 'HEAD']);
     try {
-      const linkedGitAdmin = execFileSync(
-        'git', ['-C', linkedRoot, 'rev-parse', '--absolute-git-dir'], { encoding: 'utf8' },
-      ).trim();
-      const linkedRootBefore = snapshotTree(linkedRoot);
-      const linkedAdminBefore = snapshotTree(linkedGitAdmin);
+      const linkedRootBefore = snapshotRepositoryTruth(linkedRoot);
       assert.throws(
         () => initializeV2(linkedRoot, {
           schemaVersion: 2,
@@ -2951,8 +2910,10 @@ export async function run() {
           && error.message === 'mutating continuity is refused in linked worktrees',
         'v2 initialization did not preserve the linked-worktree mutation refusal',
       );
-      assert.deepEqual(snapshotTree(linkedRoot), linkedRootBefore, 'linked-worktree rejection changed the worktree');
-      assert.deepEqual(snapshotTree(linkedGitAdmin), linkedAdminBefore, 'linked-worktree rejection changed Git administration');
+      assert.deepEqual(
+        snapshotRepositoryTruth(linkedRoot), linkedRootBefore,
+        'linked-worktree rejection changed semantic repository truth',
+      );
     } finally {
       execFileSync('git', ['-C', linkedPrimaryRoot, 'worktree', 'remove', '--force', linkedRoot]);
     }
@@ -2963,8 +2924,7 @@ export async function run() {
     renameSync(path.join(externalGitRoot, '.git'), externalGitAdmin);
     writeFileSync(path.join(externalGitRoot, '.git'), `gitdir: ${externalGitAdmin.replaceAll('\\', '/')}\n`);
     execFileSync('git', ['-C', externalGitRoot, 'status', '--short']);
-    const externalRootBefore = snapshotTree(externalGitRoot);
-    const externalAdminBefore = snapshotTree(externalGitAdmin);
+    const externalRootBefore = snapshotRepositoryTruth(externalGitRoot);
     assert.throws(
       () => initializeV2(externalGitRoot, {
         schemaVersion: 2,
@@ -2983,8 +2943,10 @@ export async function run() {
       (error) => error instanceof MemoryError && error.exitCode === 3,
       'v2 initialization accepted an external Git administration directory',
     );
-    assert.deepEqual(snapshotTree(externalGitRoot), externalRootBefore, 'external Git topology changed the repository tree');
-    assert.deepEqual(snapshotTree(externalGitAdmin), externalAdminBefore, 'external Git topology changed the admin tree');
+    assert.deepEqual(
+      snapshotRepositoryTruth(externalGitRoot), externalRootBefore,
+      'external Git topology changed semantic repository truth',
+    );
 
     const externalLegacyRoot = makeRoot('integration-external-v1-git-admin');
     const externalLegacyAdmin = path.join(path.dirname(externalLegacyRoot), `${path.basename(externalLegacyRoot)}.git-admin`);
@@ -2992,12 +2954,13 @@ export async function run() {
     renameSync(path.join(externalLegacyRoot, '.git'), externalLegacyAdmin);
     writeFileSync(path.join(externalLegacyRoot, '.git'), `gitdir: ${externalLegacyAdmin.replaceAll('\\', '/')}\n`);
     execFileSync('git', ['-C', externalLegacyRoot, 'status', '--short']);
-    const externalLegacyRootBefore = snapshotTree(externalLegacyRoot);
-    const externalLegacyAdminBefore = snapshotTree(externalLegacyAdmin);
+    const externalLegacyRootBefore = snapshotRepositoryTruth(externalLegacyRoot);
     result = runCli(helper, externalLegacyRoot, ['init']);
     assert.equal(result.status, 3, result.stderr);
-    assert.deepEqual(snapshotTree(externalLegacyRoot), externalLegacyRootBefore, 'legacy init changed an external-admin repository tree');
-    assert.deepEqual(snapshotTree(externalLegacyAdmin), externalLegacyAdminBefore, 'legacy init changed the external Git admin tree');
+    assert.deepEqual(
+      snapshotRepositoryTruth(externalLegacyRoot), externalLegacyRootBefore,
+      'legacy init changed external-admin semantic repository truth',
+    );
 
     assertInspectSchema();
 

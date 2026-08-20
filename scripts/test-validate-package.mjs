@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -199,14 +200,59 @@ export const CASES = [
     id: 'PKG-008-temp-install-destination-boundary',
     run() {
       const installHome = mkdtempSync(path.join(os.tmpdir(), 'continuity-home-'));
+      const aliasFixture = mkdtempSync(path.join(os.tmpdir(), 'continuity-root-alias-'));
+      const aliasTarget = path.join(aliasFixture, 'private-var');
+      const aliasAncestor = path.join(aliasFixture, 'var');
+      const aliasRoot = path.join(aliasAncestor, 'folders');
+      const outside = mkdtempSync(path.join(os.tmpdir(), 'continuity-root-alias-outside-'));
+      const escapeLink = path.join(aliasRoot, 'escape');
+      const inboundLink = path.join(outside, 'inbound-temp-alias');
       try {
         assert.equal(assertTempInstallHome(installHome), path.resolve(installHome));
         const skills = path.join(installHome, 'skills');
         assert.equal(path.resolve(assertSkillsDest(installHome, skills)), path.resolve(skills));
         assert.throws(() => assertSkillsDest(installHome, path.join(installHome, '..', 'escape')), /unsafe path components|outside/);
         assert.throws(() => assertTempInstallHome(repoRoot), /inside the temp directory/);
+
+        mkdirSync(path.join(aliasTarget, 'folders'), { recursive: true });
+        try {
+          symlinkSync(aliasTarget, aliasAncestor, process.platform === 'win32' ? 'junction' : 'dir');
+        } catch (error) {
+          const skip = new Error(`cannot create test root alias: ${error.code || error.message}`);
+          skip.name = 'Skip';
+          skip.reason = skip.message;
+          throw skip;
+        }
+        const aliasedHome = path.join(aliasRoot, 'continuity-home');
+        mkdirSync(aliasedHome, { recursive: true });
+        writeFileSync(path.join(aliasedHome, 'marker.txt'), 'trusted-root-alias\n');
+        const aliasedMarker = readFileSync(path.join(aliasedHome, 'marker.txt'));
+        assert.notEqual(path.resolve(aliasedHome), realpathSync(aliasedHome), 'fixture did not create a lexical/canonical root alias');
+        assert.equal(assertTempInstallHome(aliasedHome, { tmpdir: aliasRoot }), path.resolve(aliasedHome));
+        assert.deepEqual(readFileSync(path.join(aliasedHome, 'marker.txt')), aliasedMarker, 'root-alias validation changed the install home');
+
+        const outsideHome = path.join(outside, 'continuity-home');
+        mkdirSync(outsideHome, { recursive: true });
+        const outsideMarker = path.join(outsideHome, 'marker.txt');
+        writeFileSync(outsideMarker, 'outside-root-alias\n');
+        symlinkSync(outside, escapeLink, process.platform === 'win32' ? 'junction' : 'dir');
+        assert.throws(
+          () => assertTempInstallHome(path.join(escapeLink, 'continuity-home'), { tmpdir: aliasRoot }),
+          /symlink|junction|reparse|resolves outside/,
+        );
+        symlinkSync(aliasRoot, inboundLink, process.platform === 'win32' ? 'junction' : 'dir');
+        assert.throws(
+          () => assertTempInstallHome(path.join(inboundLink, 'continuity-home'), { tmpdir: aliasRoot }),
+          /inside the temp directory/,
+        );
+        assert.equal(readFileSync(outsideMarker, 'utf8'), 'outside-root-alias\n', 'escaping alias validation changed the outside target');
       } finally {
+        removeLink(inboundLink);
+        removeLink(escapeLink);
+        removeLink(aliasAncestor);
         rmSync(installHome, { recursive: true, force: true });
+        rmSync(aliasFixture, { recursive: true, force: true });
+        rmSync(outside, { recursive: true, force: true });
       }
     },
   },
@@ -218,6 +264,8 @@ export const CASES = [
       const linkPath = path.join(installHome, 'skills', 'continuity');
       try {
         mkdirSync(path.dirname(linkPath), { recursive: true });
+        const outsideMarker = path.join(outside, 'marker.txt');
+        writeFileSync(outsideMarker, 'outside-reparse-marker\n');
         try {
           symlinkSync(outside, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
         } catch (error) {
@@ -228,6 +276,8 @@ export const CASES = [
         }
         assert.throws(() => assertSkillsDest(installHome, linkPath), /symlink|junction|reparse/);
         assert.throws(() => assertUninstallDest(installHome), /symlink|junction|reparse/);
+        assert.equal(readFileSync(outsideMarker, 'utf8'), 'outside-reparse-marker\n', 'reparse rejection changed the outside target');
+        assert.equal(lstatSync(linkPath).isSymbolicLink(), true, 'reparse rejection removed the unowned link');
       } finally {
         removeLink(linkPath);
         rmSync(installHome, { recursive: true, force: true });

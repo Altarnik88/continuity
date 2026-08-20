@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   cpSync,
   existsSync,
@@ -8,6 +9,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -38,7 +40,8 @@ function fingerprint(root) {
         entries.push(`d:${portable}`);
         walk(absolute, portable);
       } else {
-        entries.push(`f:${portable}:${stat.size}`);
+        const sha256 = createHash('sha256').update(readFileSync(absolute)).digest('hex');
+        entries.push(`f:${portable}:${stat.size}:${sha256}`);
       }
     }
   };
@@ -162,6 +165,10 @@ export const CASES = [
       const project = makeTempGitProject('store');
       try {
         const dest = installSkillFromWorktree(installHome);
+        if (process.platform === 'darwin') {
+          assert.notEqual(path.resolve(installHome), realpathSync(installHome), 'PKG-012 did not exercise the macOS temp-root alias');
+          assert.notEqual(path.resolve(dest), realpathSync(dest), 'PKG-012 destination did not preserve the macOS temp-root alias');
+        }
         const store = path.join(project, '.continuity');
         mkdirSync(store, { recursive: true });
         writeFileSync(path.join(store, 'HISTORY.ndjson'), 'compatibility-store-marker\n');

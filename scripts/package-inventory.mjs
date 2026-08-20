@@ -499,8 +499,24 @@ function realpathExistingPrefix(absolute) {
 
 export function assertTempInstallHome(installHome, { tmpdir = os.tmpdir() } = {}) {
   if (typeof installHome !== 'string' || installHome.length === 0) fail('temporary install home is required');
+  const tempRoot = path.resolve(tmpdir);
   const resolved = path.resolve(installHome);
-  if (!tmpdir || !containedIn(tmpdir, resolved)) fail('install home must be inside the temp directory');
+  if (!tmpdir) fail('install home must be inside the temp directory');
+  const lexicalHit = containedIn(tempRoot, resolved);
+  if (!lexicalHit) fail('install home must be inside the temp directory');
+  assertSafePathChain(resolved, tempRoot);
+  let realTemp;
+  let realHome;
+  try {
+    realTemp = realpathSync(tempRoot);
+    realHome = realpathExistingPrefix(resolved);
+  } catch (error) {
+    if (error instanceof InventoryError) throw error;
+    fail('temporary install home is unavailable');
+  }
+  const canonicalHit = containedIn(realTemp, realHome);
+  if (!canonicalHit) fail('install home resolves outside the temp directory');
+  assertSafePathChain(realHome, realTemp);
   return resolved;
 }
 
@@ -553,9 +569,12 @@ export function assertUninstallDest(installHome) {
   assertSafePathChain(dest, home);
   const realDest = realpathSync(dest);
   const realSkills = realpathSync(skillsRoot);
+  const realHome = realpathSync(home);
   const realExpected = path.join(realSkills, 'continuity');
   if (!sameResolved(realDest, realExpected)) fail('refusing to delete unverified path');
-  if (!containedIn(home, realDest)) fail('refusing to delete dest outside the temporary install home');
+  if (!containedIn(home, realDest) && !containedIn(realHome, realDest)) {
+    fail('refusing to delete dest outside the temporary install home');
+  }
   if (path.basename(realDest) !== 'continuity') fail('refusing to delete unverified path');
   return realDest;
 }
