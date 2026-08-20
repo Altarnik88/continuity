@@ -3,7 +3,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import {
   appendFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
-  renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
+  readlinkSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
@@ -258,14 +258,86 @@ function snapshotTreeIdentities(root) {
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
       const absolute = path.join(directory, entry.name);
       const details = lstatSync(absolute, { bigint: true });
-      records.push([
-        relative, details.dev, details.ino, details.nlink, details.mode, details.size,
-      ]);
+      // Directory link counts and allocated sizes are filesystem bookkeeping, not
+      // stable object identity: APFS can retain changed values after transient
+      // entries. Preserve the stable directory inode/type/mode while retaining the
+      // full identity tuple for files, symlinks, and other non-directory entries.
+      if (details.isDirectory()) {
+        records.push([relative, 'directory', details.dev, details.ino, details.mode]);
+      } else {
+        const kind = details.isFile() ? 'file' : details.isSymbolicLink() ? 'symlink' : 'other';
+        records.push([
+          relative, kind, details.dev, details.ino, details.nlink, details.mode, details.size,
+          ...(kind === 'symlink' ? [readlinkSync(absolute)] : []),
+        ]);
+      }
       if (details.isDirectory()) visit(absolute, relative);
     }
   };
   visit(root);
   return records;
+}
+
+function assertSemanticTreeIdentityFingerprint(makeRoot) {
+  const root = makeRoot('integration-semantic-tree-identity-fingerprint');
+  const fixture = path.join(root, 'identity-fixture');
+  const firstTarget = path.join(fixture, 'target-a');
+  const secondTarget = path.join(fixture, 'target-b');
+  const stableFile = path.join(fixture, 'stable.txt');
+  const linkedDirectory = path.join(fixture, 'linked-directory');
+  mkdirSync(firstTarget, { recursive: true });
+  mkdirSync(secondTarget);
+  writeFileSync(stableFile, 'stable identity bytes\n');
+  symlinkSync(firstTarget, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir');
+
+  const relative = (file) => path.relative(root, file).split(path.sep).join('/');
+  const findIdentity = (snapshot, file) => snapshot.find(([entry]) => entry === relative(file));
+  const beforeBytes = snapshotTree(root);
+  const beforeIdentities = snapshotTreeIdentities(root);
+  const directoryIdentity = findIdentity(beforeIdentities, fixture);
+  const fileIdentity = findIdentity(beforeIdentities, stableFile);
+  const linkIdentity = findIdentity(beforeIdentities, linkedDirectory);
+  assert.equal(directoryIdentity?.[1], 'directory', 'semantic fingerprint lost the directory type');
+  assert.equal(directoryIdentity?.length, 5, 'semantic fingerprint retained mutable directory bookkeeping');
+  assert.equal(fileIdentity?.[1], 'file', 'semantic fingerprint lost the regular-file type');
+  assert.equal(fileIdentity?.length, 7, 'semantic fingerprint lost regular-file identity fields');
+  assert.equal(linkIdentity?.[1], 'symlink', 'semantic fingerprint lost the symlink type');
+  assert.equal(linkIdentity?.length, 8, 'semantic fingerprint lost symlink identity fields or target');
+  assert.equal(linkIdentity?.at(-1), readlinkSync(linkedDirectory), 'semantic fingerprint recorded the wrong symlink target');
+
+  const replacement = `${stableFile}.replacement`;
+  const displaced = `${stableFile}.displaced`;
+  writeFileSync(replacement, readFileSync(stableFile), { flag: 'wx' });
+  renameSync(stableFile, displaced);
+  renameSync(replacement, stableFile);
+  unlinkSync(displaced);
+  assert.deepEqual(snapshotTree(root), beforeBytes, 'byte-equivalent file replacement changed the byte snapshot');
+  const replacedIdentities = snapshotTreeIdentities(root);
+  const replacedFileIdentity = findIdentity(replacedIdentities, stableFile);
+  assert.equal(
+    replacedFileIdentity[2] === fileIdentity[2] && replacedFileIdentity[3] === fileIdentity[3],
+    false,
+    'byte-equivalent file replacement escaped the semantic identity fingerprint',
+  );
+
+  unlinkSync(linkedDirectory);
+  symlinkSync(secondTarget, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir');
+  const retargetedLinkIdentity = findIdentity(snapshotTreeIdentities(root), linkedDirectory);
+  assert.notEqual(
+    retargetedLinkIdentity.at(-1),
+    linkIdentity.at(-1),
+    'same-length symlink retarget escaped the semantic identity fingerprint',
+  );
+}
+
+export function runSemanticTreeIdentityFingerprint() {
+  const roots = [];
+  const makeRoot = (label) => { const root = makeRepository(label); roots.push(root); return root; };
+  try {
+    assertSemanticTreeIdentityFingerprint(makeRoot);
+  } finally {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  }
 }
 
 function sameIdentity(actual, expected, label) {
@@ -708,14 +780,20 @@ const renameTracePreload = `data:text/javascript,${encodeURIComponent(String.raw
   import path from 'node:path';
   import { syncBuiltinESMExports } from 'node:module';
   const originalRenameSync = fs.renameSync;
+  const canonicalPath = (value) => {
+    const resolved = path.resolve(String(value));
+    const canonical = path.join(fs.realpathSync.native(path.dirname(resolved)), path.basename(resolved));
+    return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+  };
   fs.renameSync = (...args) => {
-    const result = originalRenameSync(...args);
     const target = process.env.PROJECT_MEMORY_TEST_RENAME_TARGET;
     const trace = process.env.PROJECT_MEMORY_TEST_RENAME_TRACE;
-    if (process.env.NODE_ENV === 'test' && target && trace
-      && path.resolve(String(args[1])) === path.resolve(target)) {
-      fs.appendFileSync(trace, 'renamed\n', 'utf8');
+    let tracesTarget = false;
+    if (process.env.NODE_ENV === 'test' && target && trace) {
+      try { tracesTarget = canonicalPath(args[1]) === canonicalPath(target); } catch {}
     }
+    const result = originalRenameSync(...args);
+    if (tracesTarget) fs.appendFileSync(trace, 'renamed\n', 'utf8');
     return result;
   };
   syncBuiltinESMExports();
@@ -1666,6 +1744,37 @@ function assertPriorProjectionLinks(files, prior, alias, rollback, label) {
   assert.equal(rollbackIdentity.nlink, 3n, `${label} rollback link count changed`);
 }
 
+function assertInstalledProjectionBarrier(details, point, files, prior, label) {
+  assert.deepEqual(
+    Object.keys(details).sort(),
+    ['point', 'target'],
+    `${label} exposed an unexpected barrier payload contract`,
+  );
+  assert.equal(details.point, point, `${label} reached the wrong synchronized barrier`);
+  const targetParent = lstatSync(path.dirname(details.target), { bigint: true });
+  const currentParent = lstatSync(path.dirname(files.current), { bigint: true });
+  assert.equal(targetParent.isDirectory(), true, `${label} rollback parent is not a directory`);
+  assert.equal(currentParent.isDirectory(), true, `${label} CURRENT parent is not a directory`);
+  sameIdentity(targetParent, currentParent, `${label} rollback parent`);
+  assert.equal(
+    path.basename(details.target).startsWith(`${path.basename(files.current)}.rollback-`),
+    true,
+    `${label} did not identify the retained rollback link`,
+  );
+  assert.notDeepEqual(
+    readFileSync(files.current),
+    prior.currentBytes,
+    `${label} did not install the new projection before cleanup`,
+  );
+  const installedIdentity = lstatSync(files.current, { bigint: true });
+  assert.equal(
+    installedIdentity.dev === prior.currentIdentity.dev && installedIdentity.ino === prior.currentIdentity.ino,
+    false,
+    `${label} did not replace prior CURRENT identity`,
+  );
+  return details.target;
+}
+
 async function assertPriorCurrentHardLinkRaces(makeRoot) {
   const v2Root = makeRoot('integration-v2-prior-current-hardlink-race');
   initializeV2(v2Root, initInput('v2-prior-current-hardlink-race'), {
@@ -1765,20 +1874,23 @@ async function assertProjectionRollbackRecoveryRaces(makeRoot) {
     command: process.execPath,
     args: journalChildArgs('rebuild', v2Root),
     observeRenameTarget: v2Files.current,
-    mutate: ({ target }) => {
-      v2Rollback = target;
+    mutate: (details) => {
+      v2Rollback = assertInstalledProjectionBarrier(
+        details,
+        'journal-projection-rollback-cleanup',
+        v2Files,
+        v2Prior,
+        'v2 rollback recovery',
+      );
       sameIdentity(lstatSync(v2Rollback, { bigint: true }), v2Prior.currentIdentity, 'v2 rollback recovery prior inode');
-      assert.notDeepEqual(readFileSync(v2Files.current), v2Prior.currentBytes, 'v2 rollback recovery did not install the new projection before cleanup');
-      const installedIdentity = lstatSync(v2Files.current, { bigint: true });
-      assert.equal(installedIdentity.dev === v2Prior.currentIdentity.dev
-        && installedIdentity.ino === v2Prior.currentIdentity.ino, false, 'v2 rollback recovery did not replace prior CURRENT identity');
       v2Alias = `${v2Rollback}.external-hardlink`;
       linkSync(v2Rollback, v2Alias);
       assert.equal(lstatSync(v2Rollback, { bigint: true }).nlink, 2n, 'v2 rollback cleanup hard link was not inserted');
     },
   });
   assertGenericProjectionRaceFailure(v2Race, v2Alias, 'v2 projection rollback recovery race');
-  assert.ok(v2Race.renameTraceCount >= 1, 'v2 rollback recovery race did not observe the installed projection phase');
+  assert.equal(v2Race.details.target, v2Rollback, 'v2 rollback recovery race lost the synchronized installed phase');
+  assert.ok(v2Race.renameTraceCount >= 1, 'v2 rollback recovery rename tracer missed the installed projection');
   assertPriorProjectionLinks(v2Files, v2Prior, v2Alias, v2Rollback, 'v2 projection rollback recovery race');
 
   const v1Root = makeRoot('integration-v1-projection-rollback-recovery-race');
@@ -1800,21 +1912,34 @@ async function assertProjectionRollbackRecoveryRaces(makeRoot) {
     command: process.execPath,
     args: [helper, '--root', v1Root, 'checkpoint', '--file', v1Candidate],
     observeRenameTarget: v1Files.current,
-    mutate: ({ target }) => {
-      v1Rollback = target;
+    mutate: (details) => {
+      v1Rollback = assertInstalledProjectionBarrier(
+        details,
+        'legacy-projection-rollback-cleanup',
+        v1Files,
+        v1Prior,
+        'v1 rollback recovery',
+      );
       sameIdentity(lstatSync(v1Rollback, { bigint: true }), v1Prior.currentIdentity, 'v1 rollback recovery prior inode');
-      assert.notDeepEqual(readFileSync(v1Files.current), v1Prior.currentBytes, 'v1 rollback recovery did not install the new projection before cleanup');
-      const installedIdentity = lstatSync(v1Files.current, { bigint: true });
-      assert.equal(installedIdentity.dev === v1Prior.currentIdentity.dev
-        && installedIdentity.ino === v1Prior.currentIdentity.ino, false, 'v1 rollback recovery did not replace prior CURRENT identity');
       v1Alias = `${v1Rollback}.external-hardlink`;
       linkSync(v1Rollback, v1Alias);
       assert.equal(lstatSync(v1Rollback, { bigint: true }).nlink, 2n, 'v1 rollback cleanup hard link was not inserted');
     },
   });
   assertGenericProjectionRaceFailure(v1Race, v1Alias, 'v1 projection rollback recovery race');
-  assert.ok(v1Race.renameTraceCount >= 1, 'v1 rollback recovery race did not observe the installed projection phase');
+  assert.equal(v1Race.details.target, v1Rollback, 'v1 rollback recovery race lost the synchronized installed phase');
+  assert.ok(v1Race.renameTraceCount >= 1, 'v1 rollback recovery rename tracer missed the installed projection');
   assertPriorProjectionLinks(v1Files, v1Prior, v1Alias, v1Rollback, 'v1 projection rollback recovery race');
+}
+
+export async function runProjectionRollbackRecoveryRaces() {
+  const roots = [];
+  const makeRoot = (label) => { const root = makeRepository(label); roots.push(root); return root; };
+  try {
+    await assertProjectionRollbackRecoveryRaces(makeRoot);
+  } finally {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  }
 }
 
 async function assertCleanupIdentityRaces(makeRoot) {
@@ -2166,6 +2291,7 @@ export async function run() {
   const roots = [];
   const makeRoot = (label) => { const root = makeRepository(label); roots.push(root); return root; };
   try {
+    assertSemanticTreeIdentityFingerprint(makeRoot);
     assertPreOpenOwnedReadBoundary(makeRoot);
     await assertMainOptionValueBoundaries(makeRoot);
     await assertPublicOptionBoundaries(makeRoot);
