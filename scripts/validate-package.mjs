@@ -1,8 +1,6 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Ajv from 'ajv';
 
 import {
   DISTRIBUTABLE_FILES,
@@ -209,30 +207,9 @@ export function validatePackage(repoRoot = root) {
     fail('lockfile dependencies, metadata, URLs, integrity values, or licenses are outside the allowed set');
   }
 
-  const schema = parseJson(`${skill}/references/snapshot-v1.schema.json`);
-  if (schema.$schema !== 'http://json-schema.org/draft-07/schema#') fail('snapshot schema is not draft-07');
-  const ajv = new Ajv({ allErrors: true, strict: true });
-  let validate;
-  try {
-    validate = ajv.compile(schema);
-  } catch {
-    fail('snapshot schema could not be compiled as draft-07');
-  }
-  for (const repoPath of [
-    `${skill}/assets/snapshot-v1.template.json`,
-    'examples/snapshot.minimal.json',
-    'examples/snapshot.source-backed.json',
-  ]) {
-    if (!validate(parseJson(repoPath))) fail(`snapshot does not satisfy the bundled schema (${repoPath})`);
-  }
-
-  const anchor = readText('examples/source-anchor.md').replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-  const anchorHash = createHash('sha256').update(anchor, 'utf8').digest('hex');
-  const sourceExample = parseJson('examples/snapshot.source-backed.json');
-  if (sourceExample.sourceRefs?.length !== 1
-    || sourceExample.sourceRefs[0].path !== 'examples/source-anchor.md'
-    || sourceExample.sourceRefs[0].contentSha256 !== anchorHash) {
-    fail('source-backed example does not match its committed anchor');
+  const initTemplate = parseJson(`${skill}/assets/init-v3.template.json`);
+  if (initTemplate.schemaVersion !== 3 || !initTemplate.project || !initTemplate.finalGoal) {
+    fail('v3 init template is missing schemaVersion 3, project, or finalGoal');
   }
 
   const ci = readText('.github/workflows/ci.yml');

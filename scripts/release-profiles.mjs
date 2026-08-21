@@ -7,9 +7,7 @@ const MEMORY_PREFIXES = Object.freeze([
   'continuity/scripts/continuity.mjs',
   'continuity/scripts/project-memory.mjs',
   'continuity/scripts/lib/core/',
-  'continuity/scripts/lib/continuity/',
   'continuity/scripts/lib/protocol/',
-  'continuity/scripts/lib/migration/',
   'continuity/scripts/smokes/memory.mjs',
 ]);
 

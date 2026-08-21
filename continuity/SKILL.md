@@ -33,7 +33,7 @@ Provide a ready goal, criteria, and plan from the user or from any planning tool
 node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/continuity/assets/init-v3.template.json"
 ```
 
-`init` refuses an initialized store. Older store locations are not imported automatically.
+`init` refuses an initialized store. This build supports schema v3 only; v1/v2 stores are frozen at git tag `legacy-v1v2-final` and are not imported automatically.
 
 ## Record nontrivial work
 

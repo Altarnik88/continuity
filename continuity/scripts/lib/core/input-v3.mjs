@@ -1,6 +1,6 @@
 import { types } from 'node:util';
 
-import { MemoryError } from './domain-v2.mjs';
+import { MemoryError } from './errors.mjs';
 
 export const MAX_V3_INPUT_BYTES = 64 * 1024;
 export const MAX_V3_DEPTH = 16;

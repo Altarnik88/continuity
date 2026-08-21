@@ -87,7 +87,7 @@ export async function run() {
     const defaultRoot = makeRepository('default');
     const ignoredCodexHome = mkdtempSync(path.join(os.tmpdir(), 'continuity-codex-home-'));
     roots.push(defaultRoot, ignoredCodexHome);
-    result = runCli(continuityCli, defaultRoot, ['init'], { CODEX_HOME: ignoredCodexHome });
+    result = runCli(continuityCli, defaultRoot, ['init', '--schema', '3', '--file', v3InitTemplate], { CODEX_HOME: ignoredCodexHome });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(storePaths(defaultRoot).store, path.join(defaultRoot, DEFAULT_STORE_DIR));
     assert.equal(existsSync(path.join(defaultRoot, DEFAULT_STORE_DIR, 'HISTORY.ndjson')), true);
@@ -142,7 +142,7 @@ export async function run() {
     assert.deepEqual({ status: discovery.status, history: discovery.history, current: discovery.current }, {
       status: 'present', history: true, current: false,
     });
-    result = runCli(continuityCli, legacyRoot, ['init']);
+    result = runCli(continuityCli, legacyRoot, ['init', '--schema', '3', '--file', v3InitTemplate]);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readFileSync(legacyHistory).equals(legacyBefore), true);
     assert.equal(existsSync(path.join(legacyRoot, DEFAULT_STORE_DIR, 'HISTORY.ndjson')), true);

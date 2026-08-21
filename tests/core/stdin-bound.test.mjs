@@ -3,7 +3,7 @@ import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs
 import os from 'node:os';
 import path from 'node:path';
 
-import { MemoryError } from '../../continuity/scripts/lib/core/domain-v2.mjs';
+import { MemoryError } from '../../continuity/scripts/lib/core/domain-v3.mjs';
 import { MAX_INPUT_BYTES, readStdinBounded } from '../../continuity/scripts/lib/core/cli.mjs';
 
 export async function run() {

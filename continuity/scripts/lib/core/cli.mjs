@@ -1,24 +1,27 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-import { MemoryError, createDraftTemplate, validateDraftShape } from './domain-v2.mjs';
-import { appendV2, initializeV2, validateV2Append } from './journal-v2.mjs';
-import { renderLegacyInspectV1 } from './legacy-v1.mjs';
-import { assertMutationAllowed, detectStoreVersion, readV2Journal } from './store.mjs';
-import { handleMigrationCommand } from '../migration/index.mjs';
-import { handleInspectCommand } from '../continuity/index.mjs';
 import { handleV3Command } from './cli-v3.mjs';
+import { LEGACY_SCHEMA_UNSUPPORTED, MemoryError } from './errors.mjs';
+import { detectStoreVersion, gitAdminTopology } from './store.mjs';
 
 const VERSION = '2.0.0';
 const USAGE = 'usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate>';
-const HELP = `${USAGE}\n\nStore: .continuity (default)\nOverride: CONTINUITY_STORE_DIR=<repository-relative-directory>\nLegacy .codex/project-memory data is never read automatically.`;
+const HELP = `${USAGE}
+
+Store: .continuity (default)
+Override: CONTINUITY_STORE_DIR=<repository-relative-directory>
+This build supports schema v3 only; v1/v2 stores are frozen at git tag legacy-v1v2-final.
+Legacy .codex/project-memory data is never read automatically.`;
 export const MAX_INPUT_BYTES = 64 * 1024;
-const MAIN_IO_KEYS = new Set([
-  'stdin', 'stdout', 'stderr', 'clock', 'git',
-  'migrationCommandHandler', 'continuityCommandHandler',
-]);
+const MAIN_IO_KEYS = new Set(['stdin', 'stdout', 'stderr', 'clock', 'git']);
 const MAIN_FUNCTION_VALUE_KEYS = new Set(['clock', 'git']);
+const LEGACY_COMMANDS = new Set(['checkpoint', 'snapshot', 'lint', 'source', 'event', 'migrate', 'graphify']);
+
+function rejectLegacy() {
+  throw new MemoryError(LEGACY_SCHEMA_UNSUPPORTED, 2);
+}
 
 export function readStdinBounded(fd = 0) {
   const chunks = [];
@@ -94,7 +97,6 @@ function write(resolveIo, channel, value) {
   stream.write(value.endsWith('\n') ? value : `${value}\n`);
 }
 function readJsonFile(file, label) { if (!file) throw new MemoryError(`${label} requires --file`); if (statSync(file).size > MAX_INPUT_BYTES) throw new MemoryError(`${label} exceeds the size limit`); try { return JSON.parse(readFileSync(file, 'utf8')); } catch { throw new MemoryError(`${label} is not valid JSON`); } }
-function parseJsonInput(raw, label) { if (Buffer.byteLength(raw ?? '', 'utf8') > MAX_INPUT_BYTES) throw new MemoryError(`${label} exceeds the size limit`); try { return JSON.parse(raw); } catch { throw new MemoryError(`${label} is not valid JSON`); } }
 function requireCliToken(value) {
   if (typeof value !== 'string' || !value.trim() || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value)) {
     throw new MemoryError('command values must be nonempty text');
@@ -205,101 +207,14 @@ function resolveRoot(candidate, explicit) {
   return root;
 }
 
-function commandContext(resolveIo, root, options, operation) {
-  const context = { root, options };
-  const dependencies = {
-    stdin: () => undefined,
-    stdout: () => process.stdout,
-    stderr: () => process.stderr,
-    clock: () => () => new Date(),
-    git: () => undefined,
-  };
-  for (const [property, fallback] of Object.entries(dependencies)) {
-    let resolved = false; let value;
-    Object.defineProperty(context, property, {
-      enumerable: true,
-      configurable: false,
-      get() {
-        if (!resolved) {
-          value = resolveIo(property, fallback);
-          resolved = true;
-        }
-        return value;
-      },
-    });
-  }
-  if (operation !== undefined) context.operation = operation;
-  return context;
-}
-
-function commandHandler(resolveIo, property, fallback) {
-  return resolveIo(property, () => fallback);
-}
-
-async function dispatchCommandHandler(resolveIo, property, fallback, context, args) {
-  const handler = commandHandler(resolveIo, property, fallback);
-  const buffered = [];
-  const handlerContext = {};
-  const descriptors = Object.getOwnPropertyDescriptors(context);
-  for (const channel of ['stdout', 'stderr']) {
-    const stream = { write: (...writeArgs) => { buffered.push({ channel, writeArgs }); return true; } };
-    descriptors[channel] = { enumerable: true, configurable: false, get: () => stream };
-  }
-  Object.defineProperties(handlerContext, descriptors);
-  let result;
-  try { result = await handler(handlerContext, args); } catch { throw new Error('downstream command handler failed'); }
-  if (!Number.isInteger(result) || result < 0 || result > 255) throw new Error('downstream command handler returned an invalid exit code');
-  for (const entry of buffered) context[entry.channel].write(...entry.writeArgs);
-  return result;
-}
-
-function scanInvocation(argv) {
-  const valueFlags = new Set([
-    '--root', '--file', '--tail', '--subject', '--handoff', '--schema', '--to',
-    '--title', '--task', '--attempt', '--as', '--actor-id', '--run-id', '--assignee', '--why', '--result', '--approach', '--expected', '--actual',
-    '--impact', '--criterion', '--goal', '--execution', '--next', '--kind', '--exit-code',
-    '--priority', '--size', '--complexity', '--risk', '--class', '--packet', '--assignment', '--slots',
-    '--found', '--executed', '--passed', '--failed', '--skipped',
-  ]);
-  const flags = new Set();
-  let command; let rootValue; let delimiter = false;
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index];
-    if (value === '--') { delimiter = true; break; }
-    if (valueFlags.has(value)) {
-      flags.add(value);
-      if (value === '--root') rootValue = argv[index + 1];
-      index += 1;
-      continue;
-    }
-    if (value.startsWith('-')) { flags.add(value); continue; }
-    if (!command) command = value;
-  }
-  return { command, delimiter, flags, rootValue };
-}
-
-export function isV2Invocation(argv) {
-  if (argv.length === 0) return true;
-  const routing = scanInvocation(argv);
-  const { command } = routing;
-  if (routing.flags.has('--version') || routing.flags.has('--help')) return true;
-  if (routing.flags.has('--resume') || routing.flags.has('--rollback')) return true;
-  if (routing.delimiter) return true;
-  if (['event', 'record', 'migrate', 'handoff', 'rebuild'].includes(command)) return true;
-  if (command === 'graphify') return true;
-  if (command === 'init' && routing.flags.has('--schema')) return true;
-  if (command === 'inspect' && ['--json', '--subject', '--handoff'].some((flag) => routing.flags.has(flag))) return true;
-  if (command === 'history' && ['--json', '--subject', '--handoff'].some((flag) => routing.flags.has(flag))) return true;
-  if (!['init', 'inspect', 'validate', 'history', 'doctor', 'checkpoint'].includes(command)) return false;
-  try {
-    const explicit = routing.flags.has('--root');
-    const candidate = explicit ? path.resolve(routing.rootValue) : process.cwd();
-    const root = resolveRoot(candidate, explicit);
-    const version = detectStoreVersion(root);
-    return command === 'init' ? version === 'interrupted-migration' : [2, 3, 'interrupted-migration'].includes(version);
-  } catch {
-    return true;
-  }
+function doctorUninitialized(root, resolveIo) {
+  const topology = gitAdminTopology(root);
+  const worktree = topology.linkedWorktree ? 'linked' : 'primary';
+  const mutation = topology.linkedWorktree ? 'refused' : 'allowed';
+  const lock = existsSync(topology.lock) ? 'present-manual-review-required' : 'clear';
+  write(resolveIo, 'stdout', `repository=ok worktree=${worktree} mutation=${mutation}`);
+  write(resolveIo, 'stdout', 'journal=uninitialized projection=missing');
+  write(resolveIo, 'stdout', `lock=${lock}`);
 }
 
 export async function main(argv, io = {}) {
@@ -310,17 +225,19 @@ export async function main(argv, io = {}) {
   try {
     if (inspectedIo.error) throw inspectedIo.error;
     if (argv.length === 0) throw new MemoryError(USAGE);
-    const options = parse(argv); const [command, subcommand, ...rest] = options.positionals;
+    const options = parse(argv); const [command, subcommand] = options.positionals;
     if (options.delimiter) throw new MemoryError('command delimiter is not valid');
     if (command === '--version' && options.positionals.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', `continuity ${VERSION}`); return 0; }
     if (command === '--help' && options.positionals.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', HELP); return 0; }
-    if (command === 'event' && subcommand === 'template' && rest.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', JSON.stringify(createDraftTemplate(rest[0]))); return 0; }
-    if (command === 'event' && subcommand === 'lint' && rest.length === 0) { assertAllowedFlags(options, ['--file']); if (!options.file) throw new MemoryError('event lint requires --file'); validateDraftShape(readJsonFile(options.file, 'event draft')); write(resolveIo, 'stdout', 'event lint: ok'); return 0; }
+    if (options.schema === 1 || options.schema === 2 || LEGACY_COMMANDS.has(command)) rejectLegacy();
     const root = resolveRoot(options.root, options.rootExplicit);
-    const routedStoreVersion = ['init', 'inspect', 'validate', 'history', 'doctor', 'checkpoint', 'handoff', 'rebuild', 'record'].includes(command)
-      ? detectStoreVersion(root)
-      : null;
-    if (options.schema === 3 || routedStoreVersion === 3) {
+    const routedStoreVersion = detectStoreVersion(root);
+    if (command === 'init' && options.schema !== 3) rejectLegacy();
+    if (routedStoreVersion === 'uninitialized' && command === 'doctor' && !subcommand) {
+      doctorUninitialized(root, resolveIo);
+      return 0;
+    }
+    if (options.schema === 3 || routedStoreVersion === 3 || routedStoreVersion === 'uninitialized') {
       const buffered = [];
       const writeBuffered = (channel, value) => { buffered.push({ channel, value }); };
       const exitCode = await handleV3Command({
@@ -338,80 +255,6 @@ export async function main(argv, io = {}) {
         for (const entry of buffered) write(resolveIo, entry.channel, entry.value);
       }
       return exitCode;
-    }
-    if (command === 'init') {
-      assertAllowedFlags(options, ['--root', '--schema', '--file']);
-      assertMutationAllowed(root);
-      if (subcommand || options.schema !== 2 || !options.file) throw new MemoryError('v2 init requires --schema 2 --file');
-      const clock = resolveIo('clock', () => () => new Date());
-      const receipt = initializeV2(root, readJsonFile(options.file, 'v2 init input'), { clock }); write(resolveIo, 'stdout', `continuity v2 initialized: sequence=${receipt.sequence} event=${receipt.eventHash.slice(0, 12)} projection=current`); return 0;
-    }
-    if (command === 'record') {
-      assertAllowedFlags(options, ['--root', '--file', '--stdin', '--dry-run']);
-      assertMutationAllowed(root);
-      if (subcommand || Boolean(options.file) === Boolean(options.stdin)) throw new MemoryError('record requires exactly one of --file or --stdin');
-      const draft = options.file
-        ? readJsonFile(options.file, 'event draft')
-        : parseJsonInput(resolveIo('stdin', () => readStdinBounded()), 'event draft');
-      if (options.dryRun) { const validation = validateV2Append(root, draft); write(resolveIo, 'stdout', `record dry-run: ok prospective-sequence=${validation.prospectiveSequence}`); return 0; }
-      const receipt = appendV2(root, draft); write(resolveIo, 'stdout', `event recorded: sequence=${receipt.sequence} event=${receipt.eventHash.slice(0, 12)} projection=current`); return 0;
-    }
-    if (command === 'validate' && !subcommand) {
-      assertAllowedFlags(options, ['--root']);
-      if (routedStoreVersion === 'interrupted-migration') {
-        return await dispatchCommandHandler(resolveIo, 'migrationCommandHandler', handleMigrationCommand, commandContext(resolveIo, root, options, 'validate-marker'), []);
-      }
-      const store = readV2Journal(root);
-      if (store.events.some((event) => event.eventType === 'migration.v1_imported')) {
-        return await dispatchCommandHandler(resolveIo, 'migrationCommandHandler', handleMigrationCommand, commandContext(resolveIo, root, options, 'validate-v1-archive'), []);
-      }
-      write(resolveIo, 'stdout', `continuity v2 valid: ${store.events.length} event(s), projection=${store.projection}, journal-tail=${store.trailingBytes ? 'partial' : 'clean'}`); return 0;
-    }
-    if (command === 'doctor' && !subcommand) {
-      assertAllowedFlags(options, ['--root']);
-      if (routedStoreVersion === 'interrupted-migration') {
-        return await dispatchCommandHandler(resolveIo, 'migrationCommandHandler', handleMigrationCommand, commandContext(resolveIo, root, options, 'doctor-marker'), []);
-      }
-      const store = readV2Journal(root); write(resolveIo, 'stdout', `repository=ok store=v2 journal=valid projection=${store.projection} journal-tail=${store.trailingBytes ? 'partial' : 'clean'}`); return 0;
-    }
-    if (command === 'history') {
-      assertAllowedFlags(options, ['--root', '--tail', '--subject', '--json']);
-      if (subcommand) throw new MemoryError('invalid history arguments');
-      if (routedStoreVersion === 'interrupted-migration') throw new MemoryError('continuity migration is interrupted', 3);
-      if (routedStoreVersion === 1) throw new MemoryError('v1 history does not support structured selection');
-      if (options.subject) {
-        return await dispatchCommandHandler(resolveIo, 'continuityCommandHandler', handleInspectCommand, commandContext(resolveIo, root, options, 'history'), []);
-      }
-      let events = readV2Journal(root).events;
-      events = events.slice(-options.tail);
-      if (options.json) write(resolveIo, 'stdout', JSON.stringify({ schemaVersion: 2, events })); else for (const event of events) write(resolveIo, 'stdout', `#${event.sequence} ${event.eventType} ${event.subject.type}:${event.subject.id} ${event.eventHash.slice(0, 12)}`);
-      return 0;
-    }
-    if (command === 'checkpoint') {
-      if (routedStoreVersion === 'interrupted-migration') assertMutationAllowed(root);
-      assertAllowedFlags(options, ['--root']);
-      assertMutationAllowed(root);
-      throw new MemoryError('v2 is event-based; use `record`');
-    }
-    if (command === 'inspect') {
-      assertAllowedFlags(options, ['--root', '--json', '--subject', '--handoff']);
-      if (routedStoreVersion === 'interrupted-migration') throw new MemoryError('continuity migration is interrupted', 3);
-      if (routedStoreVersion === 1) {
-        if (subcommand || rest.length || !options.json || options.subject || options.handoff) throw new MemoryError('v1 structured inspect supports only --json');
-        const clock = resolveIo('clock', () => () => new Date());
-        const git = resolveIo('git', () => undefined);
-        write(resolveIo, 'stdout', JSON.stringify(renderLegacyInspectV1(root, { clock, git })));
-        return 0;
-      }
-      return await dispatchCommandHandler(resolveIo, 'continuityCommandHandler', handleInspectCommand, commandContext(resolveIo, root, options), [subcommand, ...rest].filter(Boolean));
-    }
-    if (command === 'migrate') {
-      assertAllowedFlags(options, ['--root', '--to', '--dry-run', '--resume', '--rollback']);
-      if (subcommand || rest.length || options.to !== 2) throw new MemoryError('migrate requires --to 2');
-      const resume = options.seen.has('--resume'); const rollback = options.seen.has('--rollback');
-      if ((resume && rollback) || (options.dryRun && (resume || rollback))) throw new MemoryError('migration actions are mutually exclusive');
-      if (options.migrationAction === 'start') assertMutationAllowed(root);
-      return await dispatchCommandHandler(resolveIo, 'migrationCommandHandler', handleMigrationCommand, commandContext(resolveIo, root, options, 'migrate'), []);
     }
     throw new MemoryError(USAGE);
   } catch (error) {

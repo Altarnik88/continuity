@@ -1,10 +1,10 @@
 # Migration
 
-Preferred new stores are schema v3.
+This build supports schema v3 only.
 
-- Schema v1 snapshot stores still exist in the helper. `checkpoint` is the v1 path, not the v3 path.
-- Schema v2 event stores exist. This build does not render v2 inspect.
-- `migrate` is present on the Continuity CLI and reports that migration support is not available. It does not write.
+- `init --schema 3 --file` creates a new store from the bundled v3 template.
+- v1 snapshot stores and v2 event stores are frozen at git tag `legacy-v1v2-final`. This helper refuses to read or migrate them.
+- `migrate`, `checkpoint`, and other v1/v2 invocations fail closed. They do not write.
 - Legacy `.codex/project-memory` locations are not imported automatically.
 - `project-memory.coordinator.v1` remains the Coordinator protocol identifier.
 - `continuity/scripts/project-memory.mjs` is a compatibility alias for `continuity.mjs`.

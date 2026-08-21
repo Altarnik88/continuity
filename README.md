@@ -399,18 +399,18 @@ Failure: `record fail --why … --impact … --next …`. Retry with a new `reco
 
 Context filling: `record context --next "Exact next step"` then read-only `handoff --task <id>`. The successor uses a new actor, run, and Attempt.
 
-v3 recipes: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` appears in usage and reports unavailable in this build.
+v3 recipes: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` remains in usage and fails closed for this v3-only build.
 
 ## Repository structure
 
-This worktree contains **136** tracked files. The installable Skill is `continuity/` (**60** files). Root `tests/` and `scripts/` are development and release tooling.
+This worktree contains **104** tracked files. The installable Skill is `continuity/` (**50** files). Root `tests/` and `scripts/` are development and release tooling.
 
 ```text
 .
 ├── continuity/                      # installable product tree
 │   ├── SKILL.md
 │   ├── assets/                      # init templates + coordinator.config.json
-│   ├── references/                  # protocol docs and JSON Schemas
+│   ├── references/                  # protocol docs
 │   └── scripts/
 │       ├── continuity.mjs           # Memory / Continuity CLI
 │       ├── coordinator.mjs          # Coordinator CLI (agent management)
@@ -419,10 +419,8 @@ This worktree contains **136** tracked files. The installable Skill is `continui
 │       └── lib/
 │           ├── core/                # journal, recipes, inspect, store
 │           │   └── coordination/    # ready set / packets as Core derived views
-│           ├── continuity/          # v2 inspect stub
 │           ├── coordinator/         # engine, run-state, adapters
-│           ├── protocol/            # shared ports and CLI client
-│           └── migration/           # stub
+│           └── protocol/            # shared ports and CLI client
 ├── .cursor/                         # Cursor skills and rules (thin pointers)
 ├── .grok/                           # Grok Build skills and rules (thin pointers)
 ├── tests/                           # core, protocol, coordinator tests
@@ -443,20 +441,20 @@ This worktree contains **136** tracked files. The installable Skill is `continui
 | `continuity/scripts/coordinator.mjs` | Public Coordinator CLI |
 | `.continuity/` at a **target repo** | Project data; never ship it; never put it in this Git tree |
 
-`npm pack --dry-run` lists 78 files. That tarball is not the installation unit. Install from `continuity/` or a profile zip.
+`npm pack --dry-run` lists 65 files. That tarball is not the installation unit. Install from `continuity/` or a profile zip.
 
 ## Security model
 
 Local and fail-closed. Not a security product.
 
-It hash-chains the journal, rejects path traversal and several secret-like patterns, refuses silent journal edits, refuses automatic legacy import and journal merge, and does not start a daemon. Coordinator writes run state beside the journal, not into it.
+It hash-chains the journal, rejects path traversal, refuses silent journal edits, refuses automatic legacy import and journal merge, and does not start a daemon. Coordinator writes run state beside the journal, not into it.
 
 It is not a secret scanner, DLP, or tamper-proof audit database. Pattern guards miss encoded secrets. An actor who can rewrite both the files and the checker can rebuild the hash chain. Do not record credentials, tokens, `.env` values, personal data, raw logs, diffs, or absolute home paths. Report vulnerabilities through [security advisories](https://github.com/Altarnik88/continuity/security/advisories/new).
 
 ## Compatibility and limitations
 
 - Protocol id `project-memory.coordinator.v1` is stable.
-- Preferred stores are schema v3. v1 snapshots and v2 event stores still exist. v2 inspect and `migrate` report unavailable.
+- This build supports schema v3 only. v1/v2 stores are frozen at git tag `legacy-v1v2-final`; the helper refuses to read them.
 - Continuity `--version` is `2.0.0`; Coordinator `--version` is `continuity-coordinator 1.0.0`; `package.json` is `1.0.0`.
 - `local-process` proves a real local Node process. It does not prove a hosted model ran.
 - Ready-set scheduling is deterministic; Memory does not launch the scheduled actors. Coordinator does, through an adapter you configure explicitly.
@@ -908,18 +906,18 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 
 Заполнение контекста: `record context --next "Exact next step"`, затем read-only `handoff --task <id>`. Преемник берёт новый актор, run и Attempt.
 
-Рецепты v3: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` есть в usage и в этой сборке недоступен.
+Рецепты v3: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` остаётся в usage и в этой v3-only сборке завершается fail-closed.
 
 ## Структура репозитория
 
-В этом worktree **136** отслеживаемых файла. Устанавливаемый Skill — `continuity/` (**60** файлов). Корневые `tests/` и `scripts/` — разработка и выпуск.
+В этом worktree **104** отслеживаемых файла. Устанавливаемый Skill — `continuity/` (**50** файлов). Корневые `tests/` и `scripts/` — разработка и выпуск.
 
 ```text
 .
 ├── continuity/                      # устанавливаемое дерево продукта
 │   ├── SKILL.md
 │   ├── assets/                      # шаблоны init + coordinator.config.json
-│   ├── references/                  # протокол и JSON Schema
+│   ├── references/                  # протокол
 │   └── scripts/
 │       ├── continuity.mjs           # Memory / Continuity CLI
 │       ├── coordinator.mjs          # Coordinator CLI (управление агентами)
@@ -928,10 +926,8 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 │       └── lib/
 │           ├── core/                # журнал, recipes, inspect, store
 │           │   └── coordination/    # ready set / packets как производные Core
-│           ├── continuity/          # заглушка v2 inspect
 │           ├── coordinator/         # engine, run-state, адаптеры
-│           ├── protocol/            # общие порты и CLI-клиент
-│           └── migration/           # заглушка
+│           └── protocol/            # общие порты и CLI-клиент
 ├── .cursor/                         # Cursor skills и rules (тонкие указатели)
 ├── .grok/                           # Grok Build skills и rules (тонкие указатели)
 ├── tests/                           # тесты core, protocol, coordinator
@@ -952,20 +948,20 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 | `continuity/scripts/coordinator.mjs` | Публичный Coordinator CLI |
 | `.continuity/` у **целевого репозитория** | Данные проекта; не поставлять и не коммитить в это дерево |
 
-`npm pack --dry-run` показывает 78 файлов. Этот tarball — не единица установки. Ставят из `continuity/` или zip профиля.
+`npm pack --dry-run` показывает 65 файлов. Этот tarball — не единица установки. Ставят из `continuity/` или zip профиля.
 
 ## Модель безопасности
 
 Локально и fail-closed. Это не security-продукт.
 
-Журнал с hash-цепочкой, отказ path traversal и ряда шаблонов секретов, отказ от тихих правок журнала, отказ от автоматического импорта legacy и слияния журналов, нет daemon. Coordinator пишет состояние run рядом с журналом, не в него.
+Журнал с hash-цепочкой, отказ path traversal, отказ от тихих правок журнала, отказ от автоматического импорта legacy и слияния журналов, нет daemon. Coordinator пишет состояние run рядом с журналом, не в него.
 
 Это не сканер секретов, не DLP и не tamper-proof аудит. Шаблоны пропускают закодированные секреты. Тот, кто может переписать и файлы, и проверку, может пересобрать цепочку. Не записывайте credentials, токены, `.env`, персональные данные, сырые логи, diff и абсолютные домашние пути. Уязвимости — через [security advisories](https://github.com/Altarnik88/continuity/security/advisories/new).
 
 ## Совместимость и ограничения
 
 - Идентификатор протокола `project-memory.coordinator.v1` стабилен.
-- Предпочтительны store схемы v3. Снимки v1 и событийные store v2 ещё есть. v2 inspect и `migrate` сообщают, что недоступны.
+- Эта сборка поддерживает только схему v3. Store v1/v2 заморожены на git-теге `legacy-v1v2-final`; helper отказывается их читать.
 - Continuity `--version` — `2.0.0`; Coordinator `--version` — `continuity-coordinator 1.0.0`; `package.json` — `1.0.0`.
 - `local-process` доказывает реальный локальный процесс Node. Он не доказывает, что работала hosted-модель.
 - Планирование ready set детерминировано; Memory не запускает назначенных акторов. Coordinator запускает — через явно заданный адаптер.

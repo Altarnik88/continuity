@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { MemoryError } from './domain-v2.mjs';
+import { MemoryError } from './errors.mjs';
 import { canonicalV3, isBrandedV3 } from './input-v3.mjs';
 import { TASK_CLASSES } from './coordination/contract.mjs';
 import {

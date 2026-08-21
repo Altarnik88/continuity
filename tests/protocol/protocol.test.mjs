@@ -89,7 +89,4 @@ export async function run() {
     const source = readFileSync(file.absolute, 'utf8');
     assert.equal(/lib\/coordinator\//.test(source) || /from '\.\.\/coordinator/.test(source), false, file.portable);
   }
-  const continuityAdapter = files.find((file) => file.portable === 'continuity/index.mjs');
-  const continuitySource = readFileSync(continuityAdapter.absolute, 'utf8');
-  assert.equal(continuitySource.includes('coordinator/adapters'), false);
 }

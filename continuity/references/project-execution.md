@@ -2,7 +2,7 @@
 
 Use this loop for nontrivial implementation. Read-only queries, trivial edits, and no-op work may inspect but should not write continuity data.
 
-The preferred store uses schema v3 recipes. The schema v1 `checkpoint` command exists only for a v1 store.
+The preferred store uses schema v3 recipes. This build supports schema v3 only; v1/v2 stores are frozen at git tag `legacy-v1v2-final`.
 
 ## Truth axes
 

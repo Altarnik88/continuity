@@ -2,12 +2,11 @@ import { spawnSync } from 'node:child_process';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
-import { MAX_JOURNAL_BYTES, MemoryError, canonicalV2, foldV2 } from './domain-v2.mjs';
+import { LEGACY_SCHEMA_UNSUPPORTED, MemoryError } from './errors.mjs';
 
-const MAX_PROJECTION_BYTES = 64 * 1024;
+const MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
 const MAX_GIT_POINTER_BYTES = 4 * 1024;
 const ASSERT_OWNED_FILE_OPTION_KEYS = new Set(['optional']);
-const READ_V2_JOURNAL_OPTION_KEYS = new Set(['allowEmpty', 'validateLegacyArchive']);
 const OPEN_STORE_OPTION_KEYS = new Set(['mode']);
 export const DEFAULT_STORE_DIR = '.continuity';
 export const LEGACY_STORE_DIR = '.codex/project-memory';
@@ -193,7 +192,10 @@ export function assertStoreSafe(root) {
 export function assertMutationAllowed(root) {
   const files = assertStoreSafe(root);
   if (lstatIfPresent(files.migrationMarker, 'MIGRATION.v1-to-v2.json')) {
-    throw new MemoryError('continuity mutation is blocked by interrupted migration', 3);
+    throw new MemoryError(LEGACY_SCHEMA_UNSUPPORTED, 3);
+  }
+  if (gitAdminTopology(root).linkedWorktree) {
+    throw new MemoryError('mutating continuity is refused in linked worktrees', 3);
   }
 }
 
@@ -283,96 +285,11 @@ export function readOwnedFileBounded(file, max, label) {
   return value;
 }
 
-function freezeDeep(value) {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const nested of Object.values(value)) freezeDeep(nested);
-  return value;
-}
-
-function immutableCopy(value) {
-  return freezeDeep(structuredClone(value));
-}
-
-function validateArchiveSynchronously(validator, details) {
-  try {
-    const result = validator(details);
-    const then = result !== null && (typeof result === 'object' || typeof result === 'function')
-      ? result.then
-      : undefined;
-    if (typeof then === 'function') {
-      if (typeof result.catch === 'function') result.catch(() => undefined);
-      throw new Error('asynchronous validator result');
-    }
-    if (result !== true) throw new Error('archive validator did not authorize replay');
-  } catch {
-    throw new MemoryError('legacy archive validation failed', 3);
-  }
-}
-
-export function readV2Journal(root, options = {}) {
-  if (arguments.length > 2) throw new MemoryError('readV2Journal options are invalid', 3);
-  const descriptors = inspectPublicOptions(
-    options,
-    READ_V2_JOURNAL_OPTION_KEYS,
-    'readV2Journal',
-  );
-  const allowEmpty = readPublicOption(options, descriptors, 'allowEmpty', false, 'readV2Journal');
-  const validateLegacyArchive = readPublicOption(
-    options,
-    descriptors,
-    'validateLegacyArchive',
-    undefined,
-    'readV2Journal',
-  );
-  if (typeof allowEmpty !== 'boolean') throw new MemoryError('readV2Journal options are invalid', 3);
-  if (validateLegacyArchive !== undefined && typeof validateLegacyArchive !== 'function') {
-    throw new MemoryError('legacy archive validator must be a function', 3);
-  }
-  const files = assertStoreSafe(root);
-  const historyDetails = assertOwnedFile(files.history, 'HISTORY.ndjson');
-  const currentDetails = assertOwnedFile(files.current, 'CURRENT.json');
-  if (!historyDetails) {
-    if (allowEmpty) return { files, events: [], committedBytes: 0, trailingBytes: 0, state: null, projection: currentDetails ? 'orphaned' : 'missing' };
-    throw new MemoryError('authoritative HISTORY.ndjson is missing', 3);
-  }
-  const raw = readOwnedFileBounded(files.history, MAX_JOURNAL_BYTES, 'HISTORY.ndjson total');
-  const lastLf = raw.lastIndexOf(0x0a);
-  const committedBytes = lastLf < 0 ? 0 : lastLf + 1;
-  const trailingBytes = raw.length - committedBytes;
-  const lines = raw.subarray(0, committedBytes).toString('utf8').split('\n').filter(Boolean);
-  const events = lines.map((line, index) => {
-    if (Buffer.byteLength(line, 'utf8') > 64 * 1024) throw new MemoryError(`history event ${index + 1} exceeds the size limit`, 3);
-    try { return JSON.parse(line); } catch { throw new MemoryError(`history event ${index + 1} is not valid JSON`, 3); }
-  });
-  if (!events.length) {
-    if (allowEmpty) return { files, events, committedBytes, trailingBytes, state: null, projection: currentDetails ? 'orphaned' : 'missing' };
-    throw new MemoryError('history has no committed events', 3);
-  }
-  if (events[0]?.schemaVersion !== 2) throw new MemoryError('store is not a v2 journal', 3);
-  const state = foldV2(events);
-  let projection = 'missing';
-  if (currentDetails) {
-    const rawProjection = readOwnedFileBounded(files.current, MAX_PROJECTION_BYTES, 'CURRENT.json');
-    try {
-      const parsed = JSON.parse(rawProjection.toString('utf8'));
-      projection = canonicalV2(parsed) === canonicalV2(state) ? 'current' : 'stale';
-    } catch {
-      projection = 'invalid';
-    }
-  }
-  const receiptEvent = events.find((event) => event.eventType === 'migration.v1_imported');
-  if (receiptEvent && validateLegacyArchive) {
-    // Archive paths are immutable metadata, not open capabilities. The migration
-    // validator must reopen and revalidate each path immediately before use.
-    validateArchiveSynchronously(validateLegacyArchive, immutableCopy({ root, files, receiptEvent, state }));
-  }
-  return { files, events, committedBytes, trailingBytes, state, projection };
-}
-
 export function detectStoreVersion(root) {
   const files = assertStoreSafe(root);
-  if (lstatIfPresent(files.migrationMarker, 'MIGRATION.v1-to-v2.json')) return 'interrupted-migration';
+  if (lstatIfPresent(files.migrationMarker, 'MIGRATION.v1-to-v2.json')) {
+    throw new MemoryError(LEGACY_SCHEMA_UNSUPPORTED, 3);
+  }
   if (!lstatIfPresent(files.history, 'HISTORY.ndjson')) return 'uninitialized';
   const raw = readOwnedFileBounded(files.history, MAX_JOURNAL_BYTES, 'HISTORY.ndjson total');
   const lf = raw.indexOf(0x0a);
@@ -380,8 +297,9 @@ export function detectStoreVersion(root) {
   let first;
   try { first = JSON.parse(raw.subarray(0, lf).toString('utf8')); } catch { throw new MemoryError('first journal event is not valid JSON', 3); }
   if (first?.schemaVersion === 3) return 3;
-  if (first?.schemaVersion === 2) return 2;
-  if (first?.snapshot?.schemaVersion === 1) return 1;
+  if (first?.schemaVersion === 2 || first?.snapshot?.schemaVersion === 1) {
+    throw new MemoryError(LEGACY_SCHEMA_UNSUPPORTED, 3);
+  }
   throw new MemoryError('unknown continuity journal version', 3);
 }
 
@@ -554,6 +472,5 @@ export function openStore(root, options = {}) {
   if (!['read', 'write'].includes(mode)) throw new MemoryError('store mode must be read or write', 3);
   const version = detectStoreVersion(root);
   if (mode === 'write' && gitAdminTopology(root).linkedWorktree) throw new MemoryError('mutating continuity is refused in linked worktrees', 3);
-  if (version === 2) return { version, root, ...readV2Journal(root) };
   return { version, root, files: assertStoreSafe(root) };
 }
