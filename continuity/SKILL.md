@@ -76,6 +76,7 @@ The identifier `project-memory.coordinator.v1` is retained only as a stable comp
 node "/absolute/path/to/continuity/scripts/continuity.mjs" validate
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 node "/absolute/path/to/continuity/scripts/continuity.mjs" history --tail 10
+node "/absolute/path/to/continuity/scripts/continuity.mjs" handoff --task <id>
 ```
 
 Do not edit the store or delete a lock silently. Follow [security-workflow.md](references/security-workflow.md) before checkpoint or lock recovery.

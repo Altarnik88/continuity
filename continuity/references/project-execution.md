@@ -93,11 +93,11 @@ The verifier actor and run must differ from the executor. Explicit counts preven
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record fail --why "what broke" --impact "what is stuck" --next "different next step"
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record context --next "Exact next step"
-node "/absolute/path/to/continuity/scripts/continuity.mjs" handoff
+node "/absolute/path/to/continuity/scripts/continuity.mjs" handoff --task <id>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record release --assignment <assignment-id>
 ```
 
-A retry is a new Attempt with a changed approach or hypothesis. `handoff` is read-only. A successor uses a new actor id, run id, and Attempt; it does not inherit or close the previous Attempt. Release only a still-held assignment. See [context-rollover.md](context-rollover.md).
+A retry is a new Attempt with a changed approach or hypothesis. `handoff --task <id>` is read-only and fails closed without a task. A successor uses a new actor id, run id, and Attempt; it does not inherit or close the previous Attempt. Release only a still-held assignment. See [context-rollover.md](context-rollover.md).
 
 ## Record user acceptance
 
