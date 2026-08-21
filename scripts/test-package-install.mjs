@@ -202,7 +202,7 @@ export const CASES = [
           env: helperEnv(),
         });
         assert.equal(version.status, 0, version.stderr);
-        assert.match(version.stdout, /^continuity 2\.0\.0\n?$/);
+        assert.match(version.stdout, /^continuity 3\.0\.0\n?$/);
 
         const doctorEmpty = runInstalled(helper, ['doctor'], { cwd: project, root: project });
         assert.equal(

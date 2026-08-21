@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.0
+
+- One product version from `package.json` at runtime: Memory CLI, Coordinator CLI, and the package all report `3.0.0`.
+- Store schema remains v3 and is printed separately from `--version`.
+- `npm run check` runs protocol and coordinator suites with the rest of the local gate.
+- Short bilingual READMEs point at ARCHITECTURE, INSTALL, COORDINATOR, and SECURITY.
+
 ## 1.0.0
 
 - Project Memory Core remains the journal owner (`HISTORY.ndjson` / `CURRENT.json`).

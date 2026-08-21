@@ -1,7 +1,15 @@
-export const RELEASE_VERSION = '1.0.0';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const packageJson = JSON.parse(
+  readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
+);
+export const RELEASE_VERSION = packageJson.version;
 
 const MEMORY_PREFIXES = Object.freeze([
   'continuity/SKILL.md',
+  'continuity/package.json',
   'continuity/assets/',
   'continuity/references/',
   'continuity/scripts/continuity.mjs',
@@ -12,6 +20,7 @@ const MEMORY_PREFIXES = Object.freeze([
 ]);
 
 const COORDINATOR_PREFIXES = Object.freeze([
+  'continuity/package.json',
   'continuity/scripts/coordinator.mjs',
   'continuity/scripts/lib/protocol/',
   'continuity/scripts/lib/coordinator/',
@@ -30,6 +39,7 @@ const SHARED_DOCS = Object.freeze([
   'MIGRATION.md',
   'RELEASE.md',
   'CHANGELOG.md',
+  'package.json',
 ]);
 
 const MEMORY_DOCS = Object.freeze([...SHARED_DOCS]);

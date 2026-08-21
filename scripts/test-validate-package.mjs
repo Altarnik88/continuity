@@ -175,7 +175,7 @@ export const CASES = [
     run() {
       const inventory = inventoryFromWorktree(repoRoot);
       const pack = parseNpmPackJson(JSON.stringify([{
-        filename: 'continuity-1.0.0.tgz',
+        filename: 'continuity-3.0.0.tgz',
         files: [...inventory.skill.map((file) => ({ path: file })), { path: 'package.json' }],
       }]));
       assertNpmPackIsNotSkillArtifact(pack, inventory);

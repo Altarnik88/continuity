@@ -81,7 +81,7 @@ function makeRepository(label) {
 
 try {
   let result = runFrom(['--version'], { cwd: outside });
-  assert(result.status === 0 && result.stdout.trim() === 'continuity 2.0.0', '--version failed');
+  assert(result.status === 0 && result.stdout.trim() === 'continuity 3.0.0', '--version failed');
 
   result = runFrom(['snapshot', 'template'], { cwd: outside });
   assert(result.status !== 0 && result.stderr.includes('legacy-v1v2-final'), 'v1 snapshot invocation was not refused');

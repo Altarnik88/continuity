@@ -15,7 +15,7 @@ function fail(message) {
 }
 
 const version = spawnSync(process.execPath, [cli, '--version'], { encoding: 'utf8' });
-if (version.status !== 0 || !version.stdout.includes('continuity 2.0.0')) {
+if (version.status !== 0 || !version.stdout.includes('continuity 3.0.0')) {
   fail(`--version failed: ${version.stderr}`);
 }
 

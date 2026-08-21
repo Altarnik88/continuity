@@ -75,12 +75,16 @@ export async function run() {
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /^usage: continuity\.mjs/m);
     assert.match(result.stdout, /CONTINUITY_STORE_DIR=<repository-relative-directory>/);
+    const repoRoot = path.resolve(scripts, '../..');
+    const productVersion = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
+    assert.equal(productVersion, '3.0.0');
     result = runCli(continuityCli, outsideGit, ['--version']);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'continuity 2.0.0\n');
+    assert.equal(result.stdout, `continuity ${productVersion}\n`);
+    assert.equal(result.stdout.includes('schema'), false);
     result = runCli(compatibilityCli, outsideGit, ['--version']);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'continuity 2.0.0\n');
+    assert.equal(result.stdout, `continuity ${productVersion}\n`);
     assert.equal(existsSync(path.join(outsideGit, DEFAULT_STORE_DIR)), false);
     assert.equal(existsSync(path.join(outsideGit, '.codex')), false);
 

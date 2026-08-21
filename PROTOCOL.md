@@ -4,6 +4,8 @@ Compatibility identifier: `project-memory.coordinator.v1`
 Contract version: `1`
 Protocol package version: `1`
 
+Product version is `package.json` (`3.0.0`) and is not this contract version. Store schema is v3.
+
 The protocol package lives at `continuity/scripts/lib/protocol/`. It defines types and ports. It does not contain provider business logic or the journal implementation.
 
 ## Ports

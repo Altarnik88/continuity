@@ -13,7 +13,7 @@ function fail(message) {
 }
 
 const version = spawnSync(process.execPath, [cli, '--version'], { encoding: 'utf8' });
-if (version.status !== 0 || !version.stdout.includes('continuity-coordinator 1.0.0')) {
+if (version.status !== 0 || !version.stdout.includes('continuity-coordinator 3.0.0')) {
   fail(`--version failed: ${version.stderr}`);
 }
 const help = spawnSync(process.execPath, [cli, '--help'], { encoding: 'utf8' });

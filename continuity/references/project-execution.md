@@ -17,6 +17,8 @@ These states are independent:
 | Freshness | Inspect recomputes freshness from live Git state and evidence. A historical pass can become stale. |
 | Acceptance | Only `record accept --as user` or `record reject --as user --next "…"` changes acceptance. |
 
+`--as` labels actor kind (`user`, `coordinator`, `subagent`, `tool`, `migration`). It does not launch a process. Omitting `--as` defaults to kind `coordinator`. That default is a label, not a running Coordinator.
+
 A Coordinator is optional and is not launched by Continuity. Continuity has no daemon, network client, interview mode, or top-level `coordinate` command.
 
 ## Resolve the CLI
@@ -63,6 +65,8 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record packet --task 
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record assign --task <task-id> --assignee <executor-id> --as coordinator --actor-id <writer-id> --run-id <run>
 ```
 
+There is no `record register`. Persist actors with `record --file` as `agent.registered`, then `record packet`, `record assign`, and `record verify` with a different actor and run. v3 recipes: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` remains in usage and fails closed for this v3-only build.
+
 A core task without `--class function` or `--class connector` remains unclassified and is not ready before the Build-First gate. The ready set also enforces dependencies, blockers, cycles, size, priority, capability, and path ownership. See [scheduling.md](scheduling.md).
 
 ## Execute and record evidence
@@ -71,10 +75,10 @@ A core task without `--class function` or `--class connector` remains unclassifi
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record start --task <task-id> --approach "One sentence" --as subagent --actor-id <executor-id> --run-id <executor-run>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record report --execution partial --as subagent --actor-id <executor-id> --run-id <executor-run>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record evidence --expected "check passes" --actual "exit 0" --kind command --exit-code 0 --as subagent --actor-id <executor-id> --run-id <executor-run>
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expected "check passes" --actual "what happened" --as subagent --actor-id <executor-id> --run-id <executor-run>
+node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expected "check passes" --actual "what happened" --as subagent --actor-id <executor-id> --run-id <executor-run> --evidence <evidence-id>
 ```
 
-An executor report is not evidence. Evidence without `--exit-code` is recorded as `agent_report` and cannot authorize success. A nonzero exit code is a failed observation. Record bounded summaries and references, never raw command output, logs, diffs, secrets, personal data, or private absolute paths.
+An executor report is not evidence. Evidence without `--exit-code` is recorded as `agent_report` and cannot authorize success. A nonzero exit code is a failed observation. Succeeded `record result` requires `--evidence` unless exactly one authorizing evidence exists for the task's current attempt. Record bounded summaries and references, never raw command output, logs, diffs, secrets, personal data, or private absolute paths.
 
 ## Verify independently
 

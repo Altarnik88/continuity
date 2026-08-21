@@ -25,7 +25,7 @@ export const EXPECTED_PACKAGE_SCRIPTS = Object.freeze({
   'test:coordinator': 'node scripts/test-coordinator.mjs',
   'test:release': 'node scripts/test-release.mjs',
   'package:release': 'node scripts/package-release.mjs',
-  check: 'npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:release',
+  check: 'npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:protocol && npm run test:coordinator && npm run test:release',
   'audit:dev': 'npm audit --audit-level=high',
 });
 
@@ -95,7 +95,15 @@ export function validatePackage(repoRoot = root) {
     'bugs', 'packageManager', 'engines', 'files', 'scripts', 'devDependencies',
   ];
   if (Object.keys(packageJson).join('\0') !== exactPackageKeys.join('\0')) fail('package.json has unexpected metadata fields');
-  if (packageJson.name !== 'continuity' || packageJson.version !== '1.0.0') fail('package identity is invalid');
+  if (packageJson.name !== 'continuity' || packageJson.version !== '3.0.0') fail('package identity is invalid');
+  const skillPackage = parseJson(`${skill}/package.json`);
+  if (Object.keys(skillPackage).join('\0') !== ['name', 'version', 'private', 'type'].join('\0')) {
+    fail('skill package.json has unexpected metadata fields');
+  }
+  if (skillPackage.name !== 'continuity' || skillPackage.version !== packageJson.version) {
+    fail('skill package identity does not match package.json');
+  }
+  if (skillPackage.private !== true || skillPackage.type !== 'module') fail('skill package.json metadata is invalid');
   if (packageJson.private !== true || packageJson.license !== 'MIT') fail('package publication/license boundary is invalid');
   const licenseText = readText('LICENSE').replaceAll('\r\n', '\n');
   if (!licenseText.startsWith('MIT License\n')
@@ -150,7 +158,7 @@ export function validatePackage(repoRoot = root) {
   const expectedLockPackages = {
     '': {
       name: 'continuity',
-      version: '1.0.0',
+      version: '3.0.0',
       license: 'MIT',
       devDependencies: { ajv: '8.20.0' },
       engines: { node: '>=22 <25' },

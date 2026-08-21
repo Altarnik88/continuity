@@ -59,9 +59,12 @@ function clientWithFocusedChecks(argv = ['-e', 'process.exit(0)']) {
 }
 
 export async function run() {
+  const productVersion = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
+  assert.equal(productVersion, '3.0.0');
   const version = spawnSync(process.execPath, [coordinatorCli, '--version'], { encoding: 'utf8' });
   assert.equal(version.status, 0, version.stderr);
-  assert.equal(version.stdout.trim(), 'continuity-coordinator 1.0.0');
+  assert.equal(version.stdout.trim(), `continuity-coordinator ${productVersion}`);
+  assert.equal(version.stdout.includes('schema'), false);
   const help = spawnSync(process.execPath, [coordinatorCli, '--help'], { encoding: 'utf8' });
   assert.match(help.stdout, /never starts a daemon/);
 

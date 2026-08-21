@@ -2,11 +2,11 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import { CONTINUITY_CLI_VERSION } from '../protocol/compatibility.mjs';
 import { handleV3Command } from './cli-v3.mjs';
 import { LEGACY_SCHEMA_UNSUPPORTED, MemoryError } from './errors.mjs';
 import { detectStoreVersion, gitAdminTopology } from './store.mjs';
 
-const VERSION = '2.0.0';
 const USAGE = 'usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate>';
 const HELP = `${USAGE}
 
@@ -228,7 +228,7 @@ export async function main(argv, io = {}) {
     if (argv.length === 0) throw new MemoryError(USAGE);
     const options = parse(argv); const [command, subcommand] = options.positionals;
     if (options.delimiter) throw new MemoryError('command delimiter is not valid');
-    if (command === '--version' && options.positionals.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', `continuity ${VERSION}`); return 0; }
+    if (command === '--version' && options.positionals.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', `continuity ${CONTINUITY_CLI_VERSION}`); return 0; }
     if (command === '--help' && options.positionals.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', HELP); return 0; }
     if (options.schema === 1 || options.schema === 2 || LEGACY_COMMANDS.has(command)) rejectLegacy();
     const root = resolveRoot(options.root, options.rootExplicit);

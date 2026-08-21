@@ -1,10 +1,41 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+function readNamedContinuityPackage(file) {
+  if (!existsSync(file)) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+  if (parsed?.name !== 'continuity' || typeof parsed.version !== 'string' || parsed.version.length === 0) {
+    return null;
+  }
+  return parsed.version;
+}
+
+export function readProductVersion() {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, '../../../../package.json'),
+    path.resolve(here, '../../../package.json'),
+  ];
+  for (const file of candidates) {
+    const version = readNamedContinuityPackage(file);
+    if (version) return version;
+  }
+  throw new Error('package.json product version is unavailable');
+}
+
 // Stable Coordinator protocol identifier. Existing consumers keep this value.
 export const COORDINATION_CONTRACT_ID = 'project-memory.coordinator.v1';
 export const COORDINATION_CONTRACT_VERSION = 1;
 export const PROTOCOL_PACKAGE = 'continuity.protocol';
 export const PROTOCOL_PACKAGE_VERSION = 1;
-export const COORDINATOR_RUNTIME_VERSION = '1.0.0';
-export const CONTINUITY_CLI_VERSION = '2.0.0';
+export const COORDINATOR_RUNTIME_VERSION = readProductVersion();
+export const CONTINUITY_CLI_VERSION = COORDINATOR_RUNTIME_VERSION;
 
 export const TASK_PRIORITIES = Object.freeze(['blocker', 'core', 'verification', 'backlog']);
 export const TASK_SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);

@@ -7,3 +7,5 @@ Start from [the bundled v3 init template](../assets/init-v3.template.json). The 
 `init --schema 3 --file` refuses an already-initialized store. A v1 or v2 journal, or a v1/v2 CLI invocation, fails closed with a message that names tag `legacy-v1v2-final`. The helper never silently folds an old store as v3.
 
 Authorizing evidence remains a linked `command` or `test` observation with exit code `0`. Only `--as user` may accept or reject a result.
+
+`HISTORY.ndjson` fails closed at 8 MiB. Unknown fields are rejected. A rejected write leaves the store unchanged. Product version (`package.json`) is not schema v3.

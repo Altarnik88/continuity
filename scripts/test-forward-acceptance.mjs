@@ -369,7 +369,7 @@ export const CASES = [
 
         const version = run(['--version'], dest);
         requireStatus(version, 0, 'installed --version');
-        assert.match(version.stdout, /^continuity 2\.0\.0\n?$/);
+        assert.match(version.stdout, /^continuity 3\.0\.0\n?$/);
 
         const installAsProject = run(['doctor'], dest);
         assert.notEqual(installAsProject.status, 0, 'installed skill directory must not be treated as a project root');

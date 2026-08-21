@@ -1,6 +1,6 @@
 {
   "name": "continuity",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "private": true,
   "description": "Continuity: a bounded, evidence-sensitive project continuity skill. GitHub-distributed under MIT; not published to npm.",
   "type": "module",
@@ -43,7 +43,7 @@
     "test:coordinator": "node scripts/test-coordinator.mjs",
     "test:release": "node scripts/test-release.mjs",
     "package:release": "node scripts/package-release.mjs",
-    "check": "npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:release",
+    "check": "npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:protocol && npm run test:coordinator && npm run test:release",
     "audit:dev": "npm audit --audit-level=high"
   },
   "devDependencies": {

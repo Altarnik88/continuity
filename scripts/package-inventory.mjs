@@ -117,6 +117,7 @@ export const DISTRIBUTABLE_FILES = Object.freeze([
 ]);
 export const EXPECTED_SKILL_FILES = Object.freeze([
   `${SKILL_PREFIX}SKILL.md`,
+  `${SKILL_PREFIX}package.json`,
   `${SKILL_PREFIX}assets/init-v3.template.json`,
   `${SKILL_PREFIX}references/context-rollover.md`,
   `${SKILL_PREFIX}references/coordination.md`,
