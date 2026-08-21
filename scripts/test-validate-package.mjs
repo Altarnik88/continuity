@@ -513,7 +513,7 @@ export const CASES = [
       const root = makeBoundaryRoot('cyrillic');
       try {
         const cyrillic = String.fromCodePoint(0x41f, 0x430, 0x43c, 0x44f, 0x442, 0x44c);
-        writeFileSync(path.join(root, 'README.md'), `# ${cyrillic}\n`);
+        writeFileSync(path.join(root, 'SECURITY.md'), `# ${cyrillic}\n`);
         assert.throws(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)), /contains Cyrillic/);
       } finally {
         rmSync(root, { recursive: true, force: true });

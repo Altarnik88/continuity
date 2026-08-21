@@ -53,7 +53,7 @@ export const REPO_METADATA_EXACT = Object.freeze([
   'package-lock.json',
   'package.json',
 ]);
-export const LOCALIZED_README_FILES = Object.freeze(['README.ru.md']);
+export const LOCALIZED_README_FILES = Object.freeze(['README.md', 'README.ru.md']);
 export const REQUIRED_REPO_METADATA = Object.freeze([
   '.cursor/rules/continuity.mdc',
   '.cursor/skills/continuity/SKILL.md',
