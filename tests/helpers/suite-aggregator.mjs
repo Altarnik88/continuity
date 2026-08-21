@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const SUITE_NAMES = Object.freeze(['core', 'migration', 'continuity', 'graphify']);
+export const SUITE_NAMES = Object.freeze(['core', 'migration', 'continuity', 'graphify', 'protocol']);
 
 export class SuiteSelectionError extends Error {
   constructor(reason) { super(reason); this.name = 'SuiteSelectionError'; this.reason = reason; }

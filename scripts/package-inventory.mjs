@@ -111,6 +111,13 @@ export const EXPECTED_SKILL_FILES = Object.freeze([
   `${SKILL_PREFIX}scripts/lib/graphify/index.mjs`,
   `${SKILL_PREFIX}scripts/lib/migration/index.mjs`,
   `${SKILL_PREFIX}scripts/project-memory.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/adapter.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/client.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/compatibility.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/index.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/ports.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/secrets.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/validate.mjs`,
 ]);
 export const REQUIRED_SKILL_FILES = EXPECTED_SKILL_FILES;
 export const ALLOWED_GIT_MODES = Object.freeze(new Set(['100644', '100755']));
