@@ -1,0 +1,17 @@
+---
+description: Use Continuity Memory CLI and optional Coordinator CLI from this checkout
+alwaysApply: true
+---
+
+# Continuity
+
+Read `AGENTS.md` and `continuity/SKILL.md`. The files under `.cursor/skills/continuity` are pointers only. Invoke the canonical CLIs; do not fork journal logic and do not require any other Skill.
+
+```bash
+node continuity/scripts/continuity.mjs doctor
+node continuity/scripts/continuity.mjs inspect
+node continuity/scripts/continuity.mjs inspect ready --json
+node continuity/scripts/coordinator.mjs doctor --root .
+```
+
+Keep attempt/report, evidence, execution, independent verification, freshness, and user acceptance distinct. Authorizing evidence is a `command` or `test` with exit code `0`. Only `--as user` may accept or reject a result.

@@ -10,5 +10,5 @@ Adapt this section to the repository-level instruction format supported by your 
 - Independent verification requires a different actor and run with explicit counts. Only `--as user` may accept or reject a result.
 - Read-only, trivial, no-op, and inconclusive work should not write continuity data.
 - After a write, run `validate` and `inspect`. Never edit the store or delete a lock silently.
-- The Coordinator and Graphify adapters are optional. Neither is required for ordinary Continuity use or authorized to establish truth.
+- The Coordinator is optional. It is not required for ordinary Continuity use and is not authorized to establish truth.
 - Follow `continuity/references/project-execution.md` and `continuity/references/security-workflow.md` for the complete protocol.

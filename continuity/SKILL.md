@@ -7,7 +7,7 @@ description: Inspect, initialize, validate, diagnose, and update bounded, source
 
 Treat Continuity's append-only journal as authoritative for what it recorded, not as independent proof of current project truth. Verify relevant claims against current sources, Git state, and the environment. A historical pass is not a current pass, and only the user may accept or reject a result.
 
-Continuity requires Node.js 22+ and Git. It is local and self-contained: no other Skill, planner, Coordinator, daemon, network service, model installation, or interview flow is required.
+Continuity requires Node.js 22+ and Git. Memory/Continuity is local and self-contained: no planner, daemon, network service, model installation, or interview flow is required. Coordinator is an optional separate CLI (`scripts/coordinator.mjs`) and is not started by inspect or record.
 
 ## Resolve the CLI
 
@@ -66,7 +66,7 @@ Read-only, trivial, no-op, or inconclusive tasks should not write continuity dat
 
 Continuity owns its authoritative journal. It validates recorded goals, criteria, TaskAccumulator, WorkPacket and assignment records, actors, context rollover, attempts, evidence, failures, backlog, and handoff state, and derives the ready set from that state.
 
-An optional Coordinator in the agent environment consumes `inspect ready` and `inspect wave`, selects available models and actors, distributes validated packets, launches executors and independent verifiers, integrates results, and replans when required. It writes the journal only through this helper. Continuity itself launches no planner, Coordinator, daemon, network client, model, executor, verifier, or interview; it may invoke required local Git commands to read repository state. Neither a planner nor a Coordinator is a runtime dependency. Graphify is an optional navigation adapter and never a source of truth or acceptance authority.
+An optional Coordinator runtime (`scripts/coordinator.mjs`) consumes `inspect ready` and `inspect wave`, distributes validated packets, launches executors and independent verifiers through a runtime adapter, integrates results, and replans when required. It writes the journal only through this helper. The Memory CLI itself launches no planner, Coordinator, daemon, network client, model, executor, verifier, or interview; it may invoke required local Git commands to read repository state.
 
 The identifier `project-memory.coordinator.v1` is retained only as a stable compatibility identifier for the existing Coordinator protocol.
 

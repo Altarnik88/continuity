@@ -6,7 +6,7 @@ import path from 'node:path';
 import { SUITE_NAMES, SuiteSelectionError, suiteFiles } from '../helpers/suite-aggregator.mjs';
 
 export async function run() {
-  assert.deepEqual(SUITE_NAMES, ['core', 'migration', 'continuity', 'graphify']);
+  assert.deepEqual(SUITE_NAMES, ['core', 'migration', 'continuity', 'protocol', 'coordinator']);
   const root = mkdtempSync(path.join(os.tmpdir(), 'project-memory-suite-contract-'));
   try {
     mkdirSync(path.join(root, 'migration'));

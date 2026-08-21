@@ -703,39 +703,65 @@ async function assertDescriptorBoundedReadRace() {
 
     const target = path.join(root, 'race-marker.bin');
     const replacement = path.join(root, 'race-marker.replacement');
+    const go = path.join(root, 'race-marker.go');
     const byteLimit = 32 * 1024 * 1024;
-    let observedPostOpenSwap = false;
-    for (const delay of [1, 2, 4, 8]) {
-      writeFileSync(target, Buffer.alloc(byteLimit, 0x61));
-      writeFileSync(replacement, Buffer.alloc(byteLimit, 0x62));
-      const helperScript = String.raw`
-        const fs = require('node:fs');
-        const target = process.argv[1];
-        const replacement = process.argv[2];
-        const delay = Number(process.argv[3]);
-        process.stdout.write('READY\n');
-        setTimeout(() => {
-          const displaced = target + '.displaced';
-          fs.rmSync(displaced, { force: true });
-          fs.renameSync(target, displaced);
-          fs.renameSync(replacement, target);
-          fs.rmSync(displaced, { force: true });
-        }, delay);
-      `;
-      const helperProcess = spawn(process.execPath, ['-e', helperScript, target, replacement, String(delay)], {
-        stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
-      });
-      const exited = waitForChildExit(helperProcess);
-      await waitForChildLine(helperProcess, 'READY');
-      let error;
-      try { readOwnedFileBounded(target, byteLimit, 'synthetic marker'); } catch (caught) { error = caught; }
-      assert.equal(await exited, 0, 'external descriptor-race helper failed');
-      if (error instanceof MemoryError && error.exitCode === 3 && error.message === 'synthetic marker changed while being read') {
-        observedPostOpenSwap = true;
-        break;
+    writeFileSync(target, Buffer.alloc(byteLimit, 0x61));
+    writeFileSync(replacement, Buffer.alloc(byteLimit, 0x62));
+    const helperScript = String.raw`
+      const fs = require('node:fs');
+      const target = process.argv[1];
+      const replacement = process.argv[2];
+      const go = process.argv[3];
+      process.stdout.write('READY\n');
+      const start = Date.now();
+      while (!fs.existsSync(go)) {
+        if (Date.now() - start > 10000) process.exit(2);
       }
+      const displaced = target + '.displaced';
+      fs.rmSync(displaced, { force: true });
+      fs.renameSync(target, displaced);
+      fs.renameSync(replacement, target);
+      fs.rmSync(displaced, { force: true });
+    `;
+    const helperProcess = spawn(process.execPath, ['-e', helperScript, target, replacement, go], {
+      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+    });
+    const exited = waitForChildExit(helperProcess);
+    await waitForChildLine(helperProcess, 'READY');
+    const originalSwapReadSync = fs.readSync;
+    let interceptedSwapRead = false;
+    let swapError;
+    try {
+      fs.readSync = (...args) => {
+        if (!interceptedSwapRead) {
+          interceptedSwapRead = true;
+          const before = lstatSync(target, { bigint: true });
+          writeFileSync(go, 'go\n', { flag: 'wx' });
+          const deadline = Date.now() + 10000;
+          for (;;) {
+            let current;
+            try { current = lstatSync(target, { bigint: true }); } catch { current = undefined; }
+            if (current && (current.ino !== before.ino || current.dev !== before.dev)) break;
+            if (Date.now() > deadline) throw new Error('external descriptor-race helper did not substitute the path');
+          }
+        }
+        return originalSwapReadSync(...args);
+      };
+      syncBuiltinESMExports();
+      try { readOwnedFileBounded(target, byteLimit, 'synthetic marker'); } catch (caught) { swapError = caught; }
+    } finally {
+      fs.readSync = originalSwapReadSync;
+      syncBuiltinESMExports();
+      rmSync(go, { force: true });
     }
-    assert.equal(observedPostOpenSwap, true, 'post-open path substitution did not fail from descriptor evidence');
+    assert.equal(await exited, 0, 'external descriptor-race helper failed');
+    assert.equal(interceptedSwapRead, true, 'post-open fixture did not intercept the first descriptor read');
+    assert.equal(fs.readSync, originalSwapReadSync, 'post-open fixture leaked its built-in read instrumentation');
+    assert.ok(
+      swapError instanceof MemoryError && swapError.exitCode === 3
+        && swapError.message === 'synthetic marker changed while being read',
+      'post-open path substitution did not fail from descriptor evidence',
+    );
 
     const growing = path.join(root, 'growing-legacy.bin');
     writeFileSync(growing, Buffer.alloc(byteLimit - 4096, 0x63));
@@ -841,7 +867,7 @@ async function assertMarkerRouting() {
 
     const initFile = writeDraft(root, 'marker-blocked-init.json', input);
     const recordFile = writeDraft(root, 'marker-blocked-record.json', taskDraft('marker-public-callback', input));
-    const callbackCalls = { clock: 0, migration: 0, continuity: 0, graphify: 0 };
+    const callbackCalls = { clock: 0, migration: 0, continuity: 0 };
     const removeMarker = (kind, result) => {
       callbackCalls[kind] += 1;
       unlinkSync(files.migrationMarker);
@@ -851,7 +877,6 @@ async function assertMarkerRouting() {
       clock: () => removeMarker('clock', new Date(occurredAt)),
       migrationCommandHandler: () => removeMarker('migration', 64),
       continuityCommandHandler: () => removeMarker('continuity', 65),
-      graphifyCommandHandler: () => removeMarker('graphify', 66),
     };
     for (const args of [
       ['init', '--schema', '2', '--file', initFile],
@@ -863,7 +888,7 @@ async function assertMarkerRouting() {
       const result = await awaitMain(['--root', root, ...args], hostileIo);
       assert.equal(result.status, 3, `${args.join(' ')}\n${result.stderr}`);
       assert.match(result.stderr, /mutation is blocked/);
-      assert.deepEqual(callbackCalls, { clock: 0, migration: 0, continuity: 0, graphify: 0 }, `${args.join(' ')} invoked a caller callback`);
+      assert.deepEqual(callbackCalls, { clock: 0, migration: 0, continuity: 0 }, `${args.join(' ')} invoked a caller callback`);
       assertMutationBarrierUnchanged(root, files, snapshot, `public ${args[0]}`);
     }
 
@@ -3625,15 +3650,14 @@ async function assertEmptyCliTokens() {
     const files = storePaths(root);
     const before = treeDigest(files.store);
 
-    const handlerCalls = { migration: 0, continuity: 0, graphify: 0 };
+    const handlerCalls = { migration: 0, continuity: 0 };
     const handlers = {
       migrationCommandHandler: () => { handlerCalls.migration += 1; return 71; },
       continuityCommandHandler: () => { handlerCalls.continuity += 1; return 72; },
-      graphifyCommandHandler: () => { handlerCalls.graphify += 1; return 73; },
     };
     let result = await awaitMain(['--root', root, 'inspect', '--subject', input.finalGoal.goalId], handlers);
     assert.equal(result.status, 72, result.stderr);
-    assert.deepEqual(handlerCalls, { migration: 0, continuity: 1, graphify: 0 });
+    assert.deepEqual(handlerCalls, { migration: 0, continuity: 1 });
     result = await awaitMain(['event', 'template', 'task.planned']);
     assert.equal(result.status, 0, result.stderr);
 
@@ -3656,7 +3680,7 @@ async function assertEmptyCliTokens() {
     for (const args of invalidInvocations) {
       result = await awaitMain(['--root', root, ...args], handlers);
       assert.equal(result.status, 2, `${JSON.stringify(args)}\n${result.stderr}`);
-      assert.deepEqual(handlerCalls, { migration: 0, continuity: 1, graphify: 0 }, 'rejected argv reached a downstream handler');
+      assert.deepEqual(handlerCalls, { migration: 0, continuity: 1 }, 'rejected argv reached a downstream handler');
       assert.equal(treeDigest(files.store), before, `${JSON.stringify(args)} changed the store`);
       const rejected = args.at(-1);
       if (rejected.trim()) assert.equal(`${result.stdout}${result.stderr}`.includes(rejected), false, 'CLI echoed a rejected token');
@@ -3739,55 +3763,32 @@ async function assertOpaqueGraphifyDispatch() {
   const root = makeRepository('truth-opaque-graphify');
   try {
     const before = projectDigest(root);
-    const calls = [];
     const forbidden = ['graphifyRunner', 'processRunner', 'shellRunner', 'networkRunner', 'renderer', 'migrationEngine'];
     const sideEffects = Object.fromEntries(forbidden.map((key) => [key, 0]));
     const rejectSideEffect = (name) => () => {
       sideEffects[name] += 1;
       throw new Error(`${name} must remain outside core dispatch`);
     };
-    const graphifyCommandHandler = (context, args) => {
-      calls.push({
-        graph: context.options.graph,
-        passthrough: [...context.options.passthrough],
-        timeoutMs: context.options.timeoutMs,
-        args: [...args],
-        exposedAuthorityKeys: forbidden.filter((key) => Object.hasOwn(context, key)),
-      });
-      return 0;
-    };
-    const queryArgs = [
-      '--root', root, 'graphify', 'query', '--graph', '-graph.json', '--timeout-ms', '2500',
-      '--', 'query', '--leading-data', '-second-value', '--graph', '../opaque-data',
-    ];
+    const inspectArgs = ['--root', root, 'inspect'];
     for (const key of forbidden) {
-      const rejected = await awaitMain(queryArgs, { graphifyCommandHandler, [key]: rejectSideEffect(key) });
+      const rejected = await awaitMain(inspectArgs, { [key]: rejectSideEffect(key) });
       assert.equal(rejected.status, 3, `${key} was accepted as public CLI authority`);
       assert.equal(rejected.stdout, '');
       assert.equal(rejected.stderr, 'continuity: ERROR: main options are invalid\n');
-      assert.deepEqual(calls, [], `${key} reached Graphify dispatch before option rejection`);
       assert.equal(projectDigest(root), before, `${key} option rejection mutated the synthetic repository`);
     }
-    let result = await awaitMain(queryArgs, { graphifyCommandHandler });
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(calls, [{
-      graph: '-graph.json',
-      passthrough: ['query', '--leading-data', '-second-value', '--graph', '../opaque-data'],
-      timeoutMs: 2500,
-      args: ['query'],
-      exposedAuthorityKeys: [],
-    }]);
     assert.deepEqual(sideEffects, Object.fromEntries(forbidden.map((key) => [key, 0])));
-    assert.equal(projectDigest(root), before, 'Graphify parser dispatch mutated the synthetic repository');
 
     for (const args of [
+      ['--root', root, 'graphify', 'observe'],
+      ['--root', root, 'graphify', 'query', '--graph', '-graph.json', '--timeout-ms', '2500', '--', 'query', '--leading-data'],
       ['--root', root, 'graphify', 'query', '--unknown', '--', 'query'],
       ['--root', root, 'graphify', 'observe', '--graph'],
     ]) {
-      result = await awaitMain(args, { graphifyCommandHandler });
+      const result = await awaitMain(args);
       assert.equal(result.status, 2, `${JSON.stringify(args)}\n${result.stderr}`);
-      assert.equal(calls.length, 1, 'rejected Graphify argv reached the injected handler');
-      assert.equal(projectDigest(root), before, 'rejected Graphify argv mutated the synthetic repository');
+      assert.equal(result.stdout, '');
+      assert.equal(projectDigest(root), before, 'unknown graphify argv mutated the synthetic repository');
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -3997,7 +3998,7 @@ function assertTaskTruthAxesRecompute() {
 async function assertInjectedHandlerContract() {
   const root = makeRepository('truth-injected-handler-contract');
   try {
-    const calls = { migration: [], continuity: [], graphify: [] };
+    const calls = { migration: [], continuity: [] };
     const forbidden = ['graphifyRunner', 'processRunner', 'shellRunner', 'networkRunner', 'renderer', 'migrationEngine'];
     const commandHandler = (family, sentinel) => (context, args) => {
       for (const key of forbidden) assert.equal(Object.hasOwn(context, key), false, `${family} context exposed ${key}`);
@@ -4007,7 +4008,6 @@ async function assertInjectedHandlerContract() {
     const handlers = {
       migrationCommandHandler: commandHandler('migration', 61),
       continuityCommandHandler: commandHandler('continuity', 62),
-      graphifyCommandHandler: commandHandler('graphify', 63),
     };
 
     let result = await awaitMain(['--root', root, 'migrate', '--to', '2', '--resume'], handlers);
@@ -4019,18 +4019,10 @@ async function assertInjectedHandlerContract() {
     assert.equal(result.status, 62, result.stderr);
     assert.deepEqual(calls.continuity.map(({ operation, args }) => ({ operation, args })), [{ operation: undefined, args: [] }]);
 
-    result = await awaitMain([
-      '--root', root, 'graphify', 'query', '--graph', '-graph.json', '--timeout-ms', '2500',
-      '--', 'query', '--leading-value',
-    ], handlers);
-    assert.equal(result.status, 63, result.stderr);
-    assert.deepEqual(calls.graphify.map(({ operation, options, args }) => ({
-      operation, graph: options.graph, timeoutMs: options.timeoutMs,
-      passthrough: options.passthrough, args,
-    })), [{
-      operation: undefined, graph: '-graph.json', timeoutMs: 2500,
-      passthrough: ['query', '--leading-value'], args: ['query'],
-    }]);
+    result = await awaitMain(['--root', root, 'graphify', 'observe'], handlers);
+    assert.equal(result.status, 2, result.stderr);
+    assert.deepEqual(calls.migration.map(({ operation, args }) => ({ operation, args })), [{ operation: 'migrate', args: [] }]);
+    assert.deepEqual(calls.continuity.map(({ operation, args }) => ({ operation, args })), [{ operation: undefined, args: [] }]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -4052,21 +4044,18 @@ async function assertInjectedHandlerExitValidation() {
     await genericFailure(['inspect', '--subject', 'goal-truth-injected-handler-exits'], {
       continuityCommandHandler: async () => 256,
     });
-    await genericFailure(['graphify', 'observe'], {
-      graphifyCommandHandler: async () => '4',
+    await genericFailure(['inspect', '--subject', 'goal-truth-injected-handler-exits'], {
+      continuityCommandHandler: async () => { throw new Error('untrusted handler detail'); },
     });
-    await genericFailure(['graphify', 'observe'], {
-      graphifyCommandHandler: async () => { throw new Error('untrusted handler detail'); },
-    });
-    await genericFailure(['graphify', 'observe'], {
-      graphifyCommandHandler: async (context) => {
+    await genericFailure(['inspect', '--subject', 'goal-truth-injected-handler-exits'], {
+      continuityCommandHandler: async (context) => {
         context.stdout.write('discarded handler stdout\n');
         context.stderr.write('discarded handler stderr\n');
         return undefined;
       },
     });
-    const accepted = await awaitMain(['--root', root, 'graphify', 'observe'], {
-      graphifyCommandHandler: async () => 255,
+    const accepted = await awaitMain(['--root', root, 'inspect', '--subject', 'goal-truth-injected-handler-exits'], {
+      continuityCommandHandler: async () => 255,
     });
     assert.deepEqual(accepted, { status: 255, stdout: '', stderr: '' });
   } finally {
@@ -4086,7 +4075,6 @@ function cliAccessorFixture({ values = {}, onAccess = () => {}, throwOnMeta = nu
     git: undefined,
     migrationCommandHandler: undefined,
     continuityCommandHandler: undefined,
-    graphifyCommandHandler: undefined,
   };
   const target = {};
   for (const [name, value] of Object.entries({ ...defaults, ...values })) {
@@ -4130,7 +4118,7 @@ function assertCliMetadataSnapshot(fixture, label) {
   assert.deepEqual(fixture.metaTraps, {
     getPrototypeOf: 1,
     ownKeys: 1,
-    getOwnPropertyDescriptor: 8,
+    getOwnPropertyDescriptor: 7,
   }, `${label} did not inspect the complete public option bag exactly once`);
 }
 
@@ -4152,7 +4140,6 @@ async function assertLazyCliDependencyAccess() {
       git: () => ({ status: 0, stdout: '' }),
       migrationCommandHandler: () => 61,
       continuityCommandHandler: () => 62,
-      graphifyCommandHandler: () => 63,
     };
     for (const args of [
       ['init', '--schema', '2', '--file', initFile],
@@ -4227,22 +4214,12 @@ async function assertLazyCliDependencyAccess() {
     assertCliMetadataSnapshot(cleanRecord, 'clean record');
 
     const graphRoot = makeRoot('truth-lazy-graphify');
-    const cleanGraphify = cliAccessorFixture({
-      values: {
-        graphifyCommandHandler: (context, args) => {
-          assert.deepEqual(args, ['query']);
-          context.stdout.write('synthetic graphify output\n');
-          return 76;
-        },
-      },
-    });
-    status = await mainV2([
-      '--root', graphRoot, 'graphify', 'query', '--graph', '-graph.json', '--', 'query', '--opaque',
-    ], cleanGraphify.io);
-    assert.equal(status, 76, cleanGraphify.stderr());
-    assert.deepEqual(cleanGraphify.accesses, ['graphifyCommandHandler', 'stdout'], 'Graphify resolved unrelated io dependencies');
-    assert.equal(cleanGraphify.stdout(), 'synthetic graphify output\n');
-    assertCliMetadataSnapshot(cleanGraphify, 'clean Graphify');
+    const unknownGraphify = cliAccessorFixture();
+    status = await mainV2(['--root', graphRoot, 'graphify', 'observe'], unknownGraphify.io);
+    assert.equal(status, 2, unknownGraphify.stderr());
+    assert.deepEqual(unknownGraphify.accesses, ['stderr'], 'unknown graphify resolved unrelated io dependencies');
+    assert.match(unknownGraphify.stderr(), /usage: continuity\.mjs/);
+    assertCliMetadataSnapshot(unknownGraphify, 'unknown graphify');
 
     const continuityRoot = makeRoot('truth-lazy-continuity');
     const continuityInput = initInput('lazy-continuity');
@@ -4336,8 +4313,8 @@ async function assertLazyCliDependencyAccess() {
     assert.equal(defaultContinuity.status, 3);
     assert.match(defaultContinuity.stderr, /inspect rendering is not available/);
     const defaultGraphify = await awaitMain(['--root', graphRoot, 'graphify', 'observe']);
-    assert.equal(defaultGraphify.status, 4);
-    assert.match(defaultGraphify.stderr, /Graphify support is not available/);
+    assert.equal(defaultGraphify.status, 2);
+    assert.match(defaultGraphify.stderr, /usage: continuity\.mjs/);
   } finally {
     for (const root of roots) rmSync(root, { recursive: true, force: true });
   }

@@ -29,7 +29,17 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
-      - name: Validate package, skill tests, isolated install smoke, and forward acceptance
+      - name: protocol
+        run: npm run test:protocol
+      - name: coordinator
+        run: npm run test:coordinator
+      - name: Combined check
         run: npm run check
+      - name: memory install smoke
+        run: node continuity/scripts/smokes/memory.mjs
+      - name: coordinator install smoke
+        run: node continuity/scripts/smokes/coordinator.mjs
+      - name: full install smoke
+        run: node continuity/scripts/smokes/full.mjs
       - name: Audit development tooling
         run: npm run audit:dev

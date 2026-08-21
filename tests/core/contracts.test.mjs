@@ -27,9 +27,7 @@ export async function run() {
 
   const migration = await import('../../continuity/scripts/lib/migration/index.mjs');
   const continuity = await import('../../continuity/scripts/lib/continuity/index.mjs');
-  const graphify = await import('../../continuity/scripts/lib/graphify/index.mjs');
   assert.equal(typeof migration.handleMigrationCommand, 'function');
   assert.equal(typeof continuity.handleInspectCommand, 'function');
   assert.equal(typeof continuity.createLiveContext, 'function');
-  assert.equal(typeof graphify.handleGraphifyCommand, 'function');
 }

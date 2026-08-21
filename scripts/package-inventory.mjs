@@ -13,6 +13,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const SKILL_PREFIX = 'continuity/';
+export const CANONICAL_SKILL_MANIFEST = `${SKILL_PREFIX}SKILL.md`;
+export const VENDOR_SKILL_ROOTS = Object.freeze(['.agents/skills/', '.cursor/skills/', '.grok/skills/']);
 export const RUNTIME_STORE_PREFIX = '.continuity/';
 export const LEGACY_RUNTIME_STORE_PREFIX = '.codex/project-memory/';
 export const REPO_ONLY_PREFIXES = Object.freeze([]);
@@ -21,14 +23,31 @@ export const FORBIDDEN_PREFIXES = Object.freeze([
   RUNTIME_STORE_PREFIX,
   '.codex/',
 ]);
-export const REPO_METADATA_PREFIXES = Object.freeze(['.github/', 'examples/', 'scripts/', 'tests/']);
+export const REPO_METADATA_PREFIXES = Object.freeze([
+  '.agents/',
+  '.cursor/',
+  '.github/',
+  '.grok/',
+  'examples/',
+  'scripts/',
+  'tests/',
+]);
 export const PUBLIC_DIAGRAM_FILES = Object.freeze([]);
 export const REPO_METADATA_EXACT = Object.freeze([
   '.gitattributes',
   '.gitignore',
+  'ADAPTERS.md',
+  'AGENTS.md',
+  'ARCHITECTURE.md',
+  'CHANGELOG.md',
+  'COORDINATOR.md',
+  'INSTALL.md',
   'LICENSE',
+  'MIGRATION.md',
+  'PROTOCOL.md',
   'README.md',
   'README.ru.md',
+  'RELEASE.md',
   'SECURITY.md',
   ...PUBLIC_DIAGRAM_FILES,
   'package-lock.json',
@@ -36,35 +55,64 @@ export const REPO_METADATA_EXACT = Object.freeze([
 ]);
 export const LOCALIZED_README_FILES = Object.freeze(['README.ru.md']);
 export const REQUIRED_REPO_METADATA = Object.freeze([
+  '.cursor/rules/continuity.mdc',
+  '.cursor/skills/continuity/SKILL.md',
   '.gitattributes',
   '.github/workflows/ci.yml',
   '.gitignore',
+  '.grok/rules/continuity.md',
+  '.grok/skills/continuity/SKILL.md',
+  'ADAPTERS.md',
+  'AGENTS.md',
+  'ARCHITECTURE.md',
+  'CHANGELOG.md',
+  'COORDINATOR.md',
+  'INSTALL.md',
   'LICENSE',
+  'MIGRATION.md',
+  'PROTOCOL.md',
   'README.md',
   'README.ru.md',
+  'RELEASE.md',
   'SECURITY.md',
   ...PUBLIC_DIAGRAM_FILES,
+  'examples/coordinator.config.json',
   'examples/snapshot.minimal.json',
   'examples/snapshot.source-backed.json',
   'examples/source-anchor.md',
   'package-lock.json',
   'package.json',
+  'scripts/install.mjs',
   'scripts/package-inventory.mjs',
+  'scripts/package-release.mjs',
+  'scripts/release-profiles.mjs',
   'scripts/test-continuity.mjs',
+  'scripts/test-coordinator.mjs',
   'scripts/test-forward-acceptance.mjs',
   'scripts/test-package-install.mjs',
   'scripts/test-package.mjs',
+  'scripts/test-protocol.mjs',
+  'scripts/test-release.mjs',
   'scripts/test-validate-package.mjs',
   'scripts/validate-package.mjs',
+  'scripts/zip-store.mjs',
   'tests/core/v3-e2e.test.mjs',
   'tests/helpers/suite-aggregator.mjs',
 ]);
 export const FORWARD_SKILL_ALLOWLIST = Object.freeze([]);
 export const DISTRIBUTABLE_FILES = Object.freeze([
   'continuity',
+  'ADAPTERS.md',
+  'ARCHITECTURE.md',
+  'CHANGELOG.md',
+  'COORDINATOR.md',
+  'INSTALL.md',
   'LICENSE',
+  'MIGRATION.md',
+  'PROTOCOL.md',
   'README.md',
   'README.ru.md',
+  'RELEASE.md',
   'SECURITY.md',
   ...PUBLIC_DIAGRAM_FILES,
   'examples',
@@ -108,9 +156,29 @@ export const EXPECTED_SKILL_FILES = Object.freeze([
   `${SKILL_PREFIX}scripts/lib/core/recipes-v3.mjs`,
   `${SKILL_PREFIX}scripts/lib/core/store.mjs`,
   `${SKILL_PREFIX}scripts/lib/core/workspace-v3.mjs`,
-  `${SKILL_PREFIX}scripts/lib/graphify/index.mjs`,
   `${SKILL_PREFIX}scripts/lib/migration/index.mjs`,
   `${SKILL_PREFIX}scripts/project-memory.mjs`,
+  `${SKILL_PREFIX}assets/coordinator.config.json`,
+  `${SKILL_PREFIX}scripts/coordinator.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/adapter.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/client.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/compatibility.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/index.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/ports.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/secrets.mjs`,
+  `${SKILL_PREFIX}scripts/lib/protocol/validate.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/adapters/fake.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/adapters/index.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/adapters/local-process.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/adapters/local-worker.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/cli.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/config.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/engine.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/index.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/run-state.mjs`,
+  `${SKILL_PREFIX}scripts/smokes/coordinator.mjs`,
+  `${SKILL_PREFIX}scripts/smokes/full.mjs`,
+  `${SKILL_PREFIX}scripts/smokes/memory.mjs`,
 ]);
 export const REQUIRED_SKILL_FILES = EXPECTED_SKILL_FILES;
 export const ALLOWED_GIT_MODES = Object.freeze(new Set(['100644', '100755']));
@@ -123,7 +191,7 @@ export const MAX_NPM_PACK_BYTES = 2 * 1024 * 1024;
 export const IMAGE_EXTENSIONS = Object.freeze(new Set([
   '.avif', '.bmp', '.gif', '.ico', '.jpeg', '.jpg', '.png', '.svg', '.tif', '.tiff', '.webp',
 ]));
-const PUBLIC_TEXT_EXTENSIONS = new Set(['.json', '.md', '.mjs', '.yaml', '.yml']);
+const PUBLIC_TEXT_EXTENSIONS = new Set(['.json', '.md', '.mdc', '.mjs', '.yaml', '.yml']);
 const PUBLIC_TEXT_EXACT = new Set(['.gitattributes', '.gitignore', 'LICENSE']);
 
 export class InventoryError extends Error {
@@ -139,6 +207,21 @@ function fail(message) {
 
 export function posixPath(file) {
   return String(file).split(path.sep).join('/');
+}
+
+export function parseSkillFrontmatterName(text) {
+  const normalized = String(text).replaceAll('\r\n', '\n');
+  const match = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(normalized);
+  if (!match) return null;
+  for (const line of match[1].split('\n')) {
+    const nameMatch = /^name:\s*(.+?)\s*$/.exec(line);
+    if (nameMatch) return nameMatch[1].replace(/^['"]|['"]$/g, '').trim();
+  }
+  return null;
+}
+
+export function isAllowedVendorSkillManifest(file) {
+  return VENDOR_SKILL_ROOTS.some((root) => file === `${root}continuity/SKILL.md`);
 }
 
 export function assertPortableGitPath(file) {
@@ -363,8 +446,19 @@ export function assertRepositoryBoundaries(root, files = listRepositoryFiles(roo
     fail('continuity Skill subtree must be a real directory');
   }
   const skillManifests = files.filter((file) => file === 'SKILL.md' || file.endsWith('/SKILL.md'));
-  if (skillManifests.length !== 1 || skillManifests[0] !== 'continuity/SKILL.md') {
+  if (!skillManifests.includes(CANONICAL_SKILL_MANIFEST)) {
     fail('repository must contain exactly one Skill subtree: continuity/');
+  }
+  for (const manifest of skillManifests) {
+    if (manifest === CANONICAL_SKILL_MANIFEST) continue;
+    if (!isAllowedVendorSkillManifest(manifest)) {
+      fail('repository must contain exactly one Skill subtree: continuity/');
+    }
+    const absolute = path.join(resolvedRoot, ...manifest.split('/'));
+    const name = parseSkillFrontmatterName(readFileSync(absolute, 'utf8'));
+    if (name !== 'continuity') {
+      fail(`vendor Skill copy must keep frontmatter name: continuity (${manifest})`);
+    }
   }
 
   for (const file of files) {
