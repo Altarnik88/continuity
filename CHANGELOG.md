@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Package validation inventories a Git worktree from `git ls-files --cached`, so ignored or untracked local notes (including `.superpowers/`) are not scanned as public product text.
+- `.superpowers/` is gitignored.
+- Coordinator closes only the completed packet's open attempt (`taskId` + `runId`), not every attempt that shares the executor run id.
+
 ## 3.0.0
 
 - This build supports schema v3 only. v1/v2 stores fail closed naming git tag `legacy-v1v2-final` and are never silently read as v3.

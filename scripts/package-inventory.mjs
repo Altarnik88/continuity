@@ -384,6 +384,9 @@ export function listRepositoryFiles(root) {
   if (!rootStat || rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
     fail('repository root must be a real directory');
   }
+  if (lstatIfPresent(path.join(resolvedRoot, '.git'))) {
+    return listGitIndex(resolvedRoot).files;
+  }
   const files = [];
   const walk = (directory, relative) => {
     for (const name of readdirSync(directory).sort()) {

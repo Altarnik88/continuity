@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildCommandFromFocusedChecks,
+  closeOpenAttempt,
   createCoordinatorRuntime,
 } from '../../continuity/scripts/lib/coordinator/index.mjs';
 import { createLocalProcessAdapter } from '../../continuity/scripts/lib/coordinator/adapters/local-process.mjs';
@@ -98,6 +99,13 @@ export async function run() {
   const encoded = buildCommandFromFocusedChecks(['["-e","process.exit(0)"]']);
   assert.equal(encoded.ok, true);
   assert.deepEqual(encoded.command.slice(1), ['-e', 'process.exit(0)']);
+  const remaining = closeOpenAttempt([
+    { taskId: 'task-a', actorId: 'actor-exec-01', runId: 'run-exec-01' },
+    { taskId: 'task-b', actorId: 'actor-exec-01', runId: 'run-exec-01' },
+  ], { taskId: 'task-a', runId: 'run-exec-01' });
+  assert.deepEqual(remaining, [
+    { taskId: 'task-b', actorId: 'actor-exec-01', runId: 'run-exec-01' },
+  ]);
 
   const root = makeRepo();
   try {

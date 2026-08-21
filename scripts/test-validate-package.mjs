@@ -138,6 +138,7 @@ export const CASES = [
         writeFileSync(path.join(root, 'untracked.txt'), 'untracked\n');
         const index = listGitIndex(root);
         assert.deepEqual(index.files, ['.gitignore', 'continuity/SKILL.md']);
+        assert.deepEqual(listRepositoryFiles(root), index.files);
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -512,6 +513,32 @@ export const CASES = [
         const cyrillic = String.fromCodePoint(0x41f, 0x430, 0x43c, 0x44f, 0x442, 0x44c);
         writeFileSync(path.join(root, 'SECURITY.md'), `# ${cyrillic}\n`);
         assert.throws(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)), /contains Cyrillic/);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'PKG-028-git-inventory-ignores-untracked-local-notes',
+    run() {
+      const root = makeGitRepo('local-notes');
+      try {
+        writeTracked(root, 'continuity/SKILL.md', '---\nname: continuity\n---\n');
+        writeTracked(root, 'continuity/scripts/continuity.mjs', "import 'node:fs';\n");
+        writeTracked(root, 'README.md', '# Boundary fixture\n');
+        writeTracked(root, '.gitignore', '.superpowers/\n');
+        git(root, ['commit', '-qm', 'fixture']);
+        const notes = path.join(root, '.superpowers', 'notes.md');
+        mkdirSync(path.dirname(notes), { recursive: true });
+        const cyrillic = String.fromCodePoint(0x41f, 0x430, 0x43c, 0x44f, 0x442, 0x44c);
+        writeFileSync(notes, `# ${cyrillic}\n`);
+        writeFileSync(path.join(root, 'scratch.md'), `# ${cyrillic}\n`);
+        const files = listRepositoryFiles(root);
+        assert.equal(files.some((file) => file.startsWith('.superpowers/')), false);
+        assert.equal(files.includes('scratch.md'), false);
+        assert.doesNotThrow(() => assertRepositoryBoundaries(root, files));
+        const gitignore = readFileSync(path.join(repoRoot, '.gitignore'), 'utf8');
+        assert.match(gitignore, /^\.superpowers\/$/m);
       } finally {
         rmSync(root, { recursive: true, force: true });
       }

@@ -69,6 +69,14 @@ function failedReport(message) {
  * argv[0] may be the current Node binary (or basename `node`); otherwise argv is
  * passed as arguments to `process.execPath`. Empty or malformed lists fail closed.
  */
+export function closeOpenAttempt(openAttempts, { taskId, runId } = {}) {
+  if (!Array.isArray(openAttempts)) return [];
+  if (typeof taskId !== 'string' || !taskId || typeof runId !== 'string' || !runId) {
+    return [...openAttempts];
+  }
+  return openAttempts.filter((row) => !(row.taskId === taskId && row.runId === runId));
+}
+
 export function buildCommandFromFocusedChecks(focusedChecks) {
   if (!Array.isArray(focusedChecks) || focusedChecks.length === 0) {
     return { ok: false, reason: 'focusedChecks is empty; refusing to fabricate a no-op command' };
@@ -466,7 +474,10 @@ export function createCoordinatorRuntime({
             ? { ...row, state: packetReleaseFailed ? 'held' : 'released' }
             : row
         )),
-        openAttempts: state.openAttempts.filter((row) => row.runId !== config.executorRunId),
+        openAttempts: closeOpenAttempt(state.openAttempts, {
+          taskId: packet.taskIds[0],
+          runId: config.executorRunId,
+        }),
       });
     }
     memoryClient.inspect({ root, json: true });
