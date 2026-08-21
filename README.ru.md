@@ -4,52 +4,9 @@
 
 **Локальная, source-backed непрерывность проекта, которая переживает смену чатов, моделей и исполнителей.**
 
-Continuity — локальный Node.js продукт из трёх строго разделённых слоёв:
+Continuity — это локальный Node.js CLI и Skill. Он пишет ограниченный журнал рядом с Git-репозиторием, чтобы следующий чат, другая модель или новый исполнитель могли восстановить цели, провалившиеся попытки, доказательства и следующие шаги вместо того, чтобы угадывать. Журнал авторитетен для того, что Continuity действительно записал. Живые файлы, Git и пользователь остаются авторитетны для самого проекта. Исторический PASS не является текущей истиной.
 
-1. **Project Memory Core** — append-only журнал целей, попыток, evidence, verification и приёмки пользователя.
-2. **Continuity** — плоскость чтения: inspect, ready set, freshness, handoff.
-3. **Coordinator** — необязательный runtime исполнения. Он запускает адаптеры и пишет только через CLI Core.
-
-Журнал авторитетен для того, что Continuity действительно записал. Живые файлы, Git и пользователь остаются авторитетны для самого проекта. Исторический PASS не является текущей истиной.
-
-## Какой профиль скачивать
-
-| Профиль | Когда | Содержит | Нужен Coordinator? |
-| --- | --- | --- | --- |
-| **Continuity Full** | Нужны память и исполнение в одном дереве | Core + Continuity + Coordinator | Нет; Memory работает отдельно |
-| **Continuity Memory** | Нужны только журнал и inspect/handoff | Core + Continuity + protocol | Нет |
-| **Continuity Coordinator** | Уже есть Memory CLI и нужно исполнение | Coordinator + protocol client + adapters | Подключается к Memory CLI |
-
-Сборка zip:
-
-```bash
-node scripts/package-release.mjs dist
-```
-
-Скачайте подходящий zip. Проверьте `dist/SHA256SUMS` по файлам zip. Установка:
-
-```bash
-node scripts/install.mjs --profile full --dest /absolute/path/to/dest --dry-run
-node scripts/install.mjs --profile memory --dest /absolute/path/to/dest
-node scripts/install.mjs --profile coordinator --dest /absolute/path/to/dest
-```
-
-Затем doctor:
-
-```bash
-node continuity/scripts/continuity.mjs --version
-node continuity/scripts/coordinator.mjs --version
-node continuity/scripts/continuity.mjs doctor
-node continuity/scripts/coordinator.mjs doctor --root .
-```
-
-`--version` печатает `continuity 2.0.0` и `continuity-coordinator 1.0.0`. `doctor` только читает и не создаёт store.
-
-Первый сценарий после `journal=uninitialized`: отредактируйте `continuity/assets/init-v3.template.json`, чтобы goal и criterion были намерениями пользователя, затем `init --schema 3 --file ...`, `record task --class function`, приложите command/test evidence. Принять результат может только пользователь (`record accept --as user`). Подробности — в «Первые пять минут».
-
-Memory-режим автономен: init, record, inspect, handoff, rebuild и приёмка только пользователем. Coordinator-режиму нужен runtime-адаптер. Поставляемый live-адаптер — `local-process` (текущий Node.js). Coordinator не может принять работу за пользователя.
-
-Этот продукт не заявляет hosted-model execution, нативный discovery каждым coding agent, daemon или login task и то, что исторический PASS является текущим.
+Это самостоятельный, основанный на исходниках слой непрерывности проекта для coding agents, с необязательным Coordinator runtime для агентных сред.
 
 ## Что это такое
 
@@ -59,9 +16,15 @@ Continuity — это не память модели. Это локальная,
 
 Запись хранит не только успехи, но и неудачи. Старая заметка не становится текущей истиной. `inspect` заново вычисляет freshness по живому Git. Принять или отклонить результат может только пользователь.
 
+Продукт состоит из трёх строго разделённых слоёв:
+
+1. **Project Memory Core** — единственный владелец долговременной записанной истины: цели, criteria, попытки, evidence, verification, freshness, провалы и приёмка пользователя. `HISTORY.ndjson` — авторитетный журнал. `CURRENT.json` — восстанавливаемая projection.
+2. **Continuity** — плоскость чтения: ориентация нового чата, inspect, ready state, ограниченный handoff, живой Git-drift и проверка схемы перед выдачей. Он не запускает агентов.
+3. **Coordinator** — необязательная плоскость исполнения: ready set, WorkPackets, запуск адаптеров, независимые verifiers и возобновляемое состояние run. Он никогда не правит журнал или projection напрямую.
+
 Для работы нужны Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Memory CLI не запускает модели, агентов, planner или Coordinator. Отдельный Coordinator CLI — явный foreground-процесс; он не поднимает daemon, сетевой сервис, interview или login task. Continuity может вызывать локальные команды Git, чтобы прочитать состояние репозитория.
 
-Устанавливаемое дерево продукта — каталог `continuity/` плюс профильные документы этого репозитория.
+Полный устанавливаемый Skill — каталог `continuity/`. При скачивании выберите Full, Memory или Coordinator; см. [Установка](#установка). Продукт не заявляет hosted-model execution, нативный discovery каждым coding agent и то, что исторический PASS является текущим.
 
 GitHub по умолчанию показывает [английский README](README.md). Этот файл — русская версия.
 
@@ -221,7 +184,33 @@ Continuity не является process manager. Необязательный C
 
 Continuity распространяется из [Altarnik88/continuity](https://github.com/Altarnik88/continuity) по лицензии MIT. Он не публикуется в package registry. У Skill нет runtime-шага `npm install`.
 
-Можно вызывать CLI из клона или скопировать каталог Skill в skills-каталог конкретного агента. Пути discovery различаются. Этот репозиторий не заявляет нативную интеграцию с Codex, Claude, Cursor или любым другим продуктом.
+Можно вызывать CLI из клона, скачать zip профиля из [GitHub Releases](https://github.com/Altarnik88/continuity/releases) или скопировать каталог Skill в skills-каталог конкретного агента. Пути discovery различаются. Этот репозиторий не заявляет нативную интеграцию с Codex, Claude, Cursor или любым другим продуктом.
+
+### Профили распространения
+
+| Профиль | Когда | Содержит | Нужен Coordinator? |
+| --- | --- | --- | --- |
+| **Continuity Full** | Нужны память и исполнение в одном дереве | Core + Continuity + Coordinator | Нет; Memory работает отдельно |
+| **Continuity Memory** | Нужны только журнал и inspect/handoff | Core + Continuity + protocol | Нет |
+| **Continuity Coordinator** | Уже есть Memory CLI и нужно исполнение | Coordinator + protocol client + adapters | Подключается к Memory CLI |
+
+Соберите zip из этого дерева и проверьте hashes:
+
+```bash
+node scripts/package-release.mjs dist
+```
+
+Сверьте `dist/SHA256SUMS` с zip-файлами. Устанавливайте в явный destination. Installer отказывается от неявного overwrite, не удаляет данные проекта `.continuity`, поддерживает dry-run и не ходит в сеть:
+
+```bash
+node scripts/install.mjs --profile full --dest /absolute/path/to/dest --dry-run
+node scripts/install.mjs --profile memory --dest /absolute/path/to/dest
+node scripts/install.mjs --profile coordinator --dest /absolute/path/to/dest
+```
+
+Копирование файлов доказывает, что файлы на месте. Оно не доказывает, что агент их обнаружил, и не является доказательством discovery runtime-адаптера.
+
+Memory-режим автономен: init, record, inspect, handoff, rebuild и приёмка только пользователем. Coordinator-режиму нужен runtime-адаптер. Поставляемый live-адаптер — `local-process` (текущий бинарник Node.js). Принять или отклонить результат может только пользователь.
 
 ### Прямой CLI
 
@@ -288,7 +277,18 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" --version
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 ```
 
-Если `doctor` сообщает `journal=uninitialized`, просмотрите `continuity/assets/init-v3.template.json`, замените примерные goal и criterion на реальное намерение пользователя, затем:
+`--version` печатает `continuity 2.0.0`. `doctor` только читает. На неинициализированном репозитории он сообщает `journal=uninitialized` и не создаёт store.
+
+Если установлен Full или Coordinator, CLI исполнения отдельный и тоже явный:
+
+```bash
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" --version
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .
+```
+
+`--version` печатает `continuity-coordinator 1.0.0`. `coordinator.mjs doctor` сообщает `daemon=false` и не поднимает фоновый процесс.
+
+Если Memory `doctor` сообщает `journal=uninitialized`, просмотрите `continuity/assets/init-v3.template.json`, замените примерные goal и criterion на реальное намерение пользователя, затем:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/continuity/assets/init-v3.template.json"
@@ -770,6 +770,10 @@ npm run audit:dev
 **Нужен ли Continuity Coordinator?**
 
 Нет. Standalone Memory/Continuity — полноценный продукт. Coordinator — необязательный поставляемый CLI (`continuity/scripts/coordinator.mjs`). Memory его не запускает.
+
+**Какой профиль скачивать?**
+
+Full — если нужны память и исполнение вместе. Memory — если нужны только журнал и inspect/handoff. Coordinator — если совместимый Memory CLI уже есть. Перед установкой проверьте `SHA256SUMS`. См. [Установка](#установка).
 
 **Нужен ли Continuity planner?**
 

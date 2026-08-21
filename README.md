@@ -4,52 +4,9 @@
 
 **Source-backed project continuity that survives chats, models, and executors.**
 
-Continuity is a local Node.js product with three strictly separated layers:
+Continuity is a local Node.js CLI and Skill. It writes a bounded journal beside a Git repository so a later chat, model, or executor can recover goals, failed attempts, evidence, and next actions instead of guessing. The journal is authoritative for what Continuity recorded. Live files, Git, and the user remain authoritative for the project. A historical PASS is not current truth.
 
-1. **Project Memory Core** — append-only journal of goals, attempts, evidence, verification, and user acceptance.
-2. **Continuity** — read/continuity plane: inspect, ready set, freshness, handoff.
-3. **Coordinator** — optional execution runtime. It launches adapters and writes only through the Core CLI.
-
-The journal is authoritative for what Continuity recorded. Live files, Git, and the user remain authoritative for the project. A historical PASS is not current truth.
-
-## Which profile to download
-
-| Profile | Use when | Contains | Coordinator required? |
-| --- | --- | --- | --- |
-| **Continuity Full** | You want memory and execution in one tree | Core + Continuity + Coordinator | No; Memory still works alone |
-| **Continuity Memory** | You only need the journal and inspect/handoff | Core + Continuity + protocol | No |
-| **Continuity Coordinator** | You already have a Memory CLI and want execution | Coordinator + protocol client + adapters | Connects to a Memory CLI |
-
-Build zips from this tree:
-
-```bash
-node scripts/package-release.mjs dist
-```
-
-Download the matching zip. Verify `dist/SHA256SUMS` against the zip files. Install with:
-
-```bash
-node scripts/install.mjs --profile full --dest /absolute/path/to/dest --dry-run
-node scripts/install.mjs --profile memory --dest /absolute/path/to/dest
-node scripts/install.mjs --profile coordinator --dest /absolute/path/to/dest
-```
-
-Then run doctor:
-
-```bash
-node continuity/scripts/continuity.mjs --version
-node continuity/scripts/coordinator.mjs --version
-node continuity/scripts/continuity.mjs doctor
-node continuity/scripts/coordinator.mjs doctor --root .
-```
-
-`--version` prints `continuity 2.0.0` and `continuity-coordinator 1.0.0`. `doctor` is read-only and does not create a store.
-
-First scenario after `journal=uninitialized`: edit `continuity/assets/init-v3.template.json` so the goal and criterion are the user's, then `init --schema 3 --file ...`, `record task --class function`, attach command/test evidence, and keep acceptance as `record accept --as user`. Details are in First five minutes below.
-
-Memory mode is autonomous: init, record, inspect, handoff, rebuild, and user-only acceptance. Coordinator mode needs a runtime adapter. The shipped live adapter is `local-process` (current Node.js). Only the user may accept or reject a result. A Coordinator cannot.
-
-This product does not claim hosted-model execution, native discovery by every coding agent, a daemon or login task, or that a historical PASS is current.
+It is a standalone, source-backed project continuity layer for coding agents, with an optional Coordinator runtime for agent environments.
 
 ## What Continuity is
 
@@ -59,9 +16,15 @@ You run `continuity/scripts/continuity.mjs` from the Git repository you care abo
 
 The record keeps unsuccessful work as well as successful work. It does not promote an old note into current truth. Inspect recomputes freshness from live Git. Only the user may accept or reject a result.
 
+The product is three strictly separated layers:
+
+1. **Project Memory Core** — the only owner of long-term recorded truth: goals, criteria, attempts, evidence, verification, freshness, failures, and user acceptance. `HISTORY.ndjson` is the authoritative journal. `CURRENT.json` is a rebuildable projection.
+2. **Continuity** — the read/continuity plane: startup orientation, inspect, ready state, bounded handoff, live Git drift, and schema validation before emission. It does not launch agents.
+3. **Coordinator** — an optional execution plane: ready-set consumption, WorkPackets, adapter launch, independent verifiers, and restartable run state. It never edits the journal or projection directly.
+
 Runtime requirements are Node.js 22 or 24 (`package.json` engines: `>=22 <25`) and Git. The Memory CLI does not launch models, agents, a planner, or a Coordinator. The optional Coordinator CLI is a separate foreground process; it never starts a daemon, network service, interview, or login task. Continuity may run local Git commands to read repository state.
 
-The installable product tree is the `continuity/` directory plus the profile docs in this repository.
+The complete installable Skill is the `continuity/` directory. Choose Full, Memory, or Coordinator when you download; see [Installation](#installation). This product does not claim hosted-model execution, native discovery by every coding agent, or that a historical PASS is current.
 
 ## The problem it solves
 
@@ -219,7 +182,33 @@ There is no top-level `coordinate` command on the Memory CLI. Coordinator comman
 
 Continuity is distributed from [Altarnik88/continuity](https://github.com/Altarnik88/continuity) under the MIT License. It is not published to a package registry. The Skill has no runtime `npm install` step.
 
-You can invoke the CLI from a clone, or copy the Skill directory into an agent-specific skills folder. Discovery paths differ between coding agents. This repository does not claim native integration with Codex, Claude, Cursor, or any other product.
+You can invoke the CLI from a clone, download a profile zip from [GitHub Releases](https://github.com/Altarnik88/continuity/releases), or copy the Skill directory into an agent-specific skills folder. Discovery paths differ between coding agents. This repository does not claim native integration with Codex, Claude, Cursor, or any other product.
+
+### Distribution profiles
+
+| Profile | Use when | Contains | Coordinator required? |
+| --- | --- | --- | --- |
+| **Continuity Full** | You want memory and execution in one tree | Core + Continuity + Coordinator | No; Memory still works alone |
+| **Continuity Memory** | You only need the journal and inspect/handoff | Core + Continuity + protocol | No |
+| **Continuity Coordinator** | You already have a Memory CLI and want execution | Coordinator + protocol client + adapters | Connects to a Memory CLI |
+
+Build zips from this tree, then verify hashes:
+
+```bash
+node scripts/package-release.mjs dist
+```
+
+Check `dist/SHA256SUMS` against the zip files. Install with an explicit destination. The installer refuses implicit overwrite, does not delete `.continuity` project data, supports dry-run, and stays offline:
+
+```bash
+node scripts/install.mjs --profile full --dest /absolute/path/to/dest --dry-run
+node scripts/install.mjs --profile memory --dest /absolute/path/to/dest
+node scripts/install.mjs --profile coordinator --dest /absolute/path/to/dest
+```
+
+Copying files proves the files are present. It does not prove a coding agent discovered them, and it is not proof of runtime adapter discovery.
+
+Memory mode is autonomous: init, record, inspect, handoff, rebuild, and user-only acceptance. Coordinator mode needs a runtime adapter. The shipped live adapter is `local-process` (the current Node.js binary). Only the user may accept or reject a result.
 
 ### Direct CLI usage
 
@@ -286,7 +275,18 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" --version
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 ```
 
-If `doctor` reports `journal=uninitialized`, review `continuity/assets/init-v3.template.json` and replace the example goal and criterion with the user's actual intent, then:
+`--version` prints `continuity 2.0.0`. `doctor` is read-only. On an uninitialized repository it reports `journal=uninitialized` and does not create a store.
+
+If you installed Full or Coordinator, the execution CLI is separate and also explicit:
+
+```bash
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" --version
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .
+```
+
+`--version` prints `continuity-coordinator 1.0.0`. `coordinator.mjs doctor` reports `daemon=false` and does not start a background process.
+
+If Memory `doctor` reports `journal=uninitialized`, review `continuity/assets/init-v3.template.json` and replace the example goal and criterion with the user's actual intent, then:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/continuity/assets/init-v3.template.json"
@@ -768,6 +768,10 @@ Because `project-memory.coordinator.v1` is the stable protocol id, and `scripts/
 **Does Continuity require a Coordinator?**
 
 No. Standalone Memory/Continuity is a complete product. Coordinator is an optional shipped CLI (`continuity/scripts/coordinator.mjs`). Memory does not start it.
+
+**Which profile should I download?**
+
+Full if you want memory and execution together. Memory if you only need the journal and inspect/handoff. Coordinator if you already have a compatible Memory CLI. Verify `SHA256SUMS` before install. See [Installation](#installation).
 
 **Does Continuity require a planner?**
 
