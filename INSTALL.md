@@ -84,7 +84,9 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect ready --json
 
 `--as coordinator` is only the writer kind. After the template, `inspect ready --json` reports `plan.missing: ["taskAccumulator"]` until a task exists. If `plan.missing` is nonempty, stop assigning work.
 
-To manage agents on that same repository (Full or Coordinator profile):
+A coordinator packet needs exactly one Node.js argv. `task.focusedVerification` is a text list, so encode that argv as one JSON string, for example `["-e","process.exit(0)"]`. There is no `--focused-verification` flag. Persist the field with `record --file` on a valid `task.planned` draft. A bare `record task` leaves the list empty; `coordinator run` then fail-closes (recorded failure, no evidence, no result). It does not treat a missing check as success.
+
+To manage agents on that same repository (Full or Coordinator profile), after the task carries that one JSON argv check:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .

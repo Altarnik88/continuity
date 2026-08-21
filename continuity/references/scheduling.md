@@ -24,7 +24,7 @@ A WorkPacket contains `taskIds`, `weight`, `prerequisites`, `allowedPaths`, `for
 
 Isolate (one task per packet) when complexity is `high`, risk is `significant` or `critical`, size is `L`/`XL`, or the class is security, migration, or architecture.
 
-Batch 2–4 `XS`/`S` tasks only when they share `moduleId`, share required capabilities, have compatible non-overlapping ownership, stay inside the context budget, and keep separate statuses and acceptance criteria. Do not batch security, migration, architecture, and cosmetic work together to fill a slot.
+Batch 2–4 `XS`/`S` tasks only when they share `moduleId`, share required capabilities, share identical `focusedVerification`, have compatible non-overlapping ownership, stay inside the context budget, and keep separate statuses and acceptance criteria. Differing checks stay in separate packets. Do not batch security, migration, architecture, and cosmetic work together to fill a slot.
 
 `record packet` enforces these batching and isolation rules again on persistence. A packet has 1–4 tasks; `XL` is rejected until split, and complex, significant/critical-risk, `L`, security, migration, and architecture work remains isolated.
 

@@ -248,4 +248,70 @@ export async function run() {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+
+  const waveRoot = makeRepo();
+  try {
+    assert.equal(runContinuity(waveRoot, ['init', '--schema', '3', '--file', initTemplate]).status, 0);
+    const check = '["-e","process.exit(0)"]';
+    const draftPath = path.join(waveRoot, 'task-planned.json');
+    writeFileSync(draftPath, `${JSON.stringify({
+      eventType: 'task.planned',
+      occurredAt: '2026-08-21T00:00:00.000Z',
+      actor: { kind: 'coordinator', id: 'actor-coord', role: 'coordinator', runId: 'run-coord-01' },
+      subject: { type: 'task', id: 'task-wave-check' },
+      goalId: 'goal-final',
+      taskId: 'task-wave-check',
+      supersedes: [],
+      contradicts: [],
+      evidenceRefs: [],
+      sensitivity: 'internal',
+      payload: {
+        task: {
+          taskId: 'task-wave-check',
+          goalId: 'goal-final',
+          title: 'Unmodified wave check',
+          scope: 'Unmodified wave check',
+          owner: 'actor-coord',
+          criterionIds: ['criterion-honest'],
+          userFacing: true,
+          priority: 'core',
+          size: 'S',
+          class: 'function',
+          focusedVerification: [check],
+        },
+      },
+    })}\n`);
+    const recorded = runContinuity(waveRoot, ['record', '--file', draftPath]);
+    assert.equal(recorded.status, 0, recorded.stderr);
+    const wave = JSON.parse(runContinuity(waveRoot, ['inspect', 'wave', '--json']).stdout);
+    const packet = (wave.wave?.wave || wave.packets || [])[0];
+    assert.ok(packet, 'inspect wave must return a packet');
+    assert.deepEqual(packet.focusedChecks, [check]);
+
+    const launchLog = [];
+    const adapter = createLocalProcessAdapter({ timeoutMs: 30_000 });
+    const originalLaunch = adapter.launchAssignment.bind(adapter);
+    adapter.launchAssignment = (assignment) => {
+      launchLog.push(assignment);
+      return originalLaunch(assignment);
+    };
+    const waveRuntime = createCoordinatorRuntime({
+      root: waveRoot,
+      adapter,
+      config: baseConfig({
+        slots: 1,
+        executorRunId: 'run-exec-wave',
+        verifierRunId: 'run-verify-wave',
+      }),
+    });
+    const executed = waveRuntime.run({ runId: 'run-unmodified-wave' });
+    assert.ok(launchLog.length >= 1, 'unmodified inspect wave with one JSON argv must launch');
+    const events = journalEvents(waveRoot);
+    assert.equal(events.some((event) => event.eventType === 'evidence.recorded'
+      && event.payload?.evidence?.authorizing === true), true);
+    assert.equal(events.some((event) => event.eventType === 'result.recorded'), true);
+    assert.notEqual(executed.state.status, 'blocked');
+  } finally {
+    rmSync(waveRoot, { recursive: true, force: true });
+  }
 }

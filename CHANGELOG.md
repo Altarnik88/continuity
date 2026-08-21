@@ -4,7 +4,8 @@
 
 - This build supports schema v3 only. v1/v2 stores fail closed naming git tag `legacy-v1v2-final` and are never silently read as v3.
 - Legacy commands `checkpoint`, `snapshot`, `lint`, `source`, `event`, `migrate`, `graphify`, and `--schema 1` / `--schema 2` fail closed. They do not write.
-- Coordinator no longer substitutes a no-op `process.exit(0)` executor. Empty or malformed `focusedChecks` fail closed: recorded failure, no authorizing evidence, no result.
+- Coordinator no longer substitutes a no-op `process.exit(0)` executor. Empty or malformed `focusedChecks` fail closed: recorded failure, no authorizing evidence, no result. A bare `record task` does not attach a check; persist one JSON argv string in `task.focusedVerification` via `record --file`.
+- Work-packet batching keeps one argv per packet: tasks with differing `focusedVerification` are not batched.
 - Coordinator run status is `completed` only when the wave is exhausted, `partial` when work ran and ready work remains, and `blocked` when nothing launched.
 - Coordinator slots shape the wave only; execution is sequential.
 - Coordinator verify binds to the `resultId` echoed from that write, not `unverified[0]`. Missing echo fails closed.

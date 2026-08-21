@@ -36,7 +36,7 @@ A report is stored. It is still not authorizing evidence. Coordinator must attac
 
 ## Coordinated execution
 
-1. Memory store already has a goal, criterion, and at least one ready core task.
+1. Memory store already has a goal, criterion, and at least one ready core task whose `focusedVerification` encodes one Node.js argv as a JSON string. Without that check, `run` fail-closes.
 2. `coordinator.mjs plan --root <repo>` reads ready/wave and records run state.
 3. `coordinator.mjs run` registers executor and verifier, records packet and assignment through the Memory CLI, launches `local-process` (or another configured live adapter), waits for a structured report, records evidence/result, launches a **different** verifier, records `verify`.
 4. `status` / `resume` / `cancel` observe or continue that run.
@@ -65,7 +65,7 @@ A report is stored. It is still not authorizing evidence. Coordinator must attac
 
 ## Ownership, waves, resume
 
-Packets with overlapping path ownership are not launched in parallel. A free slot can take the next independent ready packet; the engine does not have to wait for an entire wave if a slot opens.
+Packets with overlapping path ownership are not placed in the same wave. Slots only cap how many independent packets `inspect wave` may return.
 
 Around 65% context used, Coordinator must not assign a new packet; it finishes a safe step, records partial/result, writes a bounded handoff, and starts a **new** Attempt with a new actor and run. See [context-rollover.md](continuity/references/context-rollover.md).
 

@@ -499,6 +499,46 @@ export const CASES = Object.freeze([
     },
   },
   {
+    id: 'COORD-016b-focused-checks-one-argv',
+    requirement: 'batch only identical focusedVerification; one argv per packet; differing checks stay unbatched',
+    async run() {
+      const checkA = ['["-e","process.exit(0)"]'];
+      const checkB = ['["-e","process.exit(1)"]'];
+      const same = ['task-a', 'task-b'].map((taskId, index) => memTask({
+        taskId, size: 'XS', moduleId: 'mod',
+        pathOwnership: [`src/mod/${index}`], ownershipScope: [`src/mod/${index}`],
+        focusedVerification: checkA,
+      }));
+      const different = memTask({
+        taskId: 'task-c', size: 'XS', moduleId: 'mod',
+        pathOwnership: ['src/mod/2'], ownershipScope: ['src/mod/2'],
+        focusedVerification: checkB,
+      });
+      const empty = memTask({
+        taskId: 'task-d', size: 'XS', moduleId: 'mod',
+        pathOwnership: ['src/mod/3'], ownershipScope: ['src/mod/3'],
+      });
+      const samePackets = buildWorkPackets(buildTaskAccumulator(memState(same)).tasks);
+      assert.equal(samePackets.length, 1);
+      assert.equal(samePackets[0].taskIds.length, 2);
+      assert.deepEqual(samePackets[0].focusedChecks, checkA);
+
+      const mixed = buildWorkPackets(buildTaskAccumulator(memState([...same, different])).tasks);
+      const withA = mixed.find((item) => item.taskIds.includes('task-a'));
+      const withB = mixed.find((item) => item.taskIds.includes('task-c'));
+      assert.equal(withA.taskIds.length, 2);
+      assert.deepEqual(withA.focusedChecks, checkA);
+      assert.equal(withB.taskIds.length, 1);
+      assert.deepEqual(withB.focusedChecks, checkB);
+
+      const emptyPlus = buildWorkPackets(buildTaskAccumulator(memState([same[0], empty])).tasks);
+      assert.equal(emptyPlus.length, 2);
+      assert.equal(emptyPlus.every((item) => item.taskIds.length === 1), true);
+      assert.deepEqual(emptyPlus.find((item) => item.taskIds.includes('task-a')).focusedChecks, checkA);
+      assert.deepEqual(emptyPlus.find((item) => item.taskIds.includes('task-d')).focusedChecks, []);
+    },
+  },
+  {
     id: 'COORD-017-context-threshold',
     requirement: 'no new packet after 65% context or conservative heuristic',
     async run() {

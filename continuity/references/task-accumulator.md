@@ -19,7 +19,7 @@ The accumulator is derived from the v3 projection. Replay of `HISTORY.ndjson` re
 | `dependencies` | unfinished dependency ids block readiness |
 | `ownershipScope` | repository-relative paths or modules |
 | `acceptanceCriteria` | per-task |
-| `focusedVerification` | finite checks for this task only |
+| `focusedVerification` | finite checks for this task only; coordinator packets need exactly one Node.js argv encoded as a JSON string, for example `["-e","process.exit(0)"]` |
 | `status` | execution enum |
 | `actor` | current assignment actor, if any |
 | `evidenceLinks` | |
@@ -50,4 +50,4 @@ The gate passes only after a succeeded Result for a `core` `function` or `connec
 
 ## Recipe fields
 
-`record task` accepts `--title` plus optional `--priority`, `--size`, `--complexity`, `--risk`, and `--class`. Omitting `--class` persists `unclassified`. `--class` is valid only on `record task`; unknown values are rejected with no journal effect. Structured `--file` drafts remain for the remaining fields.
+`record task` accepts `--title` plus optional `--priority`, `--size`, `--complexity`, `--risk`, and `--class`. Omitting `--class` persists `unclassified`. `--class` is valid only on `record task`; unknown values are rejected with no journal effect. Structured `--file` drafts remain for the remaining fields, including `focusedVerification`. There is no `--focused-verification` flag.

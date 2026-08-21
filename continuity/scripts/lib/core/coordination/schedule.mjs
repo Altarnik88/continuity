@@ -202,7 +202,7 @@ function makePacket(tasks, isolated) {
     requiredCapabilities: capabilities,
     riskCeiling,
     contextBudget: Math.max(weight, DEFAULT_CONTEXT_BUDGET),
-    focusedChecks: uniqueSorted(tasks.flatMap((item) => item.focusedVerification)),
+    focusedChecks: packetFocusedChecks(tasks),
     completionContract: uniqueSorted(tasks.flatMap((item) => item.acceptanceCriteria.length
       ? item.acceptanceCriteria
       : [`task ${item.id} meets its criteria`])),
@@ -218,6 +218,17 @@ function makePacket(tasks, isolated) {
 
 function uniqueSorted(values) {
   return [...new Set(values.filter(Boolean))].sort();
+}
+
+function sameStringList(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function packetFocusedChecks(tasks) {
+  const lists = tasks.map((item) => uniqueSorted(item.focusedVerification ?? []));
+  const first = lists[0] ?? [];
+  if (lists.every((list) => sameStringList(list, first))) return first;
+  return lists.flatMap((list) => (list.length ? list : ['[]']));
 }
 
 export function contextAllowsNewPacket({ usedRatio, exact, packetsAssigned = 0, lastPacket } = {}) {

@@ -248,6 +248,10 @@ function taskCapabilities(task = {}) {
   return [...new Set(task.requiredCapabilities ?? task.capabilities ?? [])].sort();
 }
 
+function focusedVerificationValues(task = {}) {
+  return [...new Set((task.focusedVerification ?? []).filter(Boolean))].sort();
+}
+
 function sameValues(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
@@ -276,6 +280,7 @@ export function persistedTasksMayBatch(left = {}, right = {}) {
   if (['architecture', 'migration', 'security'].includes(left.class)
     || ['architecture', 'migration', 'security'].includes(right.class)) return false;
   if ((left.class === 'cosmetic') !== (right.class === 'cosmetic')) return false;
+  if (!sameValues(focusedVerificationValues(left), focusedVerificationValues(right))) return false;
   return true;
 }
 
