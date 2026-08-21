@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createCoordinatorRuntime } from '../../continuity/scripts/lib/coordinator/index.mjs';
 import { createFakeAdapter } from '../../continuity/scripts/lib/coordinator/adapters/fake.mjs';
-import { ProtocolError } from '../../continuity/scripts/lib/protocol/index.mjs';
+import { ProtocolError, createCliClient } from '../../continuity/scripts/lib/protocol/index.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const continuityCli = path.join(repoRoot, 'continuity', 'scripts', 'continuity.mjs');
@@ -43,6 +43,21 @@ function runCoordinator(args, root) {
   });
 }
 
+function clientWithFocusedChecks(argv = ['-e', 'process.exit(0)']) {
+  const client = createCliClient({ continuityCli, timeoutMs: 30_000 });
+  const inspectWave = client.inspectWave.bind(client);
+  client.inspectWave = (opts) => {
+    const result = inspectWave(opts);
+    const document = result.document;
+    if (document && typeof document === 'object') {
+      for (const item of document.wave?.wave || []) item.focusedChecks = [argv];
+      for (const item of document.packets || []) item.focusedChecks = [argv];
+    }
+    return result;
+  };
+  return client;
+}
+
 export async function run() {
   const version = spawnSync(process.execPath, [coordinatorCli, '--version'], { encoding: 'utf8' });
   assert.equal(version.status, 0, version.stderr);
@@ -69,10 +84,16 @@ export async function run() {
     assert.equal(doctor.status, 0, doctor.stderr);
     assert.match(doctor.stdout, /adapter=local-process/);
     assert.match(doctor.stdout, /live-proof=true/);
+    assert.match(doctor.stdout, /execution=sequential/);
     assert.match(doctor.stdout, /daemon=false/);
+
+    const planned = runCoordinator(['plan'], root);
+    assert.equal(planned.status, 0, planned.stderr);
+    assert.match(planned.stdout, /execution=sequential/);
 
     const runtime = createCoordinatorRuntime({
       root,
+      client: clientWithFocusedChecks(),
       config: {
         adapter: 'local-process',
         slots: 1,
@@ -87,7 +108,8 @@ export async function run() {
     });
     const executed = runtime.run({ runId: 'run-live-01' });
     assert.equal(executed.state.userAcceptance, 'pending');
-    assert.ok(['completed', 'blocked', 'running'].includes(executed.state.status), executed.state.status);
+    assert.equal(executed.execution, 'sequential');
+    assert.ok(['completed', 'partial', 'blocked', 'running'].includes(executed.state.status), executed.state.status);
 
     const history = readFileSync(path.join(root, '.continuity', 'HISTORY.ndjson'), 'utf8')
       .split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));

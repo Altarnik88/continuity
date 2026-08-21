@@ -31,7 +31,7 @@ export const PACKET_ISOLATION_REASONS = Object.freeze([
   'security', 'migration', 'architecture',
 ]);
 export const RUN_STATES = Object.freeze([
-  'planning', 'running', 'paused', 'blocked', 'completed', 'cancelled', 'failed',
+  'planning', 'running', 'paused', 'blocked', 'partial', 'completed', 'cancelled', 'failed',
 ]);
 export const REPORT_STATUSES = Object.freeze(['done', 'partial', 'blocked', 'failed']);
 export const ADAPTER_METHODS = Object.freeze([

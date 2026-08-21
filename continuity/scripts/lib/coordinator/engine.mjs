@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
 import {
   CONTEXT_ASSIGN_THRESHOLD,
@@ -12,6 +13,10 @@ import { loadCoordinatorConfig } from './config.mjs';
 import {
   createRunState, latestRunId, loadRunState, saveRunState,
 } from './run-state.mjs';
+
+const SHELL_META = /[|&;$><`]/;
+const NODE_NAMES = new Set(['node', 'node.exe']);
+const ROLLOVER_CONTRACT = 'continuity/references/context-rollover.md';
 
 function fail(message, exitCode = 2) {
   throw new ProtocolError(message, exitCode);
@@ -43,19 +48,87 @@ function missingPlan(ready) {
   return Array.isArray(missing) && missing.length ? missing : [];
 }
 
-function definitionOfDone(ready) {
+function emptyCounts() {
+  return { found: 0, executed: 0, passed: 0, failed: 0, skipped: 0 };
+}
+
+function failedReport(message) {
+  return {
+    status: 'failed',
+    failures: [message],
+    testCounts: emptyCounts(),
+    exactNextStep: 'Fix focusedChecks and retry with a new Attempt',
+  };
+}
+
+/**
+ * Focused check format: exactly one argv array for the current Node.js binary.
+ * Each WorkPacket.focusedChecks entry is either:
+ *   - a string array of argv tokens, or
+ *   - a JSON string encoding that array (task.focusedVerification is a text list).
+ * argv[0] may be the current Node binary (or basename `node`); otherwise argv is
+ * passed as arguments to `process.execPath`. Empty or malformed lists fail closed.
+ */
+export function buildCommandFromFocusedChecks(focusedChecks) {
+  if (!Array.isArray(focusedChecks) || focusedChecks.length === 0) {
+    return { ok: false, reason: 'focusedChecks is empty; refusing to fabricate a no-op command' };
+  }
+  if (focusedChecks.length !== 1) {
+    return {
+      ok: false,
+      reason: 'focusedChecks must contain exactly one argv array for the current Node.js binary',
+    };
+  }
+  let argv = focusedChecks[0];
+  if (typeof argv === 'string') {
+    try {
+      argv = JSON.parse(argv);
+    } catch {
+      return { ok: false, reason: 'focusedChecks entry is not a JSON argv array' };
+    }
+  }
+  if (!Array.isArray(argv) || argv.length < 1
+    || !argv.every((part) => typeof part === 'string' && part.length > 0)) {
+    return { ok: false, reason: 'focusedChecks argv must be a nonempty array of strings' };
+  }
+  if (argv.some((part) => SHELL_META.test(part))) {
+    return { ok: false, reason: 'focusedChecks argv contains shell metacharacters' };
+  }
+  const head = argv[0];
+  const base = path.basename(head).toLowerCase();
+  if (head === process.execPath || NODE_NAMES.has(base)) {
+    return { ok: true, command: [process.execPath, ...argv.slice(1)] };
+  }
+  if (/[\\/]/.test(head) || /\.(exe|cmd|bat|ps1)$/i.test(head)) {
+    return { ok: false, reason: 'focusedChecks may only execute the current Node.js binary' };
+  }
+  return { ok: true, command: [process.execPath, ...argv] };
+}
+
+function waveExhausted(ready) {
   const criteria = ready?.criteria ?? [];
   if (!criteria.length) return false;
   const required = criteria.filter((item) => item.required !== false);
   if (!required.length) return false;
-  const confirmed = new Set((ready.confirmed ?? []).map((item) => item.resultId));
-  if (!confirmed.size && !(ready.confirmed ?? []).length) {
+  if (!(ready.confirmed ?? []).length) {
     return Boolean(ready.buildFirst?.passed) && (ready.availableTasks ?? []).length === 0
       && (ready.userAcceptance === 'pending' || ready.userAcceptance === 'accepted' || ready.userAcceptance === 'mixed');
   }
   return (ready.availableTasks ?? []).length === 0
     && (ready.unverified ?? []).length === 0
     && (ready.stale ?? []).length === 0;
+}
+
+function waveItems(wave, slots) {
+  if (Array.isArray(wave.wave?.wave)) return wave.wave.wave;
+  if (Array.isArray(wave.wave)) return wave.wave;
+  if (Array.isArray(wave.packets)) return wave.packets.slice(0, slots);
+  return [];
+}
+
+function overlapsSibling(items, item) {
+  return items.some((other) => other !== item
+    && ownershipOverlap(item.allowedPaths || [], other.allowedPaths || []));
 }
 
 function agentRecord(actorId, { modelFamily, capabilityProfiles, costTier = 'lowest' }) {
@@ -119,24 +192,20 @@ function packetFromWave(item, waveId, actorId, runId) {
   });
 }
 
-function lastResultId(client, root) {
-  const inspect = asDocument(client.inspect({ root, json: true }));
-  const unverified = inspect.unverified ?? [];
-  const confirmed = inspect.confirmed ?? [];
-  return unverified[0]?.resultId || confirmed[0]?.resultId || null;
-}
-
 function executePacket({
-  root, client, adapter, config, state, packet, role,
+  root, client, adapter, config, packet, role,
 }) {
   const actorId = role === 'verifier' ? config.verifierActorId : config.executorActorId;
   const runId = role === 'verifier' ? config.verifierRunId : config.executorRunId;
   const taskId = packet.taskIds[0];
+  let assignmentId = null;
   if (role === 'executor') {
     client.recordPacket({ root, taskId, packetId: packet.packetId });
-    client.recordAssign({
+    const assigned = client.recordAssign({
       root, taskId, packetId: packet.packetId, assignee: actorId,
     });
+    assignmentId = assigned.assignmentId;
+    if (!assignmentId) fail('record assign did not echo assignmentId', 3);
     client.recordStart({
       root,
       taskId,
@@ -145,8 +214,27 @@ function executePacket({
       runId,
     });
   }
+  const built = buildCommandFromFocusedChecks(packet.focusedChecks);
+  if (!built.ok) {
+    if (role === 'executor') {
+      client.recordFail({
+        root,
+        actorId,
+        runId,
+        why: built.reason,
+        impact: 'Task is not complete; no authorizing evidence was recorded',
+        next: 'Provide exactly one argv array for the current Node.js binary in focusedChecks',
+      });
+    }
+    return {
+      report: failedReport(built.reason),
+      resultId: null,
+      verified: false,
+      assignmentId,
+    };
+  }
   const assignment = {
-    assignmentId: newId('assignment'),
+    assignmentId: assignmentId || newId('assignment'),
     packetId: packet.packetId,
     actorId,
     runId,
@@ -154,7 +242,7 @@ function executePacket({
     root,
     packet,
     timeoutMs: config.timeoutMs,
-    command: [process.execPath, '-e', 'process.exit(0)'],
+    command: built.command,
   };
   adapter.launchAssignment(assignment);
   adapter.sendContext(assignment, { packet });
@@ -178,18 +266,19 @@ function executePacket({
         impact: 'Task is not complete',
         next: report.exactNextStep || 'Retry with a different approach and a new Attempt',
       });
-      return { report, resultId: null, verified: false };
+      return { report, resultId: null, verified: false, assignmentId };
     }
     client.recordEvidence({
       root,
       actorId,
       runId,
+      taskId,
       expected: authorizing.expected || 'focused check exits 0',
       actual: authorizing.actual || 'exit 0',
       kind: authorizing.kind || 'command',
       exitCode: authorizing.exitCode,
     });
-    client.recordResult({
+    const recorded = client.recordResult({
       root,
       actorId,
       runId,
@@ -197,10 +286,26 @@ function executePacket({
       actual: 'authorizing command evidence recorded',
       execution: 'succeeded',
     });
-    const resultId = lastResultId(client, root);
-    return { report, resultId, verified: false };
+    const resultId = recorded.resultId;
+    if (!resultId) fail('record result did not echo resultId', 3);
+    return { report, resultId, verified: false, assignmentId };
   }
-  return { report, resultId: null, verified: report.status === 'done' };
+  return { report, resultId: null, verified: report.status === 'done', assignmentId };
+}
+
+function persistReleaseFailure(client, { root, config, error }) {
+  try {
+    client.recordFail({
+      root,
+      actorId: config.executorActorId,
+      runId: config.executorRunId,
+      why: `assignment release failed: ${error.message}`,
+      impact: 'Assignment lease may still be held',
+      next: 'Record release with the explicit assignment id',
+    });
+  } catch {
+    /* still surface the release failure on run state */
+  }
 }
 
 export function createCoordinatorRuntime({
@@ -232,6 +337,7 @@ export function createCoordinatorRuntime({
     return {
       daemon: false,
       interview: false,
+      execution: 'sequential',
       contractId: 'project-memory.coordinator.v1',
       memory: String(memory.stdout || '').trim(),
       adapter: {
@@ -265,49 +371,46 @@ export function createCoordinatorRuntime({
         waveId: wave.wave?.[0] ? newId('wave') : null,
       });
     }
-    return { state, ready, wave };
+    return { state, ready, wave, execution: 'sequential' };
   }
 
   function run({ runId } = {}) {
     assertLiveProof(config, runtimeAdapter);
     const planned = plan({ runId });
     let state = planned.state;
-    if (state.status === 'blocked') return { state, doctor: doctor() };
+    if (state.status === 'blocked') return { state, doctor: doctor(), execution: 'sequential' };
     if (typeof config.contextUsedRatio === 'number' && config.contextUsedRatio >= CONTEXT_ASSIGN_THRESHOLD) {
       state = persist({
         ...state,
         status: 'paused',
         stopReason: 'context-threshold',
       });
-      return { state, doctor: doctor() };
+      return { state, doctor: doctor(), execution: 'sequential' };
     }
     const ready = asDocument(memoryClient.inspectReady({ root }));
     ensureAgents(memoryClient, root, config, ready);
     state = persist({ ...state, status: 'running' });
     const waveId = state.waveId || newId('wave');
     const wave = asDocument(memoryClient.inspectWave({ root, slots: config.slots }));
-    const items = Array.isArray(wave.wave?.wave)
-      ? wave.wave.wave
-      : Array.isArray(wave.wave)
-        ? wave.wave
-        : Array.isArray(wave.packets)
-          ? wave.packets.slice(0, config.slots)
-          : [];
+    const items = waveItems(wave, config.slots);
     const claimed = [];
+    let launched = 0;
+    let releaseFailed = false;
     for (const item of items) {
       if (state.completedPacketIds.includes(item.packetId)) continue;
+      if (overlapsSibling(items, item)) continue;
       if (ownershipOverlap(claimed, item.allowedPaths || [])) continue;
-      if ((state.assignments.filter((row) => row.state === 'held').length) >= config.slots) break;
       const packet = packetFromWave(item, waveId, config.executorActorId, config.executorRunId);
+      launched += 1;
       const executed = executePacket({
-        root, client: memoryClient, adapter: runtimeAdapter, config, state, packet, role: 'executor',
+        root, client: memoryClient, adapter: runtimeAdapter, config, packet, role: 'executor',
       });
       claimed.push(...(packet.allowedPaths || []));
       state = persist({
         ...state,
         waveId,
         assignments: [...state.assignments, {
-          assignmentId: newId('assignment'),
+          assignmentId: executed.assignmentId || newId('assignment'),
           packetId: packet.packetId,
           actorId: config.executorActorId,
           runId: config.executorRunId,
@@ -323,7 +426,7 @@ export function createCoordinatorRuntime({
       if (executed.resultId) {
         const verifyPacket = packetFromWave(item, waveId, config.verifierActorId, config.verifierRunId);
         const verified = executePacket({
-          root, client: memoryClient, adapter: runtimeAdapter, config, state, packet: verifyPacket, role: 'verifier',
+          root, client: memoryClient, adapter: runtimeAdapter, config, packet: verifyPacket, role: 'verifier',
         });
         if (verified.report.status === 'done' && executed.resultId) {
           memoryClient.recordVerify({
@@ -339,30 +442,52 @@ export function createCoordinatorRuntime({
           });
         }
       }
+      const assignmentId = executed.assignmentId;
+      let packetReleaseFailed = false;
       try {
-        memoryClient.recordRelease({ root, why: 'packet complete or failed' });
-      } catch {
-        /* assignment may already be released */
+        if (!assignmentId) fail('assignment release requires the assignmentId from the write', 3);
+        memoryClient.recordRelease({ root, assignmentId, why: 'packet complete or failed' });
+      } catch (error) {
+        persistReleaseFailure(memoryClient, { root, config, error });
+        packetReleaseFailed = true;
+        releaseFailed = true;
       }
       state = persist({
         ...state,
         completedPacketIds: [...state.completedPacketIds, packet.packetId],
         assignments: state.assignments.map((row) => (
-          row.packetId === packet.packetId ? { ...row, state: 'released' } : row
+          row.packetId === packet.packetId
+            ? { ...row, state: packetReleaseFailed ? 'held' : 'released' }
+            : row
         )),
         openAttempts: state.openAttempts.filter((row) => row.runId !== config.executorRunId),
       });
     }
     memoryClient.inspect({ root, json: true });
     const after = asDocument(memoryClient.inspectReady({ root }));
-    const done = definitionOfDone(after) || state.completedPacketIds.length > 0;
+    const exhausted = waveExhausted(after);
+    let status;
+    let stopReason;
+    if (exhausted) {
+      status = 'completed';
+      stopReason = 'wave-exhausted';
+    } else if (launched > 0) {
+      status = 'partial';
+      stopReason = 'ready-work-remains';
+    } else {
+      status = 'blocked';
+      stopReason = items.length ? 'nothing-could-be-launched' : 'no-independent-ready-work';
+    }
+    if (releaseFailed) {
+      stopReason = `${stopReason};assignment-release-failed`;
+    }
     state = persist({
       ...state,
-      status: done ? 'completed' : (items.length ? 'completed' : 'blocked'),
-      stopReason: done ? 'definition-of-done-or-wave-complete' : 'no-independent-ready-work',
+      status,
+      stopReason,
       userAcceptance: 'pending',
     });
-    return { state, ready: after, doctor: doctor() };
+    return { state, ready: after, doctor: doctor(), execution: 'sequential' };
   }
 
   function resume({ runId } = {}) {
@@ -371,7 +496,15 @@ export function createCoordinatorRuntime({
     const existing = loadRunState(root, id);
     if (existing.status === 'cancelled') return { state: existing };
     if (existing.openAttempts.length) {
-      return { state: persist({ ...existing, status: 'running', stopReason: 'resume-without-closing-foreign-attempts' }), resumed: true };
+      return {
+        state: persist({
+          ...existing,
+          status: 'blocked',
+          stopReason: 'open-attempts-require-rollover',
+        }),
+        resumed: true,
+        rollover: ROLLOVER_CONTRACT,
+      };
     }
     return run({ runId: id });
   }

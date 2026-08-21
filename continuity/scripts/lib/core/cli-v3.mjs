@@ -28,6 +28,17 @@ function writeOut(write, value) {
   write('stdout', value.endsWith('\n') ? value : `${value}\n`);
 }
 
+function writeRecorded(write, receipt) {
+  writeOut(write, `event recorded: sequence=${receipt.sequence} event=${receipt.eventHash.slice(0, 12)} projection=current`);
+  const recorded = {
+    eventType: receipt.eventType,
+    subjectId: receipt.subjectId,
+  };
+  if (receipt.resultId) recorded.resultId = receipt.resultId;
+  if (receipt.assignmentId) recorded.assignmentId = receipt.assignmentId;
+  writeOut(write, JSON.stringify(recorded));
+}
+
 export async function handleV3Command({ command, subcommand, options, root, write, clock, readInput }) {
   const actor = actorFrom(options);
   if (options.class != null && !(command === 'record' && subcommand === 'task')) {
@@ -107,8 +118,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
         return 0;
       }
       const receipts = applyRecipes(root, builder, { clock });
-      const receipt = receipts.at(-1);
-      writeOut(write, `event recorded: sequence=${receipt.sequence} event=${receipt.eventHash.slice(0, 12)} projection=current`);
+      writeRecorded(write, receipts.at(-1));
       return 0;
     }
     if (options.file || options.stdin) {
@@ -119,7 +129,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
         return 0;
       }
       const receipt = appendV3(root, raw, { clock });
-      writeOut(write, `event recorded: sequence=${receipt.sequence} event=${receipt.eventHash.slice(0, 12)} projection=current`);
+      writeRecorded(write, receipt);
       return 0;
     }
     throw new MemoryError('record requires a recipe or --file/--stdin');

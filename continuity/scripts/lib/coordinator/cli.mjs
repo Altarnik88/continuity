@@ -77,19 +77,23 @@ function render(options, payload) {
       `adapter=${doctor.adapter.name}`,
       `adapter-class=${doctor.adapter.class}`,
       `live-proof=${doctor.liveProof}`,
+      `execution=${doctor.execution || 'sequential'}`,
       `health=${doctor.adapter.health?.ok ? 'ok' : 'failed'}`,
       `memory=${doctor.memory}`,
     ].join('\n');
   }
   if (payload.state) {
-    return [
+    const lines = [
       `run=${payload.state.runId}`,
       `status=${payload.state.status}`,
       `adapter=${payload.state.adapter}`,
       `user-acceptance=${payload.state.userAcceptance}`,
       `stop=${payload.state.stopReason || 'none'}`,
       `completed-packets=${payload.state.completedPacketIds.length}`,
-    ].join('\n');
+    ];
+    if (payload.execution) lines.push(`execution=${payload.execution}`);
+    if (payload.rollover) lines.push(`rollover=${payload.rollover}`);
+    return lines.join('\n');
   }
   return `${JSON.stringify(payload)}\n`;
 }

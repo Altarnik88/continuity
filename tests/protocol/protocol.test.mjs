@@ -9,6 +9,8 @@ import {
   ProtocolError,
   assertSafePayload,
   createCliClient,
+  parseRecordedEvent,
+  validateCoordinatorRunState,
   ownershipOverlap,
   validateAttemptReport,
   validateWorkPacket,
@@ -43,12 +45,43 @@ export async function run() {
     requiredCapabilities: ['implementation'],
     riskCeiling: 'routine',
     acceptanceCriteria: ['command evidence exists'],
-    focusedChecks: ['node -e process.exit(0)'],
+    focusedChecks: [['-e', 'process.exit(0)']],
     knownFailures: [],
     prohibitedApproaches: ['retry the failed rollback'],
     reportFormat: 'continuity-agent-report-v1',
   });
   assert.equal(packet.packetId, 'packet-abcd1234ef567890');
+
+  const partialState = validateCoordinatorRunState({
+    schemaVersion: 1,
+    contractId: COORDINATION_CONTRACT_ID,
+    contractVersion: COORDINATION_CONTRACT_VERSION,
+    runId: 'run-partial-01',
+    status: 'partial',
+    createdAt: '2026-08-18T00:00:00.000Z',
+    updatedAt: '2026-08-18T00:00:00.000Z',
+    adapter: 'local-process',
+    slots: 1,
+    waveId: null,
+    assignments: [],
+    openAttempts: [],
+    completedPacketIds: ['packet-abcd1234ef567890'],
+    stopReason: 'ready-work-remains',
+    userAcceptance: 'pending',
+    memoryProfile: 'local-cli',
+    configDigest: null,
+  });
+  assert.equal(partialState.status, 'partial');
+
+  assert.deepEqual(parseRecordedEvent([
+    'event recorded: sequence=12 event=abcdef123456 projection=current',
+    '{"eventType":"result.recorded","subjectId":"result-just-written","resultId":"result-just-written"}',
+  ].join('\n')), {
+    eventType: 'result.recorded',
+    subjectId: 'result-just-written',
+    resultId: 'result-just-written',
+  });
+  assert.equal(parseRecordedEvent('event recorded: sequence=12 event=abcdef123456 projection=current\n'), null);
 
   assert.throws(() => validateWorkPacket({
     ...packet,

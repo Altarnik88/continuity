@@ -16,6 +16,10 @@ node continuity/scripts/coordinator.mjs cancel --run <id>
 
 `--help` prints that usage. There is no per-command `--help`. `--version` prints `continuity-coordinator 1.0.0`. Other flags: `--root`, `--config <file>`, `--run <id>`, `--adapter <name>`, `--slots <1..8>`, `--json`. Default config is `continuity/assets/coordinator.config.json`. Default adapter is `local-process`.
 
+Execution is sequential (`spawnSync`). `doctor` and `plan` report `execution: sequential`. `--slots` shapes how many independent packets `inspect wave` may return; it is not a concurrency limit.
+
+A packet's `focusedChecks` must contain exactly one argv array for the current Node.js binary (or a JSON string of that array, because task `focusedVerification` is a text list). Example: `["-e","process.exit(0)"]`. Empty or malformed checks fail closed: the packet records `failure.recorded` and does not write evidence or a result. The coordinator never substitutes a no-op `process.exit(0)`.
+
 It never starts a daemon, watcher, service, or login task.
 
 ## What it does
@@ -41,4 +45,4 @@ It never starts a daemon, watcher, service, or login task.
 
 ## Resume
 
-`resume` reloads recorded run state. It does not close another actor's Attempt. A successor uses a new actor id, run id, and Attempt.
+`resume` reloads recorded run state. It does not close another actor's Attempt. If the run still has open Attempts, resume is `blocked` with `stopReason=open-attempts-require-rollover` and points at [context-rollover.md](continuity/references/context-rollover.md): finish or hand off, then continue with a **new actor**, **new run**, and **new Attempt**. A successor must not inherit the previous Attempt.

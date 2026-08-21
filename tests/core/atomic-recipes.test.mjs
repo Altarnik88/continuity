@@ -193,7 +193,7 @@ export const CASES = Object.freeze([
         const started = before.records;
         const failCli = runProjectMemory(root, ['record', 'fail', '--why', 'git.exe missing', '--next', 'Install Git']);
         assert.equal(failCli.status, 0, failCli.stderr);
-        assert.match(failCli.stdout, /^event recorded: sequence=\d+ event=[a-f0-9]{12} projection=current\r?\n$/);
+        assert.match(failCli.stdout, /^event recorded: sequence=\d+ event=[a-f0-9]{12} projection=current\r?\n/);
         const after = readV3Journal(root);
         assert.equal(after.events.length, started + 3);
         assert.equal(after.events.at(-3).eventType, 'lesson.recorded');
@@ -271,7 +271,7 @@ export const CASES = Object.freeze([
           'record', 'accept', '--as', 'user', '--result', resultId, '--why', 'accepted',
         ]);
         assert.equal(acceptCli.status, 0, acceptCli.stderr);
-        assert.match(acceptCli.stdout, /^event recorded: sequence=\d+ event=[a-f0-9]{12} projection=current\r?\n$/);
+        assert.match(acceptCli.stdout, /^event recorded: sequence=\d+ event=[a-f0-9]{12} projection=current\r?\n/);
         const after = readV3Journal(root);
         assert.equal(after.events.length, beforeReject.records + 2);
         assert.equal(after.events.at(-2).eventType, 'evidence.recorded');
@@ -351,7 +351,7 @@ export const CASES = Object.freeze([
           'record', 'reject', '--as', 'user', '--result', resultId, '--next', 'Change the approach', '--why', 'not done',
         ]);
         assert.equal(rejected.status, 0, rejected.stderr);
-        assert.match(rejected.stdout, /^event recorded: sequence=\d+ event=[a-f0-9]{12} projection=current\r?\n$/);
+        assert.match(rejected.stdout, /^event recorded: sequence=\d+ event=[a-f0-9]{12} projection=current\r?\n/);
         const after = readV3Journal(root);
         assert.equal(after.events.length, before.records + 3);
         assert.equal(after.events.at(-3).eventType, 'next_action.recorded');

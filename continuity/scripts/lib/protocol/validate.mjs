@@ -90,6 +90,7 @@ export function validateWorkPacket(input) {
     riskCeiling: TASK_RISKS.includes(input.riskCeiling) ? input.riskCeiling : 'routine',
     contextBudget: Number.isFinite(input.contextBudget) ? input.contextBudget : 4,
     acceptanceCriteria: stringList(input.acceptanceCriteria, 'acceptanceCriteria'),
+    // Each entry is an argv array for the current Node binary, or a JSON string of that array.
     focusedChecks: Array.isArray(input.focusedChecks) ? input.focusedChecks : [],
     knownFailures: stringList(input.knownFailures, 'knownFailures'),
     prohibitedApproaches: stringList(input.prohibitedApproaches, 'prohibitedApproaches'),

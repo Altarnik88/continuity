@@ -42,9 +42,10 @@ if (path.isAbsolute(String(packet.goal || '')) || String(packet.goal || '').incl
   /* goal is prose; ignore */
 }
 
-const command = Array.isArray(assignment.command) && assignment.command.length
-  ? assignment.command
-  : [process.execPath, '-e', 'process.exit(0)'];
+if (!Array.isArray(assignment.command) || assignment.command.length < 1) {
+  fail('assignment command is missing; refusing to fabricate a no-op');
+}
+const command = assignment.command;
 if (command[0] !== process.execPath && path.basename(command[0]).replace(/\.exe$/i, '') !== 'node') {
   fail('local-process adapter only executes the current Node.js binary');
 }

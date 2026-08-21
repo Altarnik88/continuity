@@ -309,6 +309,7 @@ export function initializeV3(root, jsonTextOrBytes, options = {}) {
 }
 
 function receiptFor(event) {
+  const subjectId = event.subject?.id ?? null;
   return {
     version: 3,
     epochId: event.epochId,
@@ -316,6 +317,10 @@ function receiptFor(event) {
     eventId: event.eventId,
     eventHash: event.eventHash,
     projection: 'current',
+    eventType: event.eventType,
+    subjectId,
+    ...(event.eventType === 'result.recorded' ? { resultId: subjectId } : {}),
+    ...(event.eventType === 'assignment.recorded' ? { assignmentId: subjectId } : {}),
   };
 }
 

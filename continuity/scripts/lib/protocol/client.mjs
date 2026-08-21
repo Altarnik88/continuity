@@ -51,6 +51,20 @@ function parseMaybeJson(text) {
   }
 }
 
+export function parseRecordedEvent(stdout) {
+  const lines = String(stdout ?? '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (!lines[index].startsWith('{')) continue;
+    try {
+      const parsed = JSON.parse(lines[index]);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch {
+      /* keep scanning for a JSON object line */
+    }
+  }
+  return null;
+}
+
 export function createCliClient({
   continuityCli = BUNDLED_CONTINUITY_CLI,
   node = process.execPath,
@@ -156,11 +170,15 @@ export function createCliClient({
       });
     },
     recordAssign(options) {
-      return record('assign', {
+      const recorded = record('assign', {
         task: options.taskId,
         packet: options.packetId,
         assignee: options.assignee,
       }, { root: options.root, ...writer });
+      const parsed = parseRecordedEvent(recorded.stdout);
+      const assignmentId = parsed?.assignmentId || parsed?.subjectId || null;
+      if (!assignmentId) fail('record assign did not echo assignmentId', 3);
+      return { ...recorded, assignmentId, document: parsed };
     },
     recordStart(options) {
       return record('start', { task: options.taskId, approach: options.approach }, {
@@ -180,6 +198,7 @@ export function createCliClient({
     },
     recordEvidence(options) {
       return record('evidence', {
+        task: options.taskId,
         expected: options.expected,
         actual: options.actual,
         kind: options.kind || 'command',
@@ -192,7 +211,7 @@ export function createCliClient({
       });
     },
     recordResult(options) {
-      return record('result', {
+      const recorded = record('result', {
         expected: options.expected,
         actual: options.actual,
         execution: options.execution || 'succeeded',
@@ -202,6 +221,10 @@ export function createCliClient({
         actorId: options.actorId,
         runId: options.runId,
       });
+      const parsed = parseRecordedEvent(recorded.stdout);
+      const resultId = parsed?.resultId || parsed?.subjectId || null;
+      if (!resultId) fail('record result did not echo resultId', 3);
+      return { ...recorded, resultId, document: parsed };
     },
     recordFail(options) {
       return record('fail', {

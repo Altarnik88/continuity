@@ -45,4 +45,4 @@ export {
   protocolOperations,
 } from './ports.mjs';
 export { classifyAdapter, adapterHealthDocument } from './adapter.mjs';
-export { createCliClient, BUNDLED_CONTINUITY_CLI, sanitizedSpawnEnv } from './client.mjs';
+export { createCliClient, BUNDLED_CONTINUITY_CLI, sanitizedSpawnEnv, parseRecordedEvent } from './client.mjs';
