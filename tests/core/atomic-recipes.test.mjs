@@ -554,6 +554,7 @@ export const CASES = Object.freeze([
       }, {
         actor: actor(), kind: 'command', expected: 'pass', actual: 'exit 0', exitCode: 0,
       }, { clock }));
+      assert.equal(draft.payload.evidence.provenance, 'claimed');
       assert.deepEqual(draft.payload.evidence.limitations, [
         'Exit code and outputs are self-reported by the writer; the CLI did not execute or observe the command.',
       ]);
@@ -562,6 +563,110 @@ export const CASES = Object.freeze([
           || JSON.stringify(draft).includes('raw logs are not stored'),
         false,
       );
+    },
+  },
+  {
+    id: 'T05-R5-001-run-passing-node-is-authorizing-observed',
+    async run() {
+      if (!hasGit()) throw new CaseSkip('git.exe is not available');
+      const root = makeRepo();
+      try {
+        seedAttempt(root);
+        const marker = 'UNIQUERAWLOGTOKEN';
+        const recorded = runProjectMemory(root, [
+          'record', 'evidence',
+          '--run', `-e console.log("${marker}")`,
+          '--expected', 'node exits 0',
+          '--kind', 'command',
+        ]);
+        assert.equal(recorded.status, 0, recorded.stderr);
+        assert.match(recorded.stdout, /evidence\.recorded/);
+        const store = readV3Journal(root);
+        const evidence = store.state.evidence.at(-1);
+        assert.equal(store.events.at(-1).eventType, 'evidence.recorded');
+        assert.equal(evidence.kind, 'command');
+        assert.equal(evidence.authorizing, true);
+        assert.equal(evidence.outcome, 'passed');
+        assert.equal(evidence.provenance, 'observed');
+        assert.match(evidence.actual, /exit 0/);
+        const limitation = (evidence.limitations || []).join(' ');
+        assert.match(limitation, /CLI executed the command/);
+        assert.match(limitation, /sha256=[a-f0-9]{64}/);
+        assert.match(limitation, /length=\d+/);
+        const journal = readFileSync(store.files.history, 'utf8');
+        assert.equal(journal.includes(marker), false);
+        const inspectText = runProjectMemory(root, ['inspect']);
+        assert.equal(inspectText.status, 0, inspectText.stderr);
+        assert.match(inspectText.stdout, /EVIDENCE /);
+        assert.match(inspectText.stdout, /:observed\b/);
+        const inspectJson = runProjectMemory(root, ['inspect', '--json']);
+        assert.equal(inspectJson.status, 0, inspectJson.stderr);
+        const view = JSON.parse(inspectJson.stdout);
+        assert.equal(view.evidence[0].provenance, 'observed');
+        assert.equal(view.evidence[0].authorizing, true);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'T05-R5-002-run-failing-node-records-real-exit-code',
+    async run() {
+      if (!hasGit()) throw new CaseSkip('git.exe is not available');
+      const root = makeRepo();
+      try {
+        seedAttempt(root);
+        const recorded = runProjectMemory(root, [
+          'record', 'evidence',
+          '--run', '-e process.exit(7)',
+          '--expected', 'node exits 0',
+          '--kind', 'command',
+        ]);
+        assert.equal(recorded.status, 0, recorded.stderr);
+        const store = readV3Journal(root);
+        const evidence = store.state.evidence.at(-1);
+        assert.equal(store.events.at(-1).eventType, 'evidence.recorded');
+        assert.equal(evidence.kind, 'command');
+        assert.equal(evidence.authorizing, false);
+        assert.equal(evidence.outcome, 'failed');
+        assert.equal(evidence.provenance, 'observed');
+        assert.match(evidence.actual, /exit 7/);
+        const limitation = (evidence.limitations || []).join(' ');
+        assert.match(limitation, /sha256=[a-f0-9]{64}/);
+        assert.match(limitation, /length=\d+/);
+        const inspectJson = runProjectMemory(root, ['inspect', '--json']);
+        assert.equal(inspectJson.status, 0, inspectJson.stderr);
+        const view = JSON.parse(inspectJson.stdout);
+        assert.equal(view.evidence[0].provenance, 'observed');
+        assert.equal(view.evidence[0].authorizing, false);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'T05-R5-003-run-and-exit-code-together-no-effect',
+    async run() {
+      if (!hasGit()) throw new CaseSkip('git.exe is not available');
+      const root = makeRepo();
+      try {
+        seedAttempt(root);
+        const before = persistenceFingerprint(root);
+        const rejected = runProjectMemory(root, [
+          'record', 'evidence',
+          '--run', '-e process.exit(0)',
+          '--exit-code', '0',
+          '--expected', 'node exits 0',
+          '--kind', 'command',
+        ]);
+        assert.notEqual(rejected.status, 0, rejected.stdout);
+        assert.equal(rejected.stdout, '');
+        assert.match(rejected.stderr, /--run and --exit-code are mutually exclusive/);
+        assert.doesNotMatch(rejected.stderr, /unknown argument/);
+        assert.deepEqual(persistenceFingerprint(root), before);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     },
   },
 ]);

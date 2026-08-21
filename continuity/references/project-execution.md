@@ -74,11 +74,12 @@ A core task without `--class function` or `--class connector` remains unclassifi
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record start --task <task-id> --approach "One sentence" --as subagent --actor-id <executor-id> --run-id <executor-run>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record report --execution partial --as subagent --actor-id <executor-id> --run-id <executor-run>
+node "/absolute/path/to/continuity/scripts/continuity.mjs" record evidence --run "-e process.exit(0)" --expected "check passes" --kind command --as subagent --actor-id <executor-id> --run-id <executor-run>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record evidence --expected "check passes" --actual "exit 0" --kind command --exit-code 0 --as subagent --actor-id <executor-id> --run-id <executor-run>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expected "check passes" --actual "what happened" --as subagent --actor-id <executor-id> --run-id <executor-run> --evidence <evidence-id>
 ```
 
-An executor report is not evidence. Evidence without `--exit-code` is recorded as `agent_report` and cannot authorize success. A nonzero exit code is a failed observation. Succeeded `record result` requires `--evidence` unless exactly one authorizing evidence exists for the task's current attempt. Record bounded summaries and references, never raw command output, logs, diffs, secrets, personal data, or private absolute paths.
+An executor report is not evidence. `record evidence --run` executes the current Node.js binary under the CLI sandbox (no shell) and records observed exit code, `provenance: observed`, and sha256 plus length of truncated output only. Self-reported `--exit-code` is `provenance: claimed`. The flags are mutually exclusive. Evidence without `--exit-code` or `--run` is recorded as `agent_report` and cannot authorize success. A nonzero exit code is a failed observation. Succeeded `record result` requires `--evidence` unless exactly one authorizing evidence exists for the task's current attempt. Record bounded summaries and references, never raw command output, logs, diffs, secrets, personal data, or private absolute paths.
 
 ## Verify independently
 

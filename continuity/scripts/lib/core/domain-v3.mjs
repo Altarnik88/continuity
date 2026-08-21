@@ -362,7 +362,7 @@ function validateEvidence(evidence) {
   exact(evidence, [
     'evidenceId', 'kind', 'source', 'expected', 'actual', 'observedAt', 'actor', 'verifier',
     'method', 'outcome', 'criterionIds', 'taskId', 'commit', 'worktree', 'sourceRefs',
-    'freshnessPolicy', 'limitations', 'authorizing',
+    'freshnessPolicy', 'limitations', 'authorizing', 'provenance',
   ], [
     'evidenceId', 'kind', 'source', 'expected', 'actual', 'observedAt', 'actor', 'method',
     'outcome', 'criterionIds', 'authorizing',
@@ -392,6 +392,9 @@ function validateEvidence(evidence) {
     evidence.limitations.forEach((item, index) => text(item, `evidence.limitations[${index}]`));
   }
   if (typeof evidence.authorizing !== 'boolean') fail('evidence.authorizing must be boolean');
+  if (evidence.provenance !== undefined) {
+    enumOf(evidence.provenance, new Set(['observed', 'claimed']), 'evidence.provenance');
+  }
   if (evidence.authorizing === true
     && (!AUTHORIZING_EVIDENCE_KIND_SET.has(evidence.kind) || evidence.outcome !== 'passed')) {
     fail('authorizing evidence kind must be a passed command or test');

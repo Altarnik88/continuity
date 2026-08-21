@@ -122,6 +122,9 @@ export function recipeEvidence(store, options, { clock } = {}) {
   const authorizing = options.authorizing !== false
     && passed
     && (kind === 'command' || kind === 'test');
+  const provenance = options.provenance === 'observed' ? 'observed' : 'claimed';
+  const claimedLimitation = 'Exit code and outputs are self-reported by the writer; the CLI did not execute or observe the command.';
+  const observedLimitation = 'CLI executed the command; stored sha256 and length of truncated output only.';
   return draftJson({
     eventType: 'evidence.recorded',
     occurredAt: iso(clock),
@@ -148,8 +151,9 @@ export function recipeEvidence(store, options, { clock } = {}) {
         ...(task ? { taskId: task.taskId } : {}),
         ...(options.head ? { commit: options.head } : {}),
         authorizing,
+        provenance,
         limitations: options.limitations || [
-          'Exit code and outputs are self-reported by the writer; the CLI did not execute or observe the command.',
+          provenance === 'observed' ? observedLimitation : claimedLimitation,
         ],
       },
     },

@@ -116,7 +116,7 @@ function parse(argv) {
     migrationAction: 'start',
     title: null, task: null, attempt: null, as: null, actorId: null, runId: null, why: null, result: null, approach: null,
     expected: null, actual: null, impact: null, criterion: null, goal: null, execution: null,
-    next: null, blocked: false, kind: null, exitCode: null, assignee: null, evidence: null,
+    next: null, blocked: false, kind: null, exitCode: null, run: null, assignee: null, evidence: null,
     priority: null, size: null, complexity: null, risk: null, class: null, packet: null, assignment: null,
     slots: null, found: null, executed: null, passed: null, failed: null, skipped: null,
     resourceLimit: null,
@@ -149,6 +149,7 @@ function parse(argv) {
     else if (value === '--as') { mark(value); options.as = takeValue('--as requires an actor kind'); }
     else if (value === '--actor-id') { mark(value); options.actorId = takeValue('--actor-id requires an ID'); }
     else if (value === '--run-id') { mark(value); options.runId = takeValue('--run-id requires an ID'); }
+    else if (value === '--run') { mark(value); options.run = takeValue('--run requires a value'); }
     else if (value === '--assignee') { mark(value); options.assignee = takeValue('--assignee requires an ID'); }
     else if (value === '--kind') { mark(value); options.kind = takeValue('--kind requires a value'); }
     else if (value === '--evidence') { mark(value); options.evidence = takeValue('--evidence requires an ID'); }

@@ -43,6 +43,7 @@ Use recipes instead of hand-writing full events:
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record task --title "Name the work" --priority core --class function
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record assign --task <id> --assignee <actor-id> --as coordinator --actor-id <writer-id> --run-id <run>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record start --task <id> --approach "One sentence" --as subagent --actor-id <id> --run-id <run>
+node "/absolute/path/to/continuity/scripts/continuity.mjs" record evidence --run "-e process.exit(0)" --expected "check passes" --kind command
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record evidence --expected "check passes" --actual "exit 0" --kind command --exit-code 0
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record verify --as subagent --actor-id <verifier-id> --run-id <verifier-run> --result <id> --found 1 --executed 1 --passed 1 --failed 0 --exit-code 0
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record accept --as user --result <id>
@@ -58,7 +59,7 @@ Keep these truth axes distinct:
 - verification is not freshness;
 - freshness is not user acceptance.
 
-Authorizing evidence is a linked `command` or `test` observation with exit code `0`. A report without `--exit-code` is an `agent_report` and cannot authorize success. Independent verification requires a different actor and run plus explicit counts. Acceptance and rejection require `--as user`; rejection also requires `--next`.
+Authorizing evidence is a linked `command` or `test` observation with exit code `0`. `record evidence --run` executes the current Node.js binary under the CLI sandbox (no shell) and records `provenance: observed` plus sha256 and length of truncated output; never raw logs. Self-reported `--exit-code` is `provenance: claimed`. Using both flags is a no-effect rejection. A report without `--exit-code` or `--run` is an `agent_report` and cannot authorize success. Independent verification requires a different actor and run plus explicit counts. Acceptance and rejection require `--as user`; rejection also requires `--next`.
 
 Read-only, trivial, no-op, or inconclusive tasks should not write continuity data. Never record secrets, personal data, raw logs, raw diffs, command output, or private absolute paths.
 

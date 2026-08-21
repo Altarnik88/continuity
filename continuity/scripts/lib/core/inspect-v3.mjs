@@ -30,6 +30,11 @@ export function buildInspectV3(store, live, { subjectId } = {}) {
     ...item,
     freshness: evaluateFreshness(live, item),
   }));
+  const evidenceView = take(evidence.map((item) => ({
+    evidenceId: item.evidenceId,
+    authorizing: item.authorizing,
+    provenance: item.provenance === 'observed' ? 'observed' : 'claimed',
+  })), 20);
   const confirmed = state.results.filter((item) => (
     item.execution === 'succeeded' && item.verification === 'passed'
     && evidence.filter((entry) => item.evidenceIds.includes(entry.evidenceId)).every((entry) => entry.freshness.aggregate === 'fresh')
@@ -81,6 +86,7 @@ export function buildInspectV3(store, live, { subjectId } = {}) {
     activeTasks: take(state.tasks.filter((item) => ['planned', 'in_progress', 'blocked', 'partial'].includes(item.execution)).map((item) => ({
       taskId: item.taskId, title: item.title, execution: item.execution, owner: item.owner,
     })), 20),
+    evidence: evidenceView,
   };
   if (subjectId) {
     const related = JSON.parse(JSON.stringify(view));
@@ -125,6 +131,7 @@ export function renderInspectText(view) {
     `BLOCKED ${view.blocked.map((item) => item.taskId).join(',') || 'none'}`,
     `CONFLICTS ${view.conflicts.map((item) => item.conflictId).join(',') || 'none'}`,
     `ACTORS ${view.actors.join(',') || 'none'}`,
+    `EVIDENCE ${(view.evidence ?? []).map((item) => `${item.evidenceId}:${item.provenance}`).join(',') || 'none'}`,
     `NEXT ${view.nextActions.map((item) => `${item.nextActionId}:${item.action}`).join(' | ') || 'none'}`,
     `PROHIBITED ${view.prohibited.map((item) => item.choice).join(' | ') || 'none'}`,
   ];
