@@ -11,7 +11,7 @@ Continuity owns the authoritative append-only journal and the validated state re
 
 An optional Coordinator in the agent environment consumes those outputs. It chooses from available models and actors, distributes validated WorkPackets, launches executors and independent verifiers, manages load and file ownership in the execution environment, integrates results, and applies repair or replan policy.
 
-Continuity does not launch a planner, Coordinator, daemon, network client, model, executor, verifier, interview, or Graphify process. It may invoke required local Git commands to read repository state. There is no top-level `coordinate` command. A Coordinator never writes journal bytes directly; every continuity write goes through this helper. External planners and Coordinators are optional consumers, not dependencies.
+The Memory CLI does not launch a planner, Coordinator, daemon, network client, model, executor, verifier, interview, or Graphify process. It may invoke required local Git commands to read repository state. There is no top-level `coordinate` command on the Memory CLI. The optional Coordinator runtime is `scripts/coordinator.mjs`. A Coordinator never writes journal bytes directly; every continuity write goes through this helper.
 
 ## Operations
 

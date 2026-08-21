@@ -118,6 +118,17 @@ export const EXPECTED_SKILL_FILES = Object.freeze([
   `${SKILL_PREFIX}scripts/lib/protocol/ports.mjs`,
   `${SKILL_PREFIX}scripts/lib/protocol/secrets.mjs`,
   `${SKILL_PREFIX}scripts/lib/protocol/validate.mjs`,
+  `${SKILL_PREFIX}assets/coordinator.config.json`,
+  `${SKILL_PREFIX}scripts/coordinator.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/adapters/fake.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/adapters/index.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/adapters/local-process.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/adapters/local-worker.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/cli.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/config.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/engine.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/index.mjs`,
+  `${SKILL_PREFIX}scripts/lib/coordinator/run-state.mjs`,
 ]);
 export const REQUIRED_SKILL_FILES = EXPECTED_SKILL_FILES;
 export const ALLOWED_GIT_MODES = Object.freeze(new Set(['100644', '100755']));

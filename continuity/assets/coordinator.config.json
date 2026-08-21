@@ -1,0 +1,10 @@
+{
+  "adapter": "local-process",
+  "slots": 1,
+  "timeoutMs": 30000,
+  "executorActorId": "actor-exec-01",
+  "verifierActorId": "actor-verify-01",
+  "executorRunId": "run-exec-01",
+  "verifierRunId": "run-verify-01",
+  "liveProofRequired": true
+}
