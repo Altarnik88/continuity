@@ -239,7 +239,8 @@ export function validatePackage(repoRoot = root) {
   if (/uses:\s*[^\s]+@(?![a-f0-9]{40}(?:\s|$))/i.test(ci)) fail('CI actions must use full commit SHA pins');
   if (!ci.includes('persist-credentials: false') || !ci.includes('timeout-minutes: 15')) fail('CI hardening settings are missing');
   if (!ci.includes('npm ci --ignore-scripts') || !ci.includes('npm run audit:dev')) fail('CI install or audit boundary is missing');
-  if (!ci.includes('npm run check') || !ci.includes('windows-latest') || !ci.includes('ubuntu-latest')) {
+  if (!/^\s+run:\s*npm run check\s*$/m.test(ci.replaceAll('\r\n', '\n'))
+    || !ci.includes('windows-latest') || !ci.includes('ubuntu-latest')) {
     fail('CI matrix or check command is missing');
   }
   if (!ci.includes('node: [22, 24]') && !ci.includes("node: ['22', '24']")) fail('CI Node matrix must include 22 and 24');
