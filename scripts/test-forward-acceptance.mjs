@@ -546,7 +546,7 @@ export const CASES = [
           '--expected', 'check passes', '--actual', 'report is not evidence',
           '--as', 'subagent', '--actor-id', 'actor-exec', '--run-id', 'run-exec',
         ]);
-        requireRejected(prematureResult, afterReport, project, 'result after report only', /authorizing evidence/);
+        requireRejected(prematureResult, afterReport, project, 'result after report only', /--evidence|authorizing evidence/);
 
         const agentReport = run([
           'record', 'evidence', '--task', taskId,
@@ -560,7 +560,7 @@ export const CASES = [
           '--expected', 'check passes', '--actual', 'agent_report is not authorizing',
           '--as', 'subagent', '--actor-id', 'actor-exec', '--run-id', 'run-exec',
         ]);
-        requireRejected(stillPremature, afterAgentReport, project, 'result after agent_report', /authorizing evidence/);
+        requireRejected(stillPremature, afterAgentReport, project, 'result after agent_report', /--evidence|authorizing evidence/);
 
         const commandEvidence = run([
           'record', 'evidence', '--task', taskId,
@@ -569,6 +569,10 @@ export const CASES = [
           '--as', 'subagent', '--actor-id', 'actor-exec', '--run-id', 'run-exec',
         ]);
         requireStatus(commandEvidence, 0, 'record command evidence');
+        const commandEvidenceId = JSON.parse(
+          String(commandEvidence.stdout).split(/\r?\n/).find((line) => line.trim().startsWith('{')) || '{}',
+        ).evidenceId;
+        assert.equal(typeof commandEvidenceId, 'string');
         const testEvidence = run([
           'record', 'evidence', '--task', taskId,
           '--expected', 'tests pass', '--actual', 'exit 0',
@@ -580,6 +584,7 @@ export const CASES = [
         const result = run([
           'record', 'result', '--task', taskId,
           '--expected', 'check passes', '--actual', 'authorizing command and test evidence recorded',
+          '--evidence', commandEvidenceId,
           '--as', 'subagent', '--actor-id', 'actor-exec', '--run-id', 'run-exec',
         ]);
         requireStatus(result, 0, 'record result');
@@ -616,6 +621,7 @@ export const CASES = [
         const selfVerify = run([
           'record', 'verify', '--result', resultId,
           '--found', '1', '--executed', '1', '--passed', '1', '--failed', '0',
+          '--exit-code', '0',
           '--as', 'subagent', '--actor-id', 'actor-exec', '--run-id', 'run-exec',
         ]);
         requireRejected(selfVerify, afterResultFp, project, 'self-verification', /independently verify|own work/);
@@ -623,6 +629,7 @@ export const CASES = [
         const verify = run([
           'record', 'verify', '--result', resultId,
           '--found', '1', '--executed', '1', '--passed', '1', '--failed', '0',
+          '--exit-code', '0',
           '--as', 'subagent', '--actor-id', 'actor-deep', '--run-id', 'run-verify',
         ]);
         requireStatus(verify, 0, 'independent verify');

@@ -17,7 +17,7 @@ After a Result exists, an operator or an optional external Coordinator selects a
 
 The recipe requires explicit `found`, `executed`, `passed`, and `failed` counts; it never invents a successful set. A pass requires `found >= 1`, `executed >= 1`, `passed >= 1`, and `failed === 0`; `skipped` and skip reasons remain explicit. The same checks apply to raw event drafts. Same actor or same run is a no-effect rejection.
 
-`--as` chooses only the verifier kind. Supply a different `--actor-id` and `--run-id` than the Result actor and Attempt owner. Defaults `actor-<kind>` and `run-cli` cannot self-verify. `record verify` requires explicit `--found`, `--executed`, `--passed`, and `--failed`. A complete `verification.recorded` draft through `record --file <draft.json>` remains valid; the event actor and report verifier must match.
+`--as` chooses only the verifier kind. Supply a different `--actor-id` and `--run-id` than the Result actor and Attempt owner. Defaults `actor-<kind>` and `run-cli` cannot self-verify. `record verify` requires explicit `--found`, `--executed`, `--passed`, `--failed`, and `--exit-code` observed from the verification run. A complete `verification.recorded` draft through `record --file <draft.json>` remains valid; the event actor and report verifier must match.
 
 ## Truth axes
 

@@ -197,7 +197,7 @@ export function createCliClient({
       });
     },
     recordEvidence(options) {
-      return record('evidence', {
+      const recorded = record('evidence', {
         task: options.taskId,
         expected: options.expected,
         actual: options.actual,
@@ -209,12 +209,20 @@ export function createCliClient({
         actorId: options.actorId,
         runId: options.runId,
       });
+      const parsed = parseRecordedEvent(recorded.stdout);
+      const evidenceId = parsed?.evidenceId || parsed?.subjectId || null;
+      if (!evidenceId) fail('record evidence did not echo evidenceId', 3);
+      return { ...recorded, evidenceId, document: parsed };
     },
     recordResult(options) {
+      if ((options.execution || 'succeeded') === 'succeeded' && !options.evidence) {
+        fail('record result requires --evidence', 2);
+      }
       const recorded = record('result', {
         expected: options.expected,
         actual: options.actual,
         execution: options.execution || 'succeeded',
+        evidence: options.evidence,
       }, {
         root: options.root,
         as: options.as || 'subagent',
@@ -239,6 +247,9 @@ export function createCliClient({
       });
     },
     recordVerify(options) {
+      if (!Number.isInteger(options.exitCode)) {
+        fail('record verify requires --exit-code observed from the verification run', 2);
+      }
       return record('verify', {
         result: options.resultId,
         found: options.found,
@@ -246,6 +257,7 @@ export function createCliClient({
         passed: options.passed,
         failed: options.failed,
         skipped: options.skipped ?? 0,
+        'exit-code': options.exitCode,
       }, {
         root: options.root,
         as: options.as || 'subagent',

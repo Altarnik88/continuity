@@ -148,10 +148,58 @@ export function recipeEvidence(store, options, { clock } = {}) {
         ...(task ? { taskId: task.taskId } : {}),
         ...(options.head ? { commit: options.head } : {}),
         authorizing,
-        limitations: options.limitations || ['Captured output is truncated and hashed; raw logs are not stored.'],
+        limitations: options.limitations || [
+          'Exit code and outputs are self-reported by the writer; the CLI did not execute or observe the command.',
+        ],
       },
     },
   });
+}
+
+function eventSequence(store, eventType, match) {
+  const event = store.events?.find((item) => item.eventType === eventType && match(item));
+  return event ? event.sequence : null;
+}
+
+function authorizingEvidenceForAttempt(store, taskId, attempt) {
+  const startedAt = eventSequence(
+    store,
+    'attempt.started',
+    (item) => item.payload?.attempt?.attemptId === attempt.attemptId,
+  );
+  const laterAttempt = store.state.attempts.find(
+    (item) => item.taskId === taskId && item.ordinal > attempt.ordinal,
+  );
+  const endedAt = laterAttempt
+    ? eventSequence(
+      store,
+      'attempt.started',
+      (item) => item.payload?.attempt?.attemptId === laterAttempt.attemptId,
+    )
+    : Number.POSITIVE_INFINITY;
+  return (store.state.evidence ?? []).filter((item) => {
+    if (item.taskId !== taskId || item.authorizing !== true) return false;
+    const sequence = eventSequence(
+      store,
+      'evidence.recorded',
+      (event) => event.payload?.evidence?.evidenceId === item.evidenceId,
+    );
+    if (startedAt == null || sequence == null) return false;
+    return sequence > startedAt && sequence < endedAt;
+  });
+}
+
+function resolveSucceededEvidenceIds(store, options, task, attempt) {
+  if (options.evidence) return [options.evidence];
+  const candidates = authorizingEvidenceForAttempt(store, task.taskId, attempt);
+  if (candidates.length === 1) return [candidates[0].evidenceId];
+  const listed = candidates.map((item) => item.evidenceId).join(', ');
+  throw new MemoryError(
+    candidates.length > 1
+      ? `record result requires --evidence; current attempt has multiple authorizing evidence: ${listed}`
+      : 'record result requires --evidence; succeeded execution has no authorizing evidence for the current attempt',
+    2,
+  );
 }
 
 export function recipeResult(store, options, { clock } = {}) {
@@ -162,10 +210,9 @@ export function recipeResult(store, options, { clock } = {}) {
   const task = store.state.tasks.find((item) => item.taskId === attempt.taskId);
   const resultId = options.id || `result-${randomUUID().slice(0, 12)}`;
   const execution = options.execution || 'succeeded';
-  const evidenceIds = options.evidence ? [options.evidence] : store.state.evidence
-    .filter((item) => item.taskId === task.taskId && item.authorizing)
-    .slice(-1)
-    .map((item) => item.evidenceId);
+  const evidenceIds = execution === 'succeeded'
+    ? resolveSucceededEvidenceIds(store, options, task, attempt)
+    : (options.evidence ? [options.evidence] : []);
   return draftJson({
     eventType: 'result.recorded',
     occurredAt: iso(clock),
@@ -498,6 +545,9 @@ export function recipeVerify(store, options, { clock } = {}) {
   if (requiredCounts.some((key) => options[key] === undefined || options[key] === null)) {
     throw new MemoryError('record verify requires explicit found, executed, passed, and failed counts', 2);
   }
+  if (!Number.isInteger(options.exitCode)) {
+    throw new MemoryError('record verify requires --exit-code observed from the verification run', 2);
+  }
   const verificationId = options.id || `verification-${randomUUID().slice(0, 12)}`;
   const found = Number(options.found);
   const executed = Number(options.executed);
@@ -524,7 +574,7 @@ export function recipeVerify(store, options, { clock } = {}) {
         expected: options.expected || result.expected,
         actual: options.actual || result.actual,
         command: options.command || options.source || 'verification',
-        exitCode: options.exitCode === undefined ? 0 : Number(options.exitCode),
+        exitCode: Number(options.exitCode),
         verifiedAt: iso(clock),
         limitations: options.limitations || ['Bounded verification output only'],
         outcome: found >= 1 && executed >= 1 && passed >= 1 && failed === 0 ? 'passed' : 'failed',

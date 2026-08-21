@@ -321,6 +321,7 @@ function receiptFor(event) {
     subjectId,
     ...(event.eventType === 'result.recorded' ? { resultId: subjectId } : {}),
     ...(event.eventType === 'assignment.recorded' ? { assignmentId: subjectId } : {}),
+    ...(event.eventType === 'evidence.recorded' ? { evidenceId: subjectId } : {}),
   };
 }
 

@@ -81,7 +81,30 @@ export async function run() {
     subjectId: 'result-just-written',
     resultId: 'result-just-written',
   });
+  assert.deepEqual(parseRecordedEvent([
+    'event recorded: sequence=12 event=abcdef123456 projection=current',
+    '{"eventType":"evidence.recorded","subjectId":"evidence-just-written","evidenceId":"evidence-just-written"}',
+  ].join('\n')), {
+    eventType: 'evidence.recorded',
+    subjectId: 'evidence-just-written',
+    evidenceId: 'evidence-just-written',
+  });
   assert.equal(parseRecordedEvent('event recorded: sequence=12 event=abcdef123456 projection=current\n'), null);
+
+  const client = createCliClient();
+  assert.throws(
+    () => client.recordVerify({
+      root: '.', resultId: 'result-x', found: 1, executed: 1, passed: 1, failed: 0,
+    }),
+    (error) => error instanceof ProtocolError
+      && error.message === 'record verify requires --exit-code observed from the verification run',
+  );
+  assert.throws(
+    () => client.recordResult({
+      root: '.', expected: 'ok', actual: 'ok', execution: 'succeeded',
+    }),
+    (error) => error instanceof ProtocolError && error.message === 'record result requires --evidence',
+  );
 
   assert.throws(() => validateWorkPacket({
     ...packet,
@@ -111,7 +134,6 @@ export async function run() {
   });
   assert.equal(report.status, 'done');
 
-  const client = createCliClient();
   assert.equal(typeof client.inspectReady, 'function');
   assert.equal(typeof client.registerAgent, 'function');
 

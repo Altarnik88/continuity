@@ -36,6 +36,7 @@ function writeRecorded(write, receipt) {
   };
   if (receipt.resultId) recorded.resultId = receipt.resultId;
   if (receipt.assignmentId) recorded.assignmentId = receipt.assignmentId;
+  if (receipt.evidenceId) recorded.evidenceId = receipt.evidenceId;
   writeOut(write, JSON.stringify(recorded));
 }
 
@@ -83,6 +84,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
       failed: options.failed,
       skipped: options.skipped,
       kind: options.kind,
+      evidence: options.evidence,
       exitCode: options.exitCode,
     };
     const builders = {

@@ -279,6 +279,7 @@ export const CASES = Object.freeze([
         const verify = runProjectMemory(root, [
           'record', 'verify', '--as', 'subagent',
           '--found', '1', '--executed', '1', '--passed', '1', '--failed', '0',
+          '--exit-code', '0',
         ]);
         assert.notEqual(verify.status, 0, verify.stderr);
         assert.equal(verify.stdout, '');
@@ -328,6 +329,7 @@ export const CASES = Object.freeze([
           'record', 'verify', '--as', 'subagent',
           '--actor-id', 'actor-cheap', '--run-id', 'run-exec',
           '--found', '1', '--executed', '1', '--passed', '1', '--failed', '0',
+          '--exit-code', '0',
         ]);
         assert.notEqual(selfVerify.status, 0, selfVerify.stderr);
         assert.deepEqual(persistenceFingerprint(root), sameRun);
@@ -335,6 +337,7 @@ export const CASES = Object.freeze([
           'record', 'verify', '--as', 'subagent',
           '--actor-id', 'actor-deep', '--run-id', 'run-verify',
           '--found', '1', '--executed', '1', '--passed', '1', '--failed', '0',
+          '--exit-code', '0',
         ]);
         assert.equal(verify.status, 0, verify.stderr);
         const after = readV3Journal(root);
@@ -418,6 +421,7 @@ export const CASES = Object.freeze([
           'record', 'verify', '--as', 'subagent',
           '--actor-id', 'actor-deep', '--run-id', 'run-verify',
           '--found', '1', '--executed', '1', '--passed', '1', '--failed', '0',
+          '--exit-code', '0',
         ];
         const before = persistenceFingerprint(root);
         const dryRun = runProjectMemory(root, [...verifyArgs, '--dry-run']);

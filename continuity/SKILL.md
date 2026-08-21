@@ -44,7 +44,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record task --title "
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record assign --task <id> --assignee <actor-id> --as coordinator --actor-id <writer-id> --run-id <run>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record start --task <id> --approach "One sentence" --as subagent --actor-id <id> --run-id <run>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record evidence --expected "check passes" --actual "exit 0" --kind command --exit-code 0
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record verify --as subagent --actor-id <verifier-id> --run-id <verifier-run> --result <id> --found 1 --executed 1 --passed 1 --failed 0
+node "/absolute/path/to/continuity/scripts/continuity.mjs" record verify --as subagent --actor-id <verifier-id> --run-id <verifier-run> --result <id> --found 1 --executed 1 --passed 1 --failed 0 --exit-code 0
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record accept --as user --result <id>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record reject --as user --result <id> --next "Different next step"
 ```

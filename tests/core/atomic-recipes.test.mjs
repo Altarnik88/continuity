@@ -12,6 +12,7 @@ import { MemoryError } from '../../continuity/scripts/lib/core/domain-v3.mjs';
 import { appendV3, initializeV3, readV3Journal } from '../../continuity/scripts/lib/core/journal-v3.mjs';
 import {
   applyRecipes, recipeAccept, recipeEvidence, recipeFail, recipeResult, recipeStart, recipeTask,
+  recipeVerify,
 } from '../../continuity/scripts/lib/core/recipes-v3.mjs';
 import { gitAdminTopology } from '../../continuity/scripts/lib/core/store.mjs';
 
@@ -79,6 +80,31 @@ const INIT = {
 function actor(kind = 'coordinator', extra = {}) {
   return { kind, id: extra.id || `actor-${kind}`, role: kind, runId: extra.runId || `run-${kind}` };
 }
+
+function agentRegistration(record) {
+  return {
+    eventType: 'agent.registered',
+    occurredAt: clock().toISOString(),
+    actor: actor(),
+    subject: { type: 'agent', id: record.actorId },
+    supersedes: [],
+    contradicts: [],
+    evidenceRefs: [],
+    sensitivity: 'internal',
+    payload: { agent: record },
+  };
+}
+
+const VERIFIER_AGENT = {
+  actorId: 'actor-deep',
+  providerFamily: 'other',
+  modelFamily: 'large',
+  capabilityProfiles: ['implementation', 'integration', 'deep_reasoning'],
+  costTier: 'high',
+  speedTier: 'slow',
+  trustTier: 'standard',
+  calibrationStatus: 'calibrated',
+};
 
 function fileInventory(root, relative = '') {
   const absolute = relative ? path.join(root, relative) : root;
@@ -402,6 +428,140 @@ export const CASES = Object.freeze([
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
+    },
+  },
+  {
+    id: 'T03-R3A-001-verify-missing-exit-code-no-effect',
+    async run() {
+      if (!hasGit()) throw new CaseSkip('git.exe is not available');
+      const root = makeRepo();
+      try {
+        seedResult(root);
+        appendV3(root, `${JSON.stringify(agentRegistration(VERIFIER_AGENT))}\n`, { clock });
+        const store = readV3Journal(root);
+        const resultId = store.state.results[0].resultId;
+        const before = persistenceFingerprint(root);
+        const expected = 'record verify requires --exit-code observed from the verification run';
+        assert.throws(
+          () => recipeVerify(store, {
+            actor: actor('subagent', { id: 'actor-deep', runId: 'run-verify' }),
+            result: resultId,
+            found: 1, executed: 1, passed: 1, failed: 0,
+          }, { clock }),
+          (error) => error instanceof MemoryError && error.message === expected,
+        );
+        assert.deepEqual(persistenceFingerprint(root), before);
+        const rejected = runProjectMemory(root, [
+          'record', 'verify', '--as', 'subagent', '--actor-id', 'actor-deep', '--run-id', 'run-verify',
+          '--result', resultId, '--found', '1', '--executed', '1', '--passed', '1', '--failed', '0',
+        ]);
+        assert.notEqual(rejected.status, 0, rejected.stdout);
+        assert.equal(rejected.stdout, '');
+        assert.match(rejected.stderr, /record verify requires --exit-code observed from the verification run/);
+        assert.deepEqual(persistenceFingerprint(root), before);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'T03-R3B-001-succeeded-result-ambiguous-evidence-no-effect',
+    async run() {
+      if (!hasGit()) throw new CaseSkip('git.exe is not available');
+      const root = makeRepo();
+      try {
+        seedAttempt(root);
+        let store = readV3Journal(root);
+        appendV3(root, recipeEvidence(store, {
+          actor: actor(), kind: 'command', source: 'node --test', expected: 'pass',
+          actual: 'first authorizing observation', exitCode: 0, id: 'evidence-first000',
+        }, { clock }), { clock });
+        store = readV3Journal(root);
+        appendV3(root, recipeEvidence(store, {
+          actor: actor(), kind: 'test', source: 'node --test', expected: 'pass',
+          actual: 'second authorizing observation', exitCode: 0, id: 'evidence-second00',
+        }, { clock }), { clock });
+        store = readV3Journal(root);
+        const before = persistenceFingerprint(root);
+        assert.throws(
+          () => recipeResult(store, {
+            actor: actor(), expected: 'pass', actual: 'pass', execution: 'succeeded',
+          }, { clock }),
+          (error) => error instanceof MemoryError
+            && /record result requires --evidence/.test(error.message)
+            && error.message.includes('evidence-first000')
+            && error.message.includes('evidence-second00'),
+        );
+        assert.deepEqual(persistenceFingerprint(root), before);
+        const rejected = runProjectMemory(root, [
+          'record', 'result', '--expected', 'pass', '--actual', 'pass', '--execution', 'succeeded',
+        ]);
+        assert.notEqual(rejected.status, 0, rejected.stdout);
+        assert.equal(rejected.stdout, '');
+        assert.match(rejected.stderr, /record result requires --evidence/);
+        assert.match(rejected.stderr, /evidence-first000/);
+        assert.match(rejected.stderr, /evidence-second00/);
+        assert.deepEqual(persistenceFingerprint(root), before);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'T03-R3B-002-succeeded-result-prior-attempt-evidence-no-effect',
+    async run() {
+      if (!hasGit()) throw new CaseSkip('git.exe is not available');
+      const root = makeRepo();
+      try {
+        seedAttempt(root);
+        let store = readV3Journal(root);
+        appendV3(root, recipeEvidence(store, {
+          actor: actor(), kind: 'command', source: 'node --test', expected: 'pass',
+          actual: 'authorizing on first attempt', exitCode: 0, id: 'evidence-attempt1',
+        }, { clock }), { clock });
+        store = readV3Journal(root);
+        appendV3(root, recipeStart(store, {
+          actor: actor(), approach: 'second attempt does not inherit prior evidence',
+        }, { clock }), { clock });
+        store = readV3Journal(root);
+        const before = persistenceFingerprint(root);
+        assert.throws(
+          () => recipeResult(store, {
+            actor: actor(), expected: 'pass', actual: 'pass', execution: 'succeeded',
+          }, { clock }),
+          (error) => error instanceof MemoryError
+            && /record result requires --evidence/.test(error.message)
+            && /current attempt/.test(error.message),
+        );
+        assert.deepEqual(persistenceFingerprint(root), before);
+        const rejected = runProjectMemory(root, [
+          'record', 'result', '--expected', 'pass', '--actual', 'pass', '--execution', 'succeeded',
+        ]);
+        assert.notEqual(rejected.status, 0, rejected.stdout);
+        assert.equal(rejected.stdout, '');
+        assert.match(rejected.stderr, /record result requires --evidence/);
+        assert.deepEqual(persistenceFingerprint(root), before);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'T03-R3C-001-evidence-default-limitation-is-self-reported',
+    async run() {
+      const draft = JSON.parse(recipeEvidence({
+        state: { tasks: [{ taskId: 'task-limit', goalId: 'goal-final', criterionIds: ['criterion-honest'] }] },
+      }, {
+        actor: actor(), kind: 'command', expected: 'pass', actual: 'exit 0', exitCode: 0,
+      }, { clock }));
+      assert.deepEqual(draft.payload.evidence.limitations, [
+        'Exit code and outputs are self-reported by the writer; the CLI did not execute or observe the command.',
+      ]);
+      assert.equal(
+        JSON.stringify(draft).includes('truncated and hashed')
+          || JSON.stringify(draft).includes('raw logs are not stored'),
+        false,
+      );
     },
   },
 ]);

@@ -268,7 +268,7 @@ function executePacket({
       });
       return { report, resultId: null, verified: false, assignmentId };
     }
-    client.recordEvidence({
+    const recordedEvidence = client.recordEvidence({
       root,
       actorId,
       runId,
@@ -278,6 +278,8 @@ function executePacket({
       kind: authorizing.kind || 'command',
       exitCode: authorizing.exitCode,
     });
+    const evidenceId = recordedEvidence.evidenceId;
+    if (!evidenceId) fail('record evidence did not echo evidenceId', 3);
     const recorded = client.recordResult({
       root,
       actorId,
@@ -285,6 +287,7 @@ function executePacket({
       expected: 'focused check exits 0',
       actual: 'authorizing command evidence recorded',
       execution: 'succeeded',
+      evidence: evidenceId,
     });
     const resultId = recorded.resultId;
     if (!resultId) fail('record result did not echo resultId', 3);
@@ -429,6 +432,8 @@ export function createCoordinatorRuntime({
           root, client: memoryClient, adapter: runtimeAdapter, config, packet: verifyPacket, role: 'verifier',
         });
         if (verified.report.status === 'done' && executed.resultId) {
+          const observedExit = (verified.report.evidence || [])
+            .find((item) => Number.isInteger(item.exitCode))?.exitCode;
           memoryClient.recordVerify({
             root,
             resultId: executed.resultId,
@@ -439,6 +444,7 @@ export function createCoordinatorRuntime({
             passed: verified.report.testCounts.passed,
             failed: verified.report.testCounts.failed,
             skipped: verified.report.testCounts.skipped,
+            exitCode: observedExit,
           });
         }
       }

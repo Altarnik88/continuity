@@ -567,7 +567,7 @@ export const CASES = Object.freeze([
         const verifierActor = actor('subagent', { id: 'actor-deep', runId: 'run-verifier' });
         const valid = JSON.parse(recipeVerify(store, {
           actor: verifierActor, result: store.state.results[0].resultId,
-          found: 1, executed: 1, passed: 1, failed: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, exitCode: 0,
         }, { clock }));
         const before = persistenceFingerprint(root);
 
@@ -714,7 +714,7 @@ export const CASES = Object.freeze([
         appendV3(root, recipeVerify(store, {
           actor: actor('subagent', { id: 'actor-cheap', runId: 'run-verify' }),
           result: store.state.results[0].resultId,
-          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0, exitCode: 0,
         }, { clock }), { clock });
         store = readV3Journal(root);
         assert.equal(store.state.results[0].verification, 'passed');
@@ -1025,7 +1025,7 @@ export const CASES = Object.freeze([
         appendV3(root, recipeVerify(store, {
           actor: actor('subagent', { id: 'actor-deep', runId: 'run-verify' }),
           result: store.state.results[0].resultId,
-          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0, exitCode: 0,
         }, { clock }), { clock });
         store = readV3Journal(root);
         assert.equal(store.state.results[0].verification, 'passed');
@@ -1224,7 +1224,7 @@ export const CASES = Object.freeze([
         appendV3(root, recipeVerify(store, {
           actor: actor('subagent', { id: 'actor-deep', runId: 'run-independent' }),
           result: store.state.results[0].resultId,
-          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0, exitCode: 0,
         }, { clock }), writeOptions);
         return readV3Journal(root);
       };
@@ -1650,7 +1650,7 @@ export const CASES = Object.freeze([
         const verifier = actor('subagent', { id: 'actor-deep', runId: 'run-verifier' });
         const badCounts = JSON.parse(recipeVerify(store, {
           actor: verifier, result: resultId,
-          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0, exitCode: 0,
         }, { clock }));
         badCounts.payload.report.outcome = 'passed';
         badCounts.payload.report.counts = { found: 1, executed: 1, passed: 0, failed: 99, skipped: 0 };
@@ -1725,7 +1725,7 @@ export const CASES = Object.freeze([
         const verifier = actor('subagent', { id: 'actor-deep', runId: 'run-verifier' });
         const validVerification = JSON.parse(recipeVerify(store, {
           actor: verifier, result: store.state.results[0].resultId,
-          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0, exitCode: 0,
         }, { clock }));
 
         const eventActorMismatch = JSON.parse(JSON.stringify(validVerification));
@@ -1980,7 +1980,7 @@ export const CASES = Object.freeze([
 
         appendV3(root, recipeVerify(store, {
           actor: verifier, result: resultId,
-          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, skipped: 0, exitCode: 0,
         }, { clock }), { clock });
         store = readV3Journal(root);
         assert.equal(store.state.results[0].verification, 'passed');
@@ -2074,7 +2074,7 @@ export const CASES = Object.freeze([
         const unregisteredBefore = persistenceFingerprint(root);
         assert.throws(() => appendV3(root, recipeVerify(store, {
           actor: actor('subagent', { id: 'actor-deep', runId: 'run-verifier' }), result: resultId,
-          found: 1, executed: 1, passed: 1, failed: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, exitCode: 0,
         }, { clock }), { clock }), /registered verifier/i);
         assert.deepEqual(persistenceFingerprint(root), unregisteredBefore);
 
@@ -2083,7 +2083,7 @@ export const CASES = Object.freeze([
         const insufficientBefore = persistenceFingerprint(root);
         assert.throws(() => appendV3(root, recipeVerify(store, {
           actor: actor('subagent', { id: 'actor-unknown', runId: 'run-verifier-unknown' }), result: resultId,
-          found: 1, executed: 1, passed: 1, failed: 0,
+          found: 1, executed: 1, passed: 1, failed: 0, exitCode: 0,
         }, { clock }), { clock }), /verifier.*capability|capability.*verifier/i);
         assert.deepEqual(persistenceFingerprint(root), insufficientBefore);
       } finally {

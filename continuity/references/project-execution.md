@@ -13,7 +13,7 @@ These states are independent:
 | Attempt and report | `record start` opens an Attempt. `record report` records the actor's account, not evidence. |
 | Evidence | A linked `command` or `test` observation with exit code `0` can authorize success. An `agent_report` cannot. |
 | Execution | A succeeded Result says the work executed successfully. It does not say the result was independently verified. |
-| Verification | `record verify` needs a different actor and run plus explicit found, executed, passed, and failed counts. |
+| Verification | `record verify` needs a different actor and run plus explicit found, executed, passed, and failed counts and `--exit-code`. |
 | Freshness | Inspect recomputes freshness from live Git state and evidence. A historical pass can become stale. |
 | Acceptance | Only `record accept --as user` or `record reject --as user --next "…"` changes acceptance. |
 
@@ -79,7 +79,7 @@ An executor report is not evidence. Evidence without `--exit-code` is recorded a
 ## Verify independently
 
 ```bash
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record verify --as subagent --actor-id <verifier-id> --run-id <verifier-run> --result <result-id> --found 1 --executed 1 --passed 1 --failed 0
+node "/absolute/path/to/continuity/scripts/continuity.mjs" record verify --as subagent --actor-id <verifier-id> --run-id <verifier-run> --result <result-id> --found 1 --executed 1 --passed 1 --failed 0 --exit-code 0
 ```
 
 The verifier actor and run must differ from the executor. Explicit counts prevent skipped or missing checks from becoming a pass. Verification does not freeze freshness and does not accept the result. See [verification-swarm.md](verification-swarm.md).
