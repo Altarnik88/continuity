@@ -703,39 +703,65 @@ async function assertDescriptorBoundedReadRace() {
 
     const target = path.join(root, 'race-marker.bin');
     const replacement = path.join(root, 'race-marker.replacement');
+    const go = path.join(root, 'race-marker.go');
     const byteLimit = 32 * 1024 * 1024;
-    let observedPostOpenSwap = false;
-    for (const delay of [1, 2, 4, 8]) {
-      writeFileSync(target, Buffer.alloc(byteLimit, 0x61));
-      writeFileSync(replacement, Buffer.alloc(byteLimit, 0x62));
-      const helperScript = String.raw`
-        const fs = require('node:fs');
-        const target = process.argv[1];
-        const replacement = process.argv[2];
-        const delay = Number(process.argv[3]);
-        process.stdout.write('READY\n');
-        setTimeout(() => {
-          const displaced = target + '.displaced';
-          fs.rmSync(displaced, { force: true });
-          fs.renameSync(target, displaced);
-          fs.renameSync(replacement, target);
-          fs.rmSync(displaced, { force: true });
-        }, delay);
-      `;
-      const helperProcess = spawn(process.execPath, ['-e', helperScript, target, replacement, String(delay)], {
-        stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
-      });
-      const exited = waitForChildExit(helperProcess);
-      await waitForChildLine(helperProcess, 'READY');
-      let error;
-      try { readOwnedFileBounded(target, byteLimit, 'synthetic marker'); } catch (caught) { error = caught; }
-      assert.equal(await exited, 0, 'external descriptor-race helper failed');
-      if (error instanceof MemoryError && error.exitCode === 3 && error.message === 'synthetic marker changed while being read') {
-        observedPostOpenSwap = true;
-        break;
+    writeFileSync(target, Buffer.alloc(byteLimit, 0x61));
+    writeFileSync(replacement, Buffer.alloc(byteLimit, 0x62));
+    const helperScript = String.raw`
+      const fs = require('node:fs');
+      const target = process.argv[1];
+      const replacement = process.argv[2];
+      const go = process.argv[3];
+      process.stdout.write('READY\n');
+      const start = Date.now();
+      while (!fs.existsSync(go)) {
+        if (Date.now() - start > 10000) process.exit(2);
       }
+      const displaced = target + '.displaced';
+      fs.rmSync(displaced, { force: true });
+      fs.renameSync(target, displaced);
+      fs.renameSync(replacement, target);
+      fs.rmSync(displaced, { force: true });
+    `;
+    const helperProcess = spawn(process.execPath, ['-e', helperScript, target, replacement, go], {
+      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+    });
+    const exited = waitForChildExit(helperProcess);
+    await waitForChildLine(helperProcess, 'READY');
+    const originalSwapReadSync = fs.readSync;
+    let interceptedSwapRead = false;
+    let swapError;
+    try {
+      fs.readSync = (...args) => {
+        if (!interceptedSwapRead) {
+          interceptedSwapRead = true;
+          const before = lstatSync(target, { bigint: true });
+          writeFileSync(go, 'go\n', { flag: 'wx' });
+          const deadline = Date.now() + 10000;
+          for (;;) {
+            let current;
+            try { current = lstatSync(target, { bigint: true }); } catch { current = undefined; }
+            if (current && (current.ino !== before.ino || current.dev !== before.dev)) break;
+            if (Date.now() > deadline) throw new Error('external descriptor-race helper did not substitute the path');
+          }
+        }
+        return originalSwapReadSync(...args);
+      };
+      syncBuiltinESMExports();
+      try { readOwnedFileBounded(target, byteLimit, 'synthetic marker'); } catch (caught) { swapError = caught; }
+    } finally {
+      fs.readSync = originalSwapReadSync;
+      syncBuiltinESMExports();
+      rmSync(go, { force: true });
     }
-    assert.equal(observedPostOpenSwap, true, 'post-open path substitution did not fail from descriptor evidence');
+    assert.equal(await exited, 0, 'external descriptor-race helper failed');
+    assert.equal(interceptedSwapRead, true, 'post-open fixture did not intercept the first descriptor read');
+    assert.equal(fs.readSync, originalSwapReadSync, 'post-open fixture leaked its built-in read instrumentation');
+    assert.ok(
+      swapError instanceof MemoryError && swapError.exitCode === 3
+        && swapError.message === 'synthetic marker changed while being read',
+      'post-open path substitution did not fail from descriptor evidence',
+    );
 
     const growing = path.join(root, 'growing-legacy.bin');
     writeFileSync(growing, Buffer.alloc(byteLimit - 4096, 0x63));
