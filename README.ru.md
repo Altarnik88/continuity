@@ -2,50 +2,225 @@
 
 **Language / Язык:** [English](README.md) | **Русский**
 
-**Локальная, source-backed непрерывность проекта, которая переживает смену чатов, моделей и исполнителей.**
+**Локальная плоскость управления долгой агентной работой: память, которая переживает чаты, и явное управление исполнителями и проверками.**
 
-Continuity — это локальный Node.js CLI и Skill. Он пишет ограниченный журнал рядом с Git-репозиторием, чтобы следующий чат, другая модель или новый исполнитель могли восстановить цели, провалившиеся попытки, доказательства и следующие шаги вместо того, чтобы угадывать. Журнал авторитетен для того, что Continuity действительно записал. Живые файлы, Git и пользователь остаются авторитетны для самого проекта. Исторический PASS не является текущей истиной.
+Continuity — скачиваемый Node.js-продукт для Git-репозитория. Он делает две работы, которые сессии обычно смешивают и потом теряют:
 
-Это самостоятельный, основанный на исходниках слой непрерывности проекта для coding agents, с необязательным Coordinator runtime для агентных сред.
+1. **Помнить истину проекта** — цели, провалившиеся попытки, доказательства, независимую проверку, freshness и то, принял ли результат *пользователь*.
+2. **Управлять агентами как роем, а не как одним чатом** — готовая работа, изоляция ownership, WorkPackets, запуск исполнителей, независимый verifier, restart и остановка. Слова исполнителя никогда не считаются доказательством.
 
-## Что это такое
+Его скачивают, когда следующий чат, другая модель или новый исполнитель должны продолжить без угадывания — и когда на одном репозитории работают несколько акторов без столкновений и без приёмки работы «за пользователя».
 
-Continuity — это не память модели. Это локальная, опирающаяся на исходники запись о работе над проектом: цели, ограничения, задачи, попытки, провалы, lessons, доказательства, независимая проверка, freshness и приёмка пользователем.
-
-Вы запускаете `continuity/scripts/continuity.mjs` из Git-репозитория, который нужно помнить. Helper хранит данные в этом репозитории как `.continuity/HISTORY.ndjson` и `.continuity/CURRENT.json`. Каталог Skill — это код. Store — это данные проекта. И то и другое переживает конец чата.
-
-Запись хранит не только успехи, но и неудачи. Старая заметка не становится текущей истиной. `inspect` заново вычисляет freshness по живому Git. Принять или отклонить результат может только пользователь.
-
-Продукт состоит из трёх строго разделённых слоёв:
-
-1. **Project Memory Core** — единственный владелец долговременной записанной истины: цели, criteria, попытки, evidence, verification, freshness, провалы и приёмка пользователя. `HISTORY.ndjson` — авторитетный журнал. `CURRENT.json` — восстанавливаемая projection.
-2. **Continuity** — плоскость чтения: ориентация нового чата, inspect, ready state, ограниченный handoff, живой Git-drift и проверка схемы перед выдачей. Он не запускает агентов.
-3. **Coordinator** — необязательная плоскость исполнения: ready set, WorkPackets, запуск адаптеров, независимые verifiers и возобновляемое состояние run. Он никогда не правит журнал или projection напрямую.
-
-Для работы нужны Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Memory CLI не запускает модели, агентов, planner или Coordinator. Отдельный Coordinator CLI — явный foreground-процесс; он не поднимает daemon, сетевой сервис, interview или login task. Continuity может вызывать локальные команды Git, чтобы прочитать состояние репозитория.
-
-Полный устанавливаемый Skill — каталог `continuity/`. При скачивании выберите Full, Memory или Coordinator; см. [Установка](#установка). Продукт не заявляет hosted-model execution, нативный discovery каждым coding agent и то, что исторический PASS является текущим.
+Нужны Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Лицензия MIT. Распространяется с [Altarnik88/continuity](https://github.com/Altarnik88/continuity), не из package registry.
 
 GitHub по умолчанию показывает [английский README](README.md). Этот файл — русская версия.
 
-## Какую проблему решает
+## Зачем это скачивать и использовать
 
-Длительная агентная работа теряет факты, которые нужны следующим чатам. Continuity записывает эти факты, не превращая их в живую власть над проектом.
+Долгая агентная работа ломается двумя независимыми способами.
 
-| Что обычно ломается | Что записывает Continuity | Чего он не делает |
+**Сбой памяти.** Новый чат не знает цель, провалившиеся подходы, последние доказательства и точный следующий шаг. Исторический PASS верят против сдвинутого Git HEAD. Исполнитель «проверяет» сам себя. Кто-то кроме пользователя помечает работу принятой.
+
+**Сбой управления.** Два агента правят одни файлы. Ready-работу угадывают, а не выводят. Coordinator подразумевают, но никогда не запускают. Отчёт исполнителя принимают за результат теста. Новый актор продолжает чужой Attempt. Обязательные criteria исчезают в backlog.
+
+Continuity нужен, чтобы эти сбои оставались видимыми и ограниченными:
+
+| Что нужно | Зачем скачивать Continuity |
+| --- | --- |
+| Работа через много чатов и моделей | `inspect` и `handoff` восстанавливают записанную истину и не выдумывают незаписанную историю |
+| Провалившиеся подходы, которые нельзя молча повторять | Провалы, lessons и запрещённые подходы остаются в append-only журнале |
+| Несколько агентов на одном репозитории | Ready set, path ownership и assignments исключают пересекающуюся работу |
+| Доказательство против разговора | Authorizing evidence — это `command` или `test` с кодом выхода `0`; отчёт — не evidence |
+| Независимая проверка | Нужен другой актор и другой run; self-verify — отказ без эффекта |
+| Власть человека | Только `record accept --as user` или `record reject --as user` меняет приёмку |
+| Настоящее исполнение, а не эссе про протокол | Необязательный Coordinator CLI запускает адаптеры на переднем плане и пишет обратно только через Memory CLI |
+
+**Не** скачивайте его как замену Git, трекер задач, хранилище секретов, витрину hosted-моделей, daemon или автоматическое доказательство корректности. Если правка одна и очевидная — просто сделайте её. Если следующего актора не было в комнате — используйте Continuity.
+
+## Что это такое
+
+Continuity — это не память модели и не скрытый запуск агентов. Это три строго разделённых слоя в одном репозитории:
+
+| Слой | Задача | Не его задача |
 | --- | --- | --- |
-| Новый чат не знает, что уже произошло | `inspect` и `handoff` восстанавливают цели, задачи, попытки, провалы и следующие шаги | Восстановить незаписанную работу |
-| Агент повторяет провалившийся подход | Провалы, lessons и next actions остаются в append-only журнале | Запретить повтор; он отказывается скрывать провал |
-| Исторический PASS принимают за текущий | Freshness пересчитывается из живого Git и evidence в момент inspect | Заморозить PASS после позднейших правок |
-| Отчёт исполнителя принимают за доказательство | `attempt.reported` не является authorizing evidence | Превратить слова в результат теста |
-| Агенты правят пересекающиеся файлы | Assignments и path ownership исключают коллизии из ready set | Блокировать файловую систему |
-| Теряются причины решений | Решения, ограничения и lessons — отдельные записи | Выдумать отсутствующее обоснование |
-| Контекст заполняется, незавершённые попытки исчезают | Context handoff хранит последний шаг, фактическое состояние, провалившиеся гипотезы и точный следующий шаг | Продолжить предыдущий Attempt |
-| Verification смешивают с приёмкой пользователя | Независимая проверка и `record accept --as user` — разные записи | Позволить Coordinator или verifier принять работу за пользователя |
-| Backlog скрывает обязательную работу | Обязательные criteria нельзя припарковать, чтобы их обойти | Запретить парковку необязательной работы |
-| Преемник видит только успешное резюме | Handoff включает провалы, ограничения, evidence и следующий шаг | Передать identity актора или закрыть старый Attempt |
+| **Project Memory Core** | Владеть долговременной записанной истиной | Выбирать модель, запускать процесс, принимать работу за пользователя |
+| **Continuity** | Плоскость чтения для следующего чата или актора | Стать Coordinator или запускать исполнителей |
+| **Coordinator** | Плоскость исполнения: пакеты, адаптеры, волны, resume | Править журнал, считать отчёт доказательством, принимать за пользователя |
 
-Coordinator — необязательный foreground-runtime, поставляемый как `continuity/scripts/coordinator.mjs`. Memory/Continuity его не запускает. Его нужно запускать явно. `--help` печатает `usage: coordinator.mjs <doctor|plan|run|resume|status|cancel>`. Отдельного `--help` по командам нет.
+С Core и Continuity вы говорите через:
+
+```text
+usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate|graphify>
+```
+
+С управлением агентами — через **отдельный** foreground CLI:
+
+```text
+usage: coordinator.mjs <doctor|plan|run|resume|status|cancel>
+```
+
+Memory никогда не запускает Coordinator. Coordinator никогда не стартует как daemon, watcher, login task или сетевой сервис. Оба CLI только явные.
+
+Код Skill — каталог `continuity/`. Данные проекта — в целевом Git-репозитории: `.continuity/HISTORY.ndjson` (авторитетный журнал) и `.continuity/CURRENT.json` (восстанавливаемая projection). Состояние Coordinator, если вы его используете, — `.continuity/coordinator/runs`. И код, и данные переживают конец чата.
+
+## Контур проекта
+
+Это не обязательный конвейер. Прямая работа с Memory и координированное исполнение — альтернативные режимы.
+
+```mermaid
+flowchart TB
+  user["Пользователь"]
+  planIn["Готовые цель, criteria и план"]
+  mem["Continuity CLI<br/>inspect / record / handoff"]
+  core["Project Memory Core"]
+  journal["HISTORY.ndjson<br/>авторитетный журнал"]
+  projection["CURRENT.json<br/>восстанавливаемая projection"]
+  derived["TaskAccumulator, ready set, WorkPackets"]
+  coord["Coordinator CLI<br/>plan / run / resume / status / cancel"]
+  adapter["Runtime-адаптер<br/>local-process"]
+  exec["Исполнитель"]
+  ver["Независимый verifier"]
+  accept["Приёмка только пользователем"]
+
+  user --> planIn
+  planIn --> mem
+  mem --> core
+  core --> journal
+  core --> projection
+  core --> derived
+  user --> coord
+  derived --> coord
+  coord --> adapter
+  adapter --> exec
+  adapter --> ver
+  exec --> mem
+  ver --> mem
+  mem --> accept
+```
+
+Путь записи: каждое долговременное событие идёт через `continuity/scripts/continuity.mjs`. Coordinator может только запускать этот CLI (или эквивалентный валидированный Core API). Он не должен открывать `HISTORY.ndjson` или `CURRENT.json` сам.
+
+Путь чтения: `inspect`, `inspect ready`, `inspect wave`, `handoff`, `doctor`, `validate` и `history` не чинят projection. `rebuild` — явная запись оператора.
+
+## Три слоя
+
+### 1. Project Memory Core
+
+Core — единственный владелец долговременной записанной истины.
+
+Он хранит и проверяет:
+
+- цели и обязательные criteria;
+- TaskAccumulator (приоритет, размер, зависимости, ownership, следующий шаг);
+- акторов и идентичность run;
+- Attempts и Results;
+- evidence и provenance;
+- независимые счётчики verification;
+- входы freshness;
+- приёмку пользователя (pending, пока пользователь сам не запишет);
+- провалы, blockers, conflicts, lessons;
+- решения и обоснования;
+- assignments и записи ownership;
+- context handoff;
+- append-only журнал с hash-цепочкой;
+- детерминированно восстанавливаемую projection;
+- отказ записи без эффекта.
+
+`HISTORY.ndjson` авторитетен для того, что было записано. `CURRENT.json` — кэш из журнала, не второй источник истины. Журнал закрывается на 8 МиБ. Неизвестные поля и узнаваемые шаблоны секретов отвергаются. Отклонённая запись не меняет store.
+
+Core не выбирает модель, не балансирует нагрузку, не запускает агента, не управляет процессами ОС, не объявляет приёмку пользователя и не превращает слова исполнителя в evidence.
+
+### 2. Continuity
+
+Continuity — плоскость чтения между журналом и следующим участником.
+
+Он отвечает за:
+
+- ориентацию нового чата (`doctor`, `inspect`);
+- детерминированный inspect целей, criteria, провалов и следующих шагов;
+- ready state (`inspect ready`) и волну (`inspect wave`);
+- ограниченный handoff (`handoff --task`);
+- живой drift Git / worktree / evidence (freshness пересчитывается в момент inspect);
+- фильтрацию с сохранением closure;
+- схемную и смысловую проверку перед выдачей;
+- read-only поведение без скрытой мутации.
+
+Continuity не запускает агентов и не становится Coordinator.
+
+### 3. Coordinator
+
+Coordinator — плоскость исполнения. Он необязателен. Memory работает без него. Его запускают, когда Continuity должен **вести акторов**, а не только помнить их.
+
+Он отвечает за:
+
+- потребление графа зависимостей и ready set;
+- сборку WorkPackets с allowed/forbidden paths, capabilities и criteria приёмки;
+- выбор актора по capabilities;
+- адаптивные волны и лимит слотов;
+- изоляцию ownership (параллельно не идут пакеты с пересекающимися путями);
+- запуск исполнителей через vendor-neutral runtime-адаптер;
+- context rollover (новый actor id, run id и Attempt — никогда не продолжение старого Attempt);
+- условия repair / replan и остановки;
+- интеграцию структурированных отчётов;
+- запуск **другого** verifier-актора;
+- остановку после волны, пока приёмка пользователя остаётся pending;
+- сохранение CoordinatorRun, чтобы `resume` не закрывал чужой Attempt.
+
+Coordinator не может:
+
+- принять работу за пользователя;
+- считать отчёт исполнителя доказательством;
+- позволить актору проверить свой Result;
+- спрятать обязательный Criterion в backlog;
+- продолжить Attempt под новой идентичностью;
+- молча уйти на неизвестный или платный provider.
+
+Стабильный идентификатор протокола: `project-memory.coordinator.v1`. Это compatibility id, не имя продукта.
+
+## Управление агентами
+
+Этого Memory в одиночку не делает. Memory может записать, что актор существует. Coordinator назначает, запускает, ждёт и записывает попытку через Memory CLI.
+
+### Команды
+
+```bash
+node continuity/scripts/coordinator.mjs --help
+node continuity/scripts/coordinator.mjs --version
+node continuity/scripts/coordinator.mjs doctor --root <repo>
+node continuity/scripts/coordinator.mjs plan --root <repo>
+node continuity/scripts/coordinator.mjs run --root <repo> --config <file>
+node continuity/scripts/coordinator.mjs resume --run <id>
+node continuity/scripts/coordinator.mjs status --run <id>
+node continuity/scripts/coordinator.mjs cancel --run <id>
+```
+
+`--version` печатает `continuity-coordinator 1.0.0`. Отдельного `--help` по командам нет. Другие флаги: `--root`, `--config`, `--run`, `--adapter`, `--slots` (1..8), `--json`. Конфиг по умолчанию — `continuity/assets/coordinator.config.json`.
+
+`doctor` сообщает `daemon=false`. Если `liveProofRequired` истинно (это значение по умолчанию), тестовый адаптер `fake` отвергается.
+
+### Что несёт WorkPacket
+
+У каждого пакета есть wave id, packet id, идентичность актора и run, цель, зависимости, разрешённые и запрещённые пути, required capabilities, потолок риска, бюджет контекста, criteria приёмки, focused checks, известные провалы, запрещённые подходы и формат структурированного отчёта.
+
+Отчёт сохраняется. Он всё равно не является authorizing evidence. Coordinator должен приложить наблюдение `command` или `test` с `--exit-code 0` через Memory CLI, затем запустить другого verifier.
+
+### Адаптеры
+
+Адаптеры запускают работу. Они не источники истины Continuity. Обязательные методы: `discoverCapabilities`, `validateConfiguration`, `launchAssignment`, `sendContext`, `waitForReport`, `cancelAssignment`, `collectEvidence`, `healthCheck`.
+
+| Адаптер | Класс | Смысл |
+| --- | --- | --- |
+| `local-process` | live | Запускает текущий бинарник Node.js как реальный дочерний процесс и возвращает структурированный отчёт |
+| `fake` | test-only | Детерминированный двойник для тестов. Не live-доказательство. Отвергается при `liveProofRequired` |
+
+Неизвестное имя адаптера — ошибка, а не молчаливый fallback. Credentials не должны попадать в config, журнал, логи или release-артефакты. См. [ADAPTERS.md](ADAPTERS.md).
+
+### Ownership, волны, resume
+
+- Пакеты с пересекающимся path ownership не запускаются параллельно.
+- Свободный слот может взять следующий независимый ready-пакет; движку не обязательно ждать всю волну.
+- Около 65% заполнения контекста Coordinator не назначает новый пакет: завершает безопасный шаг, записывает partial/result, делает ограниченный handoff и начинает **новый** Attempt с новым актором и run.
+- `resume` читает `.continuity/coordinator/runs/<id>.json`. Он не закрывает чужой Attempt.
 
 ## Пять осей истины
 
@@ -53,194 +228,92 @@ Coordinator — необязательный foreground-runtime, поставл�
 
 **Execution → Evidence → Verification → Freshness → User acceptance**
 
-| Ось | Смысл | Это не то же самое, что |
+| Ось | Смысл | Это не |
 | --- | --- | --- |
-| Execution | Result записывает, как работа исполнилась (`succeeded`, `failed`, `partial` и остальные execution-состояния) | Доказательство, freshness или приёмка |
-| Evidence | Authorizing evidence — это связанное наблюдение `command` или `test` с exit code `0` | Отчёт исполнителя |
-| Verification | `record verify` от другого актора и другого run, с явными счётчиками `found` / `executed` / `passed` / `failed` | Freshness или приёмка |
-| Freshness | `inspect` заново оценивает возраст evidence по живому Git (HEAD и dirty worktree) | Сохранённый итог verification |
+| Execution | Result фиксирует, как работа исполнилась (`succeeded`, `failed`, `partial`, …) | Доказательство, freshness или приёмка |
+| Evidence | Authorizing evidence — связанный `command` или `test` с кодом выхода `0` | Отчёт исполнителя |
+| Verification | `record verify` от другого актора и run, с явными счётчиками | Freshness или приёмка |
+| Freshness | `inspect` заново считает возраст evidence по живому Git | Сохранённый итог verification |
 | User acceptance | Только `record accept --as user` или `record reject --as user --next "…"` | Любой технический PASS |
 
-Attempt — это одна записанная попытка выполнить задачу. Result — записанный итог исполнения этой попытки. `record report` сохраняет рассказ актора об Attempt; это не evidence и не Result.
+`--as` помечает вид актора (`user`, `coordinator`, `subagent`, `tool`, `migration`). Это не запуск процесса. Если `--as` опустить, по умолчанию используется вид `coordinator`. Это метка, а не работающий Coordinator.
 
-Правила, которые helper действительно проверяет:
+## Как работа реально идёт
 
-- `attempt.reported` не является authorizing evidence.
-- Слова исполнителя не являются доказательством. Отчёт без `--exit-code` сохраняется как `agent_report` и не может уполномочить успех.
-- Authorizing evidence — связанное наблюдение `command` или `test` с exit code `0`.
-- Независимый verifier должен отличаться от исполнителя и владельца Attempt. Run verifier должен отличаться от run исполнителя, если run id существуют.
-- `record verify` также требует сохранённую запись `agent.registered` для этого verifier. Разные `--actor-id` и `--run-id` необходимы, но недостаточны.
-- Идентичности по умолчанию `actor-<kind>` и `run-cli` не независимы и не могут проверить сами себя.
-- Успешная verification не устанавливает freshness.
-- Свежая verification не означает приёмку.
-- Принять или отклонить результат может только пользователь. Coordinator, исполнитель и verifier не могут.
-- Исторический PASS не является текущим PASS.
-
-## Как это работает
-
-Continuity держит три слоя, и они не равны.
-
-1. **Живая реальность проекта.** Текущие файлы, Git, команды, тесты и решения пользователя. Это остаётся авторитетным для самого проекта.
-2. **Авторитетный журнал Continuity.** `.continuity/HISTORY.ndjson` — ограниченная, append-only, hash-chained запись того, что Continuity действительно записал. Журнал авторитетен для записанной истории, а не для того, совпадает ли репозиторий с этой историей сейчас.
-3. **Восстанавливаемая проекция.** `.continuity/CURRENT.json` — кэш, который пересобирается из журнала. Если он отсутствует, устарел или невалиден, `inspect` остаётся read-only. `rebuild` — явный ремонт проекции, а не запрос и не источник новой истины.
-
-Старое доказательство может стать stale, когда Git сдвигается. Старый PASS не становится текущим PASS автоматически. Проекцию можно пересобрать из журнала; журнал нельзя пересобрать из проекции.
-
-Предпочтительные записи идут через schema v3 recipes командой `record`. Schema v1 ещё существует для старых snapshot-store; команда `checkpoint` — это не путь v3. Schema v2 event store есть в helper, но в этой сборке v2 inspect не рисуется (`v2 inspect rendering is not available in this build`).
-
-Полезные производные объекты, которые восстанавливаются из журнала:
-
-- **TaskAccumulator** — задачи с priority, size, зависимостями, ownership, попытками, evidence, freshness и рекомендуемым следующим действием.
-- **Ready set** — задачи, которые можно начинать сейчас. Он вычисляется в момент inspect и не является записью.
-- **WorkPacket** — от одной до четырёх готовых задач с ownership, capabilities, проверками и completion contract.
-- **Build-First** — пока у core-задачи класса `function` или `connector` нет Result с authorizing command/test evidence, неклассифицированная, документационная, тестовая и косметическая работа не попадает в ready set.
-
-`--as` выбирает вид актора (`user`, `coordinator`, `subagent`, `tool`, `migration`). Это метка писателя. Она не запускает процесс. Если `--as` опустить, по умолчанию используется вид `coordinator`. Это метка, а не работающий Coordinator.
-
-Журнал закрывается при 8 MiB. Вход ограничен. Неизвестные поля и ряд узнаваемых шаблонов секретов и частных данных отвергаются. Отклонённые записи оставляют журнал без изменений.
-
-```mermaid
-flowchart LR
-  task[Задача] --> attempt[Attempt]
-  task -.-> assign[Необязательное assignment]
-  assign -.-> attempt
-  attempt --> evidence[Evidence]
-  evidence --> result[Result]
-  result --> verify[Независимая verification]
-  verify --> inspectNode[inspect пересчитывает freshness]
-  inspectNode --> accept[Приёмка пользователем]
-  attempt -.-> report[Report сам по себе не уполномочивает Result]
-  verify -.-> notFresh[Verification не означает freshness]
-  inspectNode -.-> notAccept[Freshness не означает приёмку]
-  attempt -.-> fail[Провал открывает новый Attempt]
-  attempt -.-> roll[Rollover требует новый actor, run и Attempt]
-```
-
-Провал дописывает lesson, next action и событие failure. Он не переписывает прежние события. Context rollover завершает сессию текущего актора; преемник начинает новый actor id, run id и Attempt.
-
-## Граница системы
-
-Прямое использование и координированное использование — альтернативные режимы, а не обязательная цепочка. Continuity не запускает исполнителей.
-
-```mermaid
-flowchart TB
-  user["Пользователь или необязательный planner"] --> ready["Готовые goal, criteria и plan"]
-  ready --> continuity["Continuity"]
-  continuity --> journal["HISTORY.ndjson"]
-  continuity --> projection["CURRENT.json"]
-  continuity --> derived["TaskAccumulator, ready set, WorkPackets"]
-  continuity --> records["Акторы, assignments, attempts, evidence"]
-  continuity --> status["Verification, freshness, провалы, backlog, lessons, handoff"]
-  continuity --> standalone["Standalone: пользователь или coding agent"]
-  continuity --> coordinated["Необязательный Coordinator CLI"]
-  standalone --> workers["Исполнители и независимый verifier"]
-  coordinated --> workers
-  workers --> validated["Проверенные записи возвращаются через CLI"]
-  validated --> continuity
-  continuity --> acceptance["Приёмка только пользователем"]
-```
-
-Continuity не является process manager. Необязательный Coordinator может читать `inspect ready` и `inspect wave`, выбирать зарегистрированных акторов и доступные модели, распределять проверенные WorkPackets, запускать исполнителей в агентной среде и писать обратно только через этот helper. Graphify — необязательный навигационный адаптер, а не источник истины. В этой сборке команда `graphify` сообщает, что поддержка Graphify недоступна.
-
-## Standalone и координированный режимы
-
-### Standalone
+### Standalone Memory (без Coordinator)
 
 Пользователь или coding agent говорит с Continuity напрямую:
 
-1. Запустите `doctor`. После появления store — `inspect` и `inspect ready --json`.
-2. Передайте готовые goal, criteria и plan. Continuity не проводит interview и не выдумывает их.
-3. `record task` с `--class function` или `--class connector`.
-4. `record start`, приложите authorizing command или test evidence и сделайте `record result`.
-5. Сохраните verifier через `record --file` как `agent.registered`, запустите эту проверку сами, затем `record verify` с другим актором и другим run.
-6. Попросите пользователя сделать `record accept` или `record reject`.
-7. Перед следующим чатом прочитайте `handoff --task <task-id>`.
+1. `doctor`. Когда store есть — `inspect` и `inspect ready --json`.
+2. Подать готовую цель, criteria и план. Continuity не устраивает interview и не выдумывает их.
+3. `record task --class function` или `--class connector`.
+4. `record start`, authorizing command/test evidence, `record result`.
+5. Сохранить verifier как `agent.registered`, прогнать проверку самим, `record verify` другим актором и run.
+6. Попросить пользователя `record accept` или `record reject`.
+7. Перед следующим чатом прочитать `handoff --task <id>`.
 
-Для этого цикла не нужны Coordinator, planner или другой Skill. Записи packet и assignment в standalone необязательны. Они нужны, когда helper должен проверить ownership и eligibility актора до начала работы.
+Coordinator не нужен. Пакеты и assignments необязательны, пока не нужна проверка ownership.
 
-### Необязательный координированный режим
+### Координированное исполнение (Coordinator CLI)
 
-Если вы запускаете необязательный Coordinator CLI или в агентной среде уже есть Coordinator, он может:
+1. В Memory store уже есть цель, criterion и хотя бы одна готовая core-задача.
+2. `coordinator.mjs plan --root <repo>` читает ready/wave и записывает состояние run.
+3. `coordinator.mjs run` регистрирует исполнителя и verifier, пишет packet и assignment через Memory CLI, запускает `local-process` (или другой явно заданный live-адаптер), ждёт структурированный отчёт, записывает evidence/result, запускает **другого** verifier, пишет `verify`.
+4. `status` / `resume` / `cancel` наблюдают или продолжают этот run.
+5. Приёмка пользователя остаётся `pending`, пока пользователь не запишет `--as user`.
 
-- читать `inspect ready` и `inspect wave`;
-- выбирать из зарегистрированных акторов и доступных моделей;
-- сохранять записи `agent.registered`, WorkPackets и assignments через helper;
-- запускать исполнителей и другого verifier в этой среде;
-- писать события только через проверенный CLI;
-- интегрировать результат или начать repair/replan.
+Graphify — необязательный навигационный адаптер, не источник истины. В этой сборке `graphify` сообщает, что поддержка недоступна.
 
-Он по-прежнему не может:
+## Профили распространения
 
-- править `HISTORY.ndjson` вручную;
-- принять работу за пользователя;
-- позволить модели или актору независимо проверить собственную работу;
-- считать Graphify, вывод planner или прозу исполнителя authorizing evidence.
+Одно каноническое дерево исходников. Три скачиваемых формы:
 
-`project-memory.coordinator.v1` — стабильный compatibility identifier этого протокола. Это не имя продукта и не runtime-зависимость.
+| Профиль | Содержит | Работает без |
+| --- | --- | --- |
+| **Continuity Full** | Core + Continuity + Coordinator + protocol + адаптеры | Ничего лишнего для локального CLI |
+| **Continuity Memory** | Core + Continuity + protocol + Memory CLI | Coordinator |
+| **Continuity Coordinator** | Coordinator + protocol client + адаптеры + Coordinator CLI | Реализации журнала; подключается к Memory CLI |
 
-Команды верхнего уровня `coordinate` на Memory CLI нет. Команды Coordinator живут в `coordinator.mjs`. `interview.offered` всегда `false`.
+Пример GitHub Release: [v1.0.0-rc.1](https://github.com/Altarnik88/continuity/releases/tag/v1.0.0-rc.1). Локальная сборка: `node scripts/package-release.mjs dist`, затем `dist/SHA256SUMS`.
 
 ## Установка
 
-Continuity распространяется из [Altarnik88/continuity](https://github.com/Altarnik88/continuity) по лицензии MIT. Он не публикуется в package registry. У Skill нет runtime-шага `npm install`.
+Continuity не публикуется в package registry. Runtime-шага `npm install` нет.
 
-Можно вызывать CLI из клона, скачать zip профиля из [GitHub Releases](https://github.com/Altarnik88/continuity/releases) или скопировать каталог Skill в skills-каталог конкретного агента. Пути discovery различаются. Этот репозиторий не заявляет нативную интеграцию с Codex, Claude, Cursor или любым другим продуктом.
-
-### Профили распространения
-
-| Профиль | Когда | Содержит | Нужен Coordinator? |
-| --- | --- | --- | --- |
-| **Continuity Full** | Нужны память и исполнение в одном дереве | Core + Continuity + Coordinator | Нет; Memory работает отдельно |
-| **Continuity Memory** | Нужны только журнал и inspect/handoff | Core + Continuity + protocol | Нет |
-| **Continuity Coordinator** | Уже есть Memory CLI и нужно исполнение | Coordinator + protocol client + adapters | Подключается к Memory CLI |
-
-Соберите zip из этого дерева и проверьте hashes:
+### Проверить hashes и поставить профиль
 
 ```bash
 node scripts/package-release.mjs dist
-```
-
-Сверьте `dist/SHA256SUMS` с zip-файлами. Устанавливайте в явный destination. Installer отказывается от неявного overwrite, не удаляет данные проекта `.continuity`, поддерживает dry-run и не ходит в сеть:
-
-```bash
 node scripts/install.mjs --profile full --dest /absolute/path/to/dest --dry-run
 node scripts/install.mjs --profile memory --dest /absolute/path/to/dest
 node scripts/install.mjs --profile coordinator --dest /absolute/path/to/dest
 ```
 
-Копирование файлов доказывает, что файлы на месте. Оно не доказывает, что агент их обнаружил, и не является доказательством discovery runtime-адаптера.
+Installer показывает destination, отказывается от неявного overwrite, не удаляет данные `.continuity`, поддерживает dry-run, хеширует скопированные файлы и не ходит в сеть. `--replace-code` — только замена кода. Копирование файлов не доказывает, что агент обнаружил Skill.
 
-Memory-режим автономен: init, record, inspect, handoff, rebuild и приёмка только пользователем. Coordinator-режиму нужен runtime-адаптер. Поставляемый live-адаптер — `local-process` (текущий бинарник Node.js). Принять или отклонить результат может только пользователь.
-
-### Прямой CLI
-
-Клонируйте репозиторий и вызывайте helper абсолютным путём из Git worktree, который Continuity должен осмотреть:
+### Прямой CLI из клона
 
 ```bash
 git clone https://github.com/Altarnik88/continuity.git
 cd continuity
 node continuity/scripts/continuity.mjs --version
+node continuity/scripts/coordinator.mjs --version
 ```
 
-`--version` работает без установки зависимостей. Он печатает `continuity 2.0.0`.
+`--version` работает без установки зависимостей. Continuity печатает `continuity 2.0.0`. Coordinator печатает `continuity-coordinator 1.0.0`.
 
-Из другого целевого репозитория:
+Из другого Git-репозитория:
 
 ```bash
 node "/absolute/path/to/clone/continuity/scripts/continuity.mjs" doctor
+node "/absolute/path/to/clone/continuity/scripts/coordinator.mjs" doctor --root "/absolute/path/to/that/repo"
 ```
 
-`doctor` только читает. На неинициализированном репозитории он сообщает `journal=uninitialized` и `projection=missing` и не создаёт store.
-
-`inspect` требует существующий `HISTORY.ndjson`. До `init` голый `inspect` завершается с `authoritative HISTORY.ndjson is missing`. `inspect --json` и `inspect ready --json` на неинициализированном store сейчас падают с `v2 inspect rendering is not available in this build`. Ни один из этих вызовов store не создаёт.
-
-Необязательный `--root` должен называть точный верхний уровень целевого worktree. Store по умолчанию — `<target-repository>/.continuity`. `CONTINUITY_STORE_DIR` может выбрать другой каталог относительно репозитория. Старые расположения `.codex/project-memory` автоматически не читаются и не импортируются.
-
-`continuity/scripts/project-memory.mjs` — compatibility alias того же CLI.
+`doctor` только читает. На неинициализированном репозитории Continuity сообщает `journal=uninitialized` и не создаёт store. `inspect` требует существующий `HISTORY.ndjson`. Необязательный `--root` должен называть верхний уровень целевого worktree. Store по умолчанию: `<repo>/.continuity`. `CONTINUITY_STORE_DIR` может выбрать другой каталог относительно репозитория. Старые `.codex/project-memory` автоматически не импортируются. `continuity/scripts/project-memory.mjs` — compatibility alias Memory CLI.
 
 ### Установка как Skill агента
 
-Скопируйте только `continuity/` и сохраните имя каталога назначения `continuity`. Путь skills-каталога и способ reload смотрите в документации своего агента.
+Скопируйте только `continuity/` и сохраните имя каталога `continuity`. Путь skills-каталога смотрите в документации своего агента. Этот репозиторий не заявляет нативную интеграцию с конкретным продуктом.
 
 PowerShell:
 
@@ -253,7 +326,7 @@ Copy-Item -LiteralPath $source -Destination $destination -Recurse
 node (Join-Path $destination 'scripts\continuity.mjs') --version
 ```
 
-POSIX shell:
+POSIX:
 
 ```bash
 skills_root=/path/documented-by-your-agent/skills
@@ -262,79 +335,42 @@ cp -R continuity "$skills_root/continuity"
 node "$skills_root/continuity/scripts/continuity.mjs" --version
 ```
 
-Успешное копирование доказывает, что файлы и CLI на месте. Оно не доказывает, что агент обнаружил Skill.
-
-`examples/AGENTS.snippet.md` — заготовка инструкций, которую можно адаптировать.
-
-Обновление: замените только установленный каталог `continuity/`. Удаление: уберите только этот каталог. Не удаляйте `<repository>/.continuity`, если вы отдельно не собираетесь стереть данные непрерывности проекта.
-
 ## Первые пять минут
 
-Запускайте это из Git-репозитория, который Continuity должен помнить. Замените `/absolute/path/to/continuity` на клонированный или установленный каталог Skill.
+Запускайте из Git-репозитория, который Continuity должен помнить.
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" --version
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 ```
 
-`--version` печатает `continuity 2.0.0`. `doctor` только читает. На неинициализированном репозитории он сообщает `journal=uninitialized` и не создаёт store.
-
-Если установлен Full или Coordinator, CLI исполнения отдельный и тоже явный:
-
-```bash
-node "/absolute/path/to/continuity/scripts/coordinator.mjs" --version
-node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .
-```
-
-`--version` печатает `continuity-coordinator 1.0.0`. `coordinator.mjs doctor` сообщает `daemon=false` и не поднимает фоновый процесс.
-
-Если Memory `doctor` сообщает `journal=uninitialized`, просмотрите `continuity/assets/init-v3.template.json`, замените примерные goal и criterion на реальное намерение пользователя, затем:
+Если `doctor` сообщает `journal=uninitialized`, отредактируйте `continuity/assets/init-v3.template.json`, чтобы goal и criterion были намерениями пользователя, затем:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/continuity/assets/init-v3.template.json"
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect
-```
-
-`init` отказывается поверх уже инициализированного store. Шаблон создаёт user-backed goal и один обязательный criterion. Он не создаёт задачи. После этого шаблона `inspect ready --json` сообщает `plan.missing: ["taskAccumulator"]`, пока вы не запишете задачу. Если `plan.missing` непустой, не назначайте работу. Continuity не выдумает недостающие требования.
-
-Запишите одну core-задачу класса `function`:
-
-```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record task --title "Name the work" --priority core --size S --class function --as coordinator --actor-id actor-writer --run-id run-plan-01
 node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect ready --json
 ```
 
-`--as coordinator` здесь только вид писателя. Он не запускает Coordinator.
+`--as coordinator` здесь только вид писателя. После шаблона `inspect ready --json` сообщает `plan.missing: ["taskAccumulator"]`, пока нет задачи. Если `plan.missing` непустой, не назначайте работу.
 
-На v3 store inspect после шаблона выглядит так:
+Чтобы **управлять агентами** на том же репозитории (профиль Full или Coordinator):
 
-```text
-GOAL goal-final Keep truthful project continuity
-CRITERIA criterion-honest
-CONFIRMED none
-UNVERIFIED none
-STALE none
-FAILURES none
-REJECTED none
-BLOCKED none
-CONFLICTS none
-ACTORS user:actor-user
-NEXT none
-PROHIBITED none
+```bash
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" --version
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" plan --root .
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" run --root . --config "/absolute/path/to/continuity/assets/coordinator.config.json"
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" status --root .
 ```
 
-`inspect ready` без `--json` печатает короткий coordination view. `inspect wave` всегда печатает JSON.
+Coordinator не примет результат. Попросите пользователя `record accept --as user` или `record reject --as user --next "…"`.
 
-## Основной цикл
+## Цикл Memory
 
-Этот цикл — для нетривиальной реализации. Read-only, тривиальная, no-op или неопределённая работа может inspect и не должна писать.
-
-`--as` — вид актора. `--actor-id` и `--run-id` называют писателя. `record assign --assignee` называет актора, которому принадлежит assignment; он может отличаться от писателя. Стабильные id выглядят как `actor-writer` и `run-plan-01`.
-
-Core-задача без `--class function` или `--class connector` сохраняется как `unclassified` и не готова до Build-First. Пропуск `--class` не валит запись; `inspect wave` исключает её как `unclassified-task-class`.
-
-Standalone-исполнение может начаться сразу после `record task`:
+Только для нетривиальной работы. `--actor-id` и `--run-id` называют писателя. `record assign --assignee` называет актора, которому принадлежит работа.
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record start --task <task-id> --approach "One sentence" --as subagent --actor-id actor-exec-01 --run-id run-exec-01
@@ -343,417 +379,74 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record evidence --exp
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expected "check passes" --actual "what happened" --as subagent --actor-id actor-exec-01 --run-id run-exec-01
 ```
 
-`record report` не уполномочивает Result. Evidence без `--exit-code` — это `agent_report` и тоже не уполномочивает успех.
+Рецепта `record register` нет. Акторов сохраняют через `record --file` как `agent.registered`, затем `record packet`, `record assign`, `record verify` другим актором и run.
 
-Чтобы назначить работу или записать независимую verification, сначала сохраните акторов. Рецепта `record register` нет. Используйте `record --file` с `agent.registered`:
+Провал: `record fail --why … --impact … --next …`. Повтор — новый `record start` и другой подход.
 
-```json
-{
-  "eventType": "agent.registered",
-  "occurredAt": "2026-08-21T00:00:00.000Z",
-  "actor": { "kind": "coordinator", "id": "actor-writer", "role": "coordinator", "runId": "run-plan-01" },
-  "subject": { "type": "agent", "id": "actor-exec-01" },
-  "supersedes": [],
-  "contradicts": [],
-  "evidenceRefs": [],
-  "sensitivity": "internal",
-  "payload": {
-    "agent": {
-      "actorId": "actor-exec-01",
-      "providerFamily": "local",
-      "modelFamily": "small",
-      "capabilityProfiles": ["implementation"],
-      "costTier": "lowest",
-      "speedTier": "fast",
-      "trustTier": "standard",
-      "calibrationStatus": "calibrated",
-      "kind": "subagent"
-    }
-  }
-}
-```
+Заполнение контекста: `record context --next "Exact next step"`, затем read-only `handoff --task <id>`. Преемник берёт новый актор, run и Attempt.
 
-Зарегистрируйте исполнителя и другого verifier, затем:
-
-```bash
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record --file executor.json
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record --file verifier.json
-node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect wave --json
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record packet --task <task-id> --as coordinator --actor-id actor-writer --run-id run-plan-01
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record assign --task <task-id> --assignee actor-exec-01 --as coordinator --actor-id actor-writer --run-id run-plan-01
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record verify --as subagent --actor-id actor-verify-01 --run-id run-verify-01 --result <result-id> --found 1 --executed 1 --passed 1 --failed 0
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record accept --as user --result <result-id>
-```
-
-`record assign` нужен соответствующий сохранённый packet и зарегистрированный assignee. `record verify` нужен зарегистрированный verifier, чей actor id и run id отличаются от исполнителя и владельца Attempt.
-
-Если попытка провалилась:
-
-```bash
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record fail --why "what broke" --impact "what is stuck" --next "different next step" --as subagent --actor-id actor-exec-01 --run-id run-exec-01
-```
-
-Это дописывает lesson, next action и failure. Повторите через новый `record start` и изменённый подход. Не переписывайте провалившийся Attempt.
-
-Если контекст заполняется:
-
-```bash
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record context --next "Exact next step" --as subagent --actor-id actor-exec-01 --run-id run-exec-01
-node "/absolute/path/to/continuity/scripts/continuity.mjs" handoff --task <task-id>
-```
-
-`handoff` только читает и требует задачу. Преемник использует новый `--actor-id`, `--run-id` и Attempt. После частичного handoff `record start` нужен явный `--task`. Переставайте назначать новые packets около 65% использованного контекста, если среда сообщает достоверную долю; остаток оставьте на focused check или handoff.
-
-Отклонение пользователем тоже требует следующего шага:
-
-```bash
-node "/absolute/path/to/continuity/scripts/continuity.mjs" record reject --as user --result <result-id> --next "Different next step"
-```
-
-После любой записи запустите `validate` и `inspect`. Не редактируйте файлы журнала и проекции вручную. Для lock и восстановления следуйте [security-workflow.md](continuity/references/security-workflow.md). Записи в store из linked worktree отклоняются; мутации делайте из primary worktree.
-
-Команды верхнего уровня:
-
-```text
-usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate|graphify>
-```
-
-`--help` печатает этот usage и путь store по умолчанию. Отдельных `inspect --help` и `record --help` нет. v3 recipes для `record`: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context` и `backlog`. Сырые черновики по-прежнему идут через `record --file` или `record --stdin`.
-
-`migrate` и `graphify` есть в usage. В этой сборке они сообщают, что migration и Graphify недоступны, и выходят без записи.
-
-## Реальные сценарии
-
-| Ситуация | Что обычно ломается | Как помогает Continuity | Чего он не автоматизирует |
-| --- | --- | --- | --- |
-| Долгая фича через много чатов | Следующий чат заново открывает задачу | `inspect` и `handoff` восстанавливают goal, попытки, evidence и следующий шаг | Возобновить сессию предыдущего актора |
-| Brownfield-репозиторий с существующим WIP | Агенты считают грязные файлы чистым листом | `doctor` и inspect сравнивают записанный workspace с живым Git | Выдумать план для незаписанного WIP |
-| Параллельная реализация несколькими агентами | Два агента берут одни и те же файлы | Ready set и assignments исключают пересекающийся ownership | Запустить агентов |
-| Большой рефакторинг с пересекающимся ownership | Коллизии путей видны уже после порчи | Ownership проверяется снова на `record assign` | Слить конфликтующие правки |
-| Security-sensitive ремонт | Отчёт принимают за security PASS | Правила изоляции, независимая verification и приёмка только пользователем остаются разными | Сканировать уязвимости |
-| Миграция базы или схемы | Провалившийся rollback повторяют молча | Провалы и запрещённые подходы остаются в журнале | Выполнить миграцию |
-| Провалившийся подход, который нельзя повторять | Следующий исполнитель видит только последнее резюме | `record fail` хранит симптом, impact, lesson и следующий шаг | Помешать оператору проигнорировать эту запись |
-| Контекстное окно подходит к пределу | Частичная работа исчезает вместе с чатом | `record context` и read-only `handoff` хранят точный следующий шаг | Сам измерить токены |
-| Замена исполнителя или модели | Преемник наследует открытый Attempt | Замена требует новый actor, run и Attempt | Выбрать модель-замену |
-| Независимая проверка перед релизом | Реализатор «проверяет» свою работу | Тот же актор или тот же run — no-effect rejection | Запустить тесты |
-| Приёмка пользователем после технической проверки | Coordinator помечает работу сделанной | Только `--as user` меняет acceptance | Принять работу от имени пользователя |
-| Возврат к заброшенному проекту через недели | Исторический PASS доверяют сдвинутому HEAD | Inspect пересчитывает freshness; stale evidence виден | Сделать rebase, перезапуск или restore backup |
-
-Реалистичный провал, а не переписанный happy path: агент миграции записывает провалившуюся гипотезу rollback и затронутые пути. Преемник читает эту историю в handoff, открывает новый Attempt и пробует другой подход вместо того, чтобы молча повторить тот же rollback.
-
-## Где Continuity действительно нужен
-
-Continuity полезен, когда цена забвения выше цены нескольких ограниченных фактов: долгая работа над репозиторием, больше одного coding agent на одном repo, dirty Git, миграции и security-ремонты, где нельзя потерять историю провалов, и любая задача, в которой нужно отличить «тест только что прошёл» от «пользователь это принял».
-
-Журнал сохраняет, что просили, что пробовали, какие подходы провалились, что доказано, насколько это доказательство свежо, что всё ещё заблокировано, чего пользователь ещё не принял, и что должен сделать следующий актор. Это не архив чата.
-
-## Когда Continuity не нужен
-
-Не используйте Continuity как:
-
-- журнал одноразовой тривиальной правки;
-- хранилище секретов и credentials;
-- свалку сырых логов, diff или вывода команд;
-- замену Git;
-- issue tracker;
-- систему backup;
-- tamper-proof audit database;
-- автоматический process manager;
-- маршрутизатор моделей;
-- daemon или сетевой orchestration-сервис;
-- универсальную нативную интеграцию с каждым coding agent;
-- автоматическое доказательство корректности.
-
-Если работа — одна очевидная правка, сделайте правку. Если это длинная агентная сессия, которую продолжит тот, кого в комнате не было, запишите Continuity.
+Рецепты v3: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` и `graphify` есть в usage и в этой сборке недоступны.
 
 ## Структура репозитория
 
-Это worktree содержит 132 файла. Устанавливаемый Skill — `continuity/` (61 файл). Корневые `tests/` и `scripts/` — разработка и release tooling. GitHub по умолчанию показывает [`README.md`](README.md); этот файл — русская версия.
+В этом worktree **132** отслеживаемых файла. Устанавливаемый Skill — `continuity/` (**61** файл). Корневые `tests/` и `scripts/` — разработка и выпуск.
 
 ```text
 .
-├── continuity/                 # устанавливаемый Skill (копируйте этот каталог)
-│   ├── SKILL.md                # инструкции Skill и frontmatter
-│   ├── assets/                 # init, snapshot и coordinator.config.json
-│   ├── references/             # канонические протокольные документы и JSON Schema
+├── continuity/                      # устанавливаемое дерево продукта
+│   ├── SKILL.md
+│   ├── assets/                      # шаблоны init + coordinator.config.json
+│   ├── references/                  # протокол и JSON Schema
 │   └── scripts/
-│       ├── continuity.mjs      # Memory/Continuity CLI
-│       ├── coordinator.mjs     # необязательный Coordinator CLI
-│       ├── project-memory.mjs  # compatibility alias для continuity.mjs
-│       ├── smokes/             # smokes профилей установки
+│       ├── continuity.mjs           # Memory / Continuity CLI
+│       ├── coordinator.mjs          # Coordinator CLI (управление агентами)
+│       ├── project-memory.mjs       # compatibility alias
+│       ├── smokes/                  # smoke установки профилей
 │       └── lib/
-│           ├── core/           # журнал, recipes, inspect, store
-│           │   └── coordination/
-│           ├── continuity/     # адаптер v2 inspect (в этой сборке stub)
-│           ├── coordinator/    # foreground runtime, адаптеры, run-state
-│           ├── protocol/       # общие ports и client
-│           ├── graphify/       # необязательный адаптер Graphify (stub)
-│           └── migration/      # явная миграция (stub)
-├── tests/                      # тесты репозитория; после установки не нужны
-├── scripts/                    # validate, install, package-release
-├── examples/                   # snapshots, AGENTS snippet, coordinator.config.json
-├── .github/workflows/          # CI
-├── ADAPTERS.md
-├── ARCHITECTURE.md
-├── CHANGELOG.md
-├── COORDINATOR.md
-├── INSTALL.md
-├── MIGRATION.md
-├── PROTOCOL.md
-├── README.md
-├── README.ru.md
-├── RELEASE.md
-├── SECURITY.md
-├── LICENSE
-├── package.json
-└── package-lock.json
+│           ├── core/                # журнал, recipes, inspect, store
+│           │   └── coordination/    # ready set / packets как производные Core
+│           ├── continuity/          # заглушка v2 inspect
+│           ├── coordinator/         # engine, run-state, адаптеры
+│           ├── protocol/            # общие порты и CLI-клиент
+│           ├── graphify/            # заглушка
+│           └── migration/           # заглушка
+├── tests/                           # тесты core, protocol, coordinator
+├── scripts/                         # validate, install, package-release
+├── examples/
+├── ARCHITECTURE.md PROTOCOL.md INSTALL.md
+├── COORDINATOR.md ADAPTERS.md MIGRATION.md RELEASE.md CHANGELOG.md
+├── README.md README.ru.md SECURITY.md LICENSE
+└── package.json
 ```
 
-| Путь | Что это | Нужен после установки? | Тип |
-| --- | --- | --- | --- |
-| `continuity/` | Полный распространяемый Skill | Да | runtime |
-| `continuity/SKILL.md` | Инструкции установленного Skill (`name: continuity`) | Да | runtime docs |
-| `continuity/assets/` | шаблоны init/snapshot и `coordinator.config.json` | Да, для `init` и Coordinator | runtime templates |
-| `continuity/references/` | Протокольные руководства и переносимые JSON Schema | Да, как справка | runtime docs |
-| `continuity/scripts/continuity.mjs` | Канонический Memory/Continuity CLI | Да | runtime |
-| `continuity/scripts/coordinator.mjs` | Необязательный Coordinator CLI | Да, для Coordinator/Full | runtime |
-| `continuity/scripts/project-memory.mjs` | Compatibility alias, который импортирует `continuity.mjs` | Только для старых путей вызова | runtime alias |
-| `continuity/scripts/lib/core/` | Domain, журнал, recipes, inspect, workspace, store | Да | runtime |
-| `continuity/scripts/lib/core/coordination/` | TaskAccumulator, ready set, packets, registry, persist policy | Да | runtime |
-| `continuity/scripts/lib/coordinator/` | Coordinator engine, config, адаптеры, run-state | Да, для Coordinator/Full | runtime |
-| `continuity/scripts/lib/protocol/` | Общие protocol ports и CLI client | Да | runtime |
-| `continuity/scripts/lib/continuity/` | Точка входа v2 inspect | Есть; в этой сборке сообщает, что недоступна | runtime stub |
-| `continuity/scripts/lib/graphify/` | Команда Graphify | Есть; в этой сборке сообщает, что недоступна | runtime stub |
-| `continuity/scripts/lib/migration/` | Команда migrate | Есть; в этой сборке сообщает, что недоступна | runtime stub |
-| `tests/` | Тесты core, protocol, coordinator, package и helpers | Нет | tests |
-| `scripts/` | validate, install, package-release, forward acceptance | Нет | release tooling |
-| `.github/workflows/` | Матрица CI | Нет | release tooling |
-| `examples/` | Snapshot-фикстуры, `AGENTS.snippet.md`, `coordinator.config.json` | По желанию | examples |
-| Документы продукта, `LICENSE`, `package.json` | ARCHITECTURE, PROTOCOL, INSTALL, COORDINATOR, ADAPTERS, MIGRATION, RELEASE, CHANGELOG, README, SECURITY | LICENSE едет вместе с копией Skill | docs / metadata |
+| Путь | Роль |
+| --- | --- |
+| `continuity/scripts/lib/core/` | Memory Core: журнал и проверка |
+| `continuity/scripts/lib/protocol/` | Версионированные порты; Coordinator говорит только через них |
+| `continuity/scripts/lib/coordinator/` | Runtime управления агентами |
+| `continuity/scripts/continuity.mjs` | Публичный Memory CLI |
+| `continuity/scripts/coordinator.mjs` | Публичный Coordinator CLI |
+| `.continuity/` у **целевого репозитория** | Данные проекта; не поставлять и не коммитить в это дерево |
 
-`npm pack --dry-run` содержит 79 файлов: Skill, examples, лицензию, документы продукта, оба README и `package.json`. Этот tarball не является единицей установки. Установка копирует `continuity/` или zip профиля.
-
-<details>
-<summary>Файлы worktree (132)</summary>
-
-```text
-.gitattributes
-.github/workflows/ci.yml
-.gitignore
-ADAPTERS.md
-ARCHITECTURE.md
-CHANGELOG.md
-COORDINATOR.md
-INSTALL.md
-LICENSE
-MIGRATION.md
-PROTOCOL.md
-README.md
-README.ru.md
-RELEASE.md
-SECURITY.md
-continuity/SKILL.md
-continuity/assets/coordinator.config.json
-continuity/assets/init-v2.template.json
-continuity/assets/init-v3.template.json
-continuity/assets/snapshot-v1.template.json
-continuity/references/context-rollover.md
-continuity/references/coordination.md
-continuity/references/inspect-v1.schema.json
-continuity/references/installation.md
-continuity/references/project-execution.md
-continuity/references/projection-v2.schema.json
-continuity/references/scheduling.md
-continuity/references/schema.md
-continuity/references/security-workflow.md
-continuity/references/snapshot-v1.schema.json
-continuity/references/task-accumulator.md
-continuity/references/v2-contract.schema.json
-continuity/references/verification-swarm.md
-continuity/scripts/continuity.mjs
-continuity/scripts/coordinator.mjs
-continuity/scripts/lib/continuity/index.mjs
-continuity/scripts/lib/coordinator/adapters/fake.mjs
-continuity/scripts/lib/coordinator/adapters/index.mjs
-continuity/scripts/lib/coordinator/adapters/local-process.mjs
-continuity/scripts/lib/coordinator/adapters/local-worker.mjs
-continuity/scripts/lib/coordinator/cli.mjs
-continuity/scripts/lib/coordinator/config.mjs
-continuity/scripts/lib/coordinator/engine.mjs
-continuity/scripts/lib/coordinator/index.mjs
-continuity/scripts/lib/coordinator/run-state.mjs
-continuity/scripts/lib/core/cli-v3.mjs
-continuity/scripts/lib/core/cli.mjs
-continuity/scripts/lib/core/coordination/accumulator.mjs
-continuity/scripts/lib/core/coordination/contract.mjs
-continuity/scripts/lib/core/coordination/index.mjs
-continuity/scripts/lib/core/coordination/persist-policy.mjs
-continuity/scripts/lib/core/coordination/registry.mjs
-continuity/scripts/lib/core/coordination/schedule.mjs
-continuity/scripts/lib/core/domain-v2.mjs
-continuity/scripts/lib/core/domain-v3.mjs
-continuity/scripts/lib/core/input-v3.mjs
-continuity/scripts/lib/core/inspect-v3.mjs
-continuity/scripts/lib/core/journal-v2.mjs
-continuity/scripts/lib/core/journal-v3.mjs
-continuity/scripts/lib/core/legacy-v1.mjs
-continuity/scripts/lib/core/recipes-v3.mjs
-continuity/scripts/lib/core/store.mjs
-continuity/scripts/lib/core/workspace-v3.mjs
-continuity/scripts/lib/graphify/index.mjs
-continuity/scripts/lib/migration/index.mjs
-continuity/scripts/lib/protocol/adapter.mjs
-continuity/scripts/lib/protocol/client.mjs
-continuity/scripts/lib/protocol/compatibility.mjs
-continuity/scripts/lib/protocol/index.mjs
-continuity/scripts/lib/protocol/ports.mjs
-continuity/scripts/lib/protocol/secrets.mjs
-continuity/scripts/lib/protocol/validate.mjs
-continuity/scripts/project-memory.mjs
-continuity/scripts/smokes/coordinator.mjs
-continuity/scripts/smokes/full.mjs
-continuity/scripts/smokes/memory.mjs
-examples/AGENTS.snippet.md
-examples/coordinator.config.json
-examples/snapshot.minimal.json
-examples/snapshot.source-backed.json
-examples/source-anchor.md
-package-lock.json
-package.json
-scripts/install.mjs
-scripts/package-inventory.mjs
-scripts/package-release.mjs
-scripts/release-profiles.mjs
-scripts/test-continuity.mjs
-scripts/test-coordinator.mjs
-scripts/test-forward-acceptance.mjs
-scripts/test-package-install.mjs
-scripts/test-package.mjs
-scripts/test-protocol.mjs
-scripts/test-release.mjs
-scripts/test-validate-package.mjs
-scripts/validate-package.mjs
-scripts/zip-store.mjs
-tests/coordinator/runtime.test.mjs
-tests/coordinator/security.test.mjs
-tests/core/actor-identity-cli.test.mjs
-tests/core/adverse-retry.test.mjs
-tests/core/all-event-paths.test.mjs
-tests/core/append-freshness-authority.test.mjs
-tests/core/atomic-recipes.test.mjs
-tests/core/bindings.test.mjs
-tests/core/cli-contract.test.mjs
-tests/core/continuity-runtime.test.mjs
-tests/core/contracts.test.mjs
-tests/core/coordination.test.mjs
-tests/core/criterion-revision-owner.test.mjs
-tests/core/duplicate-event.test.mjs
-tests/core/failure-schema-parity.test.mjs
-tests/core/final-goal-authority.test.mjs
-tests/core/integration-seams.test.mjs
-tests/core/journal-cli.test.mjs
-tests/core/migration-invariants.test.mjs
-tests/core/projection-order.test.mjs
-tests/core/required-goal-task.test.mjs
-tests/core/schemas.test.mjs
-tests/core/security.test.mjs
-tests/core/stdin-bound.test.mjs
-tests/core/suite-aggregator.test.mjs
-tests/core/task-revised.test.mjs
-tests/core/transitions.test.mjs
-tests/core/truth-closure.test.mjs
-tests/core/v3-crash-concurrent.test.mjs
-tests/core/v3-e2e.test.mjs
-tests/core/workspace-fingerprint.test.mjs
-tests/helpers/repository.mjs
-tests/helpers/suite-aggregator.mjs
-tests/helpers/v2-contract-fixture.mjs
-tests/protocol/protocol.test.mjs
-```
-
-</details>
+`npm pack --dry-run` показывает 79 файлов. Этот tarball — не единица установки. Ставят из `continuity/` или zip профиля.
 
 ## Модель безопасности
 
-Continuity локален и fail-closed. Это не security-продукт.
+Локально и fail-closed. Это не security-продукт.
 
-Что он делает:
+Журнал с hash-цепочкой, отказ path traversal и ряда шаблонов секретов, отказ от тихих правок журнала, отказ от автоматического импорта legacy и слияния журналов, нет daemon. Coordinator пишет состояние run рядом с журналом, не в него.
 
-- работает локально с Node.js и Git; для обычного использования не открывает сетевой клиент;
-- держит store внутри целевого репозитория, обычными файлами ограниченного размера;
-- hash-chain `HISTORY.ndjson`, чтобы читатели могли заметить сломанную цепочку;
-- отвергает path traversal, reparse/alias escapes и ряд узнаваемых шаблонов секретов и частных данных;
-- отказывается от тихого редактирования журнала: записи идут через helper;
-- отказывается автоматически импортировать legacy store `.codex/project-memory`;
-- отказывается автоматически сливать расходящиеся журналы;
-- считает Graphify receipts неуполномочивающими, если они есть;
-- не запускает daemon, interview или автоматический установщик моделей.
+Это не сканер секретов, не DLP и не tamper-proof аудит. Шаблоны пропускают закодированные секреты. Тот, кто может переписать и файлы, и проверку, может пересобрать цепочку. Не записывайте credentials, токены, `.env`, персональные данные, сырые логи, diff и абсолютные домашние пути. Уязвимости — через [security advisories](https://github.com/Altarnik88/continuity/security/advisories/new).
 
-Чего он не делает:
+## Совместимость и ограничения
 
-- это не сканер секретов, классификатор приватности, DLP или система контроля доступа;
-- успешные `validate`, dry-run или lint не доказывают, что содержимое безопасно;
-- актор, который может переписать и репозиторий, и checker, может пересобрать hash chain;
-- `CURRENT.json` не является backup.
-
-Не записывайте credentials, токены, cookies, строки подключения, присваивания `.env`, персональные данные, клиентские payload, сырые строки БД, сырые diff, логи, stack dump, вывод команд или абсолютные локальные пути. Уязвимости сообщайте приватно через [Continuity security advisories](https://github.com/Altarnik88/continuity/security/advisories/new). Не прикладывайте настоящий Continuity store к публичному issue.
-
-## Совместимость и legacy-идентификаторы
-
-Имя продукта — Continuity.
-
-`project-memory.coordinator.v1` остаётся идентификатором протокола Coordinator, чтобы существующие потребители не переименовывали контракт. Это не Skill, не зависимость и не название продукта.
-
-`continuity/scripts/project-memory.mjs` — compatibility alias, который загружает `continuity.mjs`. Новые документы и вызовы должны использовать `continuity.mjs`.
-
-Store по умолчанию — `.continuity`. Legacy-каталог `.codex/project-memory` можно обнаружить как metadata для миграции под контролем оператора. Эта сборка не читает те записи автоматически, а `migrate` сообщает, что поддержка миграции недоступна.
-
-## Текущие ограничения
-
-- Предпочтительные новые store — schema v3. Snapshot store schema v1 и event store schema v2 в helper ещё существуют.
-- v2 inspect rendering в этой сборке недоступен.
-- `migrate` и `graphify` есть на поверхности CLI и недоступны в этой сборке.
-- На v3 store `history` сейчас рисует inspect view, а не хвост событий. `--tail` относится к v1/v2 history.
-- `handoff` требует задачу. Это не замена `record context`.
-- `inspect` не инициализирует store. На пустом репозитории используйте `doctor`.
-- Отдельного `--help` для `inspect`, `record` или команд Coordinator нет.
-- Рецепта `record register` нет. Акторы для assignment или verification должны быть сохранены через `record --file` как `agent.registered`.
-- Continuity `--version` печатает `2.0.0`; Coordinator `--version` печатает `continuity-coordinator 1.0.0`; версия `package.json` — `1.0.0`.
-- Node engines — `>=22 <25`. Формулировка «Node.js 22+» в тексте Skill всё равно означает поддерживаемый runtime Node 22 или 24.
-- Журнал ограничен (8 MiB) и линеен. Нет автоматического rollover, архива, upgrade или слияния журналов.
-- Multi-event recipes делают preflight, затем дописывают последовательно. Это не одна транзакционная запись.
-- Планирование ready set детерминировано, но Continuity не запускает назначенных акторов.
-- Pattern guards — best-effort. Они пропустят закодированные секреты и нетипичные PII.
-- Этот репозиторий не заявляет нативный discovery каждым coding agent.
+- Идентификатор протокола `project-memory.coordinator.v1` стабилен.
+- Предпочтительны store схемы v3. Снимки v1 и событийные store v2 ещё есть. v2 inspect, `migrate` и `graphify` сообщают, что недоступны.
+- Continuity `--version` — `2.0.0`; Coordinator `--version` — `continuity-coordinator 1.0.0`; `package.json` — `1.0.0`.
+- `local-process` доказывает реальный локальный процесс Node. Он не доказывает, что работала hosted-модель.
+- Планирование ready set детерминировано; Memory не запускает назначенных акторов. Coordinator запускает — через явно заданный адаптер.
 
 ## Разработка и проверка
-
-Локальный `npm run validate` на этом трёхслойном worktree:
-
-```text
-package validation: ok (worktree 132 files; skill 61; repo-only 0; metadata 71; npm-pack 79 files, not the standalone Skill artifact)
-```
-
-`npm run check` это:
-
-```bash
-npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:release
-```
-
-GitHub Actions CI использует `ubuntu-latest`, `windows-latest` и `macos-latest` с Node 22 и 24, ровно один pinned checkout, `timeout-minutes: 15`, `npm ci --ignore-scripts`, именованные lane protocol/coordinator, Combined check (`npm run check`), smokes профилей и `npm run audit:dev`. Combined check выполняет локальный агрегат, а не только упоминает его.
-
-Локальные пробы helper:
-
-- `node continuity/scripts/continuity.mjs --version` → `continuity 2.0.0`
-- `node continuity/scripts/coordinator.mjs --version` → `continuity-coordinator 1.0.0`
-- `doctor` на пустом Git worktree → `journal=uninitialized`
-- `coordinator.mjs doctor --root .` → `daemon=false`, `adapter=local-process`, `adapter-class=live`
-- `init --schema 3 --file continuity/assets/init-v3.template.json` → `continuity v3 initialized`
-- `inspect`, `inspect ready --json`, `inspect wave --json` и `record task --class function` ведут себя как описано выше
-- `graphify observe` → Graphify support is not available (exit 4)
-- `migrate --to 2` → migration support is not available (exit 3)
-
-Команды для контрибьютора:
 
 ```bash
 npm ci --ignore-scripts
@@ -761,55 +454,26 @@ npm run check
 npm run audit:dev
 ```
 
+`npm run check` — это `validate && test && test:package && test:forward && test:release`.
+
+Матрица CI: Ubuntu, Windows, macOS × Node 22 и 24. Combined check реально выполняет `npm run check`. Исторический PASS не является текущим; смотрите Actions для этого SHA.
+
 ## FAQ
 
-**Почему в репозитории всё ещё есть `project-memory`?**
+**Почему недостаточно одной Memory?**  
+Memory помнит. Она не запускает исполнителей, не изолирует пересекающийся ownership в момент старта процесса и не гоняет независимого verifier-актора. Full или Coordinator скачивают, когда нужен этот контур управления.
 
-Потому что `project-memory.coordinator.v1` — стабильный id протокола, а `scripts/project-memory.mjs` — compatibility alias. Продукт называется Continuity. Эти строки — не второй Skill и не обязательный Coordinator.
+**Заменяет ли Coordinator Continuity?**  
+Нет. Coordinator бесполезен без Memory/Continuity endpoint или локального CLI. Отдельного дублирующего журнала у него нет.
 
-**Нужен ли Continuity Coordinator?**
+**Может ли Coordinator принять работу?**  
+Нет. Только `--as user`.
 
-Нет. Standalone Memory/Continuity — полноценный продукт. Coordinator — необязательный поставляемый CLI (`continuity/scripts/coordinator.mjs`). Memory его не запускает.
+**Какой профиль скачивать?**  
+Full — обе работы. Memory — только журнал. Coordinator — если Memory уже есть в другом месте. Проверяйте `SHA256SUMS`.
 
-**Какой профиль скачивать?**
-
-Full — если нужны память и исполнение вместе. Memory — если нужны только журнал и inspect/handoff. Coordinator — если совместимый Memory CLI уже есть. Перед установкой проверьте `SHA256SUMS`. См. [Установка](#установка).
-
-**Нужен ли Continuity planner?**
-
-Нет. Передайте готовые goal, criteria и plan сами или пусть любой planning-инструмент подготовит этот вход. Недостающий вход остаётся `plan.missing`.
-
-**Почему в standalone-примерах есть `--as coordinator`?**
-
-`--as` — вид актора, а не запуск процесса. Helper по умолчанию использует вид `coordinator`, если `--as` опущен. Это не запускает Coordinator.
-
-**Почему `record assign` или `record verify` падают с unregistered actor?**
-
-Assignment и независимая verification требуют сохранённую запись `agent.registered` для этого актора. Одних разных `--actor-id` недостаточно.
-
-**Можно ли указать агенту на этот GitHub-репозиторий и ждать нативный discovery?**
-
-Не по этому README. Скопируйте `continuity/` в skills-каталог, который документирует ваш агент, или вызывайте CLI по пути.
-
-**Журнал tamper-proof?**
-
-Нет. Hash-chaining ловит случайную или неаккуратную порчу. Он не останавливает того, кто может переписать файлы и checker.
-
-**Можно ли слить два Continuity store?**
-
-Нет. Не используйте union merge driver для `HISTORY.ndjson`. Linked worktree могут inspect; расходящихся писателей быть не должно.
-
-**Что если нет `CURRENT.json`?**
-
-Журнал остаётся авторитетным для записанных событий. `inspect` остаётся read-only. `rebuild` используйте только как намеренный ремонт проекции на v3 store.
-
-**Почему `inspect` падает до `init`?**
-
-Потому что журнала ещё нет. `doctor` — зонд неинициализированного store. `inspect` не создаёт `HISTORY.ndjson`.
-
-**Почему версии CLI и пакета разные?**
-
-Continuity `--version` печатает `continuity 2.0.0`. Coordinator `--version` печатает `continuity-coordinator 1.0.0`. Версия `package.json` — `1.0.0`. Это независимые строки.
+**Журнал tamper-proof?**  
+Нет. Hash-цепочка ловит случайную поломку.
 
 ## Лицензия
 
@@ -817,29 +481,11 @@ Continuity `--version` печатает `continuity 2.0.0`. Coordinator `--versi
 
 ## Как начать
 
-1. Клонируйте [Altarnik88/continuity](https://github.com/Altarnik88/continuity).
-2. Вызывайте `continuity/scripts/continuity.mjs` абсолютным путём или скопируйте `continuity/` в skills-каталог своего агента.
-3. Из целевого Git-репозитория запустите `--version` и `doctor`.
-4. Если store неинициализирован, отредактируйте v3-шаблон и выполните `init --schema 3 --file .../init-v3.template.json`.
-5. Запишите задачу класса `function` или `connector`, приложите command/test evidence, проверьте зарегистрированным другим актором и run и дайте принять результат только пользователю.
+1. Клонируйте [Altarnik88/continuity](https://github.com/Altarnik88/continuity) или скачайте [zip релиза](https://github.com/Altarnik88/continuity/releases).
+2. Если скачали zip — сверьте hashes.
+3. Из целевого Git-репозитория запустите Continuity `--version` и `doctor`.
+4. Инициализируйте v3 store из отредактированного шаблона, запишите задачу `function` или `connector`, приложите command/test evidence.
+5. Если нужно управление агентами — `coordinator.mjs doctor`, затем `plan` и `run`.
+6. Принять или отклонить может только пользователь.
 
-Дальше читайте:
-
-- [Install](INSTALL.md)
-- [Architecture](ARCHITECTURE.md)
-- [Coordinator](COORDINATOR.md)
-- [Adapters](ADAPTERS.md)
-- [Protocol](PROTOCOL.md)
-- [Migration](MIGRATION.md)
-- [Release](RELEASE.md)
-- [Инструкции Skill](continuity/SKILL.md)
-- [Установка](continuity/references/installation.md)
-- [Исполнение проекта](continuity/references/project-execution.md)
-- [Контракт Coordinator](continuity/references/coordination.md)
-- [Накопление задач](continuity/references/task-accumulator.md)
-- [Планирование](continuity/references/scheduling.md)
-- [Context rollover](continuity/references/context-rollover.md)
-- [Независимая проверка](continuity/references/verification-swarm.md)
-- [Snapshot schema](continuity/references/schema.md)
-- [Security workflow](continuity/references/security-workflow.md)
-- [SECURITY.md](SECURITY.md)
+Дальше: [INSTALL.md](INSTALL.md), [ARCHITECTURE.md](ARCHITECTURE.md), [COORDINATOR.md](COORDINATOR.md), [ADAPTERS.md](ADAPTERS.md), [PROTOCOL.md](PROTOCOL.md), [SECURITY.md](SECURITY.md), [continuity/SKILL.md](continuity/SKILL.md).
