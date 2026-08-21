@@ -260,8 +260,6 @@ No Coordinator is required. Packets and assignments are optional until you want 
 4. `status` / `resume` / `cancel` observe or continue that run.
 5. User acceptance stays `pending` until the user writes `--as user`.
 
-Graphify is an optional navigation adapter, not a source of truth. In this build `graphify` reports that support is not available.
-
 ## Distribution profiles
 
 One canonical source tree. Three downloadable shapes:
@@ -333,6 +331,22 @@ cp -R continuity "$skills_root/continuity"
 node "$skills_root/continuity/scripts/continuity.mjs" --version
 ```
 
+### Cursor and Grok Build
+
+Copy or check out this repository. Continuity is usable from those tools in this checkout; this is not a native marketplace listing.
+
+- **Grok Build** reads root `AGENTS.md` and `.grok/skills` (and `.grok/rules` when present).
+- **Cursor** reads `.cursor/skills` and `.cursor/rules`.
+
+Those files point at the canonical Skill `continuity/SKILL.md` and the CLIs in this checkout:
+
+```bash
+node continuity/scripts/continuity.mjs
+node continuity/scripts/coordinator.mjs
+```
+
+They do not replace copying `continuity/` for a generic agent install.
+
 ## First five minutes
 
 Run from the Git repository Continuity should remember.
@@ -387,7 +401,7 @@ v3 recipes: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `
 
 ## Repository structure
 
-This worktree contains **132** tracked files. The installable Skill is `continuity/` (**61** files). Root `tests/` and `scripts/` are development and release tooling.
+This worktree contains **137** tracked files. The installable Skill is `continuity/` (**61** files). Root `tests/` and `scripts/` are development and release tooling.
 
 ```text
 .
@@ -408,10 +422,12 @@ This worktree contains **132** tracked files. The installable Skill is `continui
 │           ├── protocol/            # shared ports and CLI client
 │           ├── graphify/            # stub
 │           └── migration/           # stub
+├── .cursor/                         # Cursor skills and rules (thin pointers)
+├── .grok/                           # Grok Build skills and rules (thin pointers)
 ├── tests/                           # core, protocol, coordinator tests
 ├── scripts/                         # validate, install, package-release
 ├── examples/
-├── ARCHITECTURE.md PROTOCOL.md INSTALL.md
+├── AGENTS.md ARCHITECTURE.md PROTOCOL.md INSTALL.md
 ├── COORDINATOR.md ADAPTERS.md MIGRATION.md RELEASE.md CHANGELOG.md
 ├── README.md README.ru.md SECURITY.md LICENSE
 └── package.json

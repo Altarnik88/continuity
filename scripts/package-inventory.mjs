@@ -13,6 +13,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const SKILL_PREFIX = 'continuity/';
+export const CANONICAL_SKILL_MANIFEST = `${SKILL_PREFIX}SKILL.md`;
+export const VENDOR_SKILL_ROOTS = Object.freeze(['.agents/skills/', '.cursor/skills/', '.grok/skills/']);
 export const RUNTIME_STORE_PREFIX = '.continuity/';
 export const LEGACY_RUNTIME_STORE_PREFIX = '.codex/project-memory/';
 export const REPO_ONLY_PREFIXES = Object.freeze([]);
@@ -21,12 +23,21 @@ export const FORBIDDEN_PREFIXES = Object.freeze([
   RUNTIME_STORE_PREFIX,
   '.codex/',
 ]);
-export const REPO_METADATA_PREFIXES = Object.freeze(['.github/', 'examples/', 'scripts/', 'tests/']);
+export const REPO_METADATA_PREFIXES = Object.freeze([
+  '.agents/',
+  '.cursor/',
+  '.github/',
+  '.grok/',
+  'examples/',
+  'scripts/',
+  'tests/',
+]);
 export const PUBLIC_DIAGRAM_FILES = Object.freeze([]);
 export const REPO_METADATA_EXACT = Object.freeze([
   '.gitattributes',
   '.gitignore',
   'ADAPTERS.md',
+  'AGENTS.md',
   'ARCHITECTURE.md',
   'CHANGELOG.md',
   'COORDINATOR.md',
@@ -44,10 +55,15 @@ export const REPO_METADATA_EXACT = Object.freeze([
 ]);
 export const LOCALIZED_README_FILES = Object.freeze(['README.ru.md']);
 export const REQUIRED_REPO_METADATA = Object.freeze([
+  '.cursor/rules/continuity.mdc',
+  '.cursor/skills/continuity/SKILL.md',
   '.gitattributes',
   '.github/workflows/ci.yml',
   '.gitignore',
+  '.grok/rules/continuity.md',
+  '.grok/skills/continuity/SKILL.md',
   'ADAPTERS.md',
+  'AGENTS.md',
   'ARCHITECTURE.md',
   'CHANGELOG.md',
   'COORDINATOR.md',
@@ -176,7 +192,7 @@ export const MAX_NPM_PACK_BYTES = 2 * 1024 * 1024;
 export const IMAGE_EXTENSIONS = Object.freeze(new Set([
   '.avif', '.bmp', '.gif', '.ico', '.jpeg', '.jpg', '.png', '.svg', '.tif', '.tiff', '.webp',
 ]));
-const PUBLIC_TEXT_EXTENSIONS = new Set(['.json', '.md', '.mjs', '.yaml', '.yml']);
+const PUBLIC_TEXT_EXTENSIONS = new Set(['.json', '.md', '.mdc', '.mjs', '.yaml', '.yml']);
 const PUBLIC_TEXT_EXACT = new Set(['.gitattributes', '.gitignore', 'LICENSE']);
 
 export class InventoryError extends Error {
@@ -192,6 +208,21 @@ function fail(message) {
 
 export function posixPath(file) {
   return String(file).split(path.sep).join('/');
+}
+
+export function parseSkillFrontmatterName(text) {
+  const normalized = String(text).replaceAll('\r\n', '\n');
+  const match = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(normalized);
+  if (!match) return null;
+  for (const line of match[1].split('\n')) {
+    const nameMatch = /^name:\s*(.+?)\s*$/.exec(line);
+    if (nameMatch) return nameMatch[1].replace(/^['"]|['"]$/g, '').trim();
+  }
+  return null;
+}
+
+export function isAllowedVendorSkillManifest(file) {
+  return VENDOR_SKILL_ROOTS.some((root) => file === `${root}continuity/SKILL.md`);
 }
 
 export function assertPortableGitPath(file) {
@@ -416,8 +447,19 @@ export function assertRepositoryBoundaries(root, files = listRepositoryFiles(roo
     fail('continuity Skill subtree must be a real directory');
   }
   const skillManifests = files.filter((file) => file === 'SKILL.md' || file.endsWith('/SKILL.md'));
-  if (skillManifests.length !== 1 || skillManifests[0] !== 'continuity/SKILL.md') {
+  if (!skillManifests.includes(CANONICAL_SKILL_MANIFEST)) {
     fail('repository must contain exactly one Skill subtree: continuity/');
+  }
+  for (const manifest of skillManifests) {
+    if (manifest === CANONICAL_SKILL_MANIFEST) continue;
+    if (!isAllowedVendorSkillManifest(manifest)) {
+      fail('repository must contain exactly one Skill subtree: continuity/');
+    }
+    const absolute = path.join(resolvedRoot, ...manifest.split('/'));
+    const name = parseSkillFrontmatterName(readFileSync(absolute, 'utf8'));
+    if (name !== 'continuity') {
+      fail(`vendor Skill copy must keep frontmatter name: continuity (${manifest})`);
+    }
   }
 
   for (const file of files) {

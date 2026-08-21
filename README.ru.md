@@ -262,8 +262,6 @@ Coordinator не нужен. Пакеты и assignments необязатель�
 4. `status` / `resume` / `cancel` наблюдают или продолжают этот run.
 5. Приёмка пользователя остаётся `pending`, пока пользователь не запишет `--as user`.
 
-Graphify — необязательный навигационный адаптер, не источник истины. В этой сборке `graphify` сообщает, что поддержка недоступна.
-
 ## Профили распространения
 
 Одно каноническое дерево исходников. Три скачиваемых формы:
@@ -335,6 +333,22 @@ cp -R continuity "$skills_root/continuity"
 node "$skills_root/continuity/scripts/continuity.mjs" --version
 ```
 
+### Cursor and Grok Build
+
+Скопируйте или клонируйте этот репозиторий. Continuity можно вызывать из этих инструментов в этом checkout; это не публикация в marketplace.
+
+- **Grok Build** читает корневой `AGENTS.md` и `.grok/skills` (и `.grok/rules`, если они есть).
+- **Cursor** читает `.cursor/skills` и `.cursor/rules`.
+
+Эти файлы указывают на канонический Skill `continuity/SKILL.md` и CLI в этом checkout:
+
+```bash
+node continuity/scripts/continuity.mjs
+node continuity/scripts/coordinator.mjs
+```
+
+Они не заменяют копирование `continuity/` для обычной установки как Skill агента.
+
 ## Первые пять минут
 
 Запускайте из Git-репозитория, который Continuity должен помнить.
@@ -389,7 +403,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 
 ## Структура репозитория
 
-В этом worktree **132** отслеживаемых файла. Устанавливаемый Skill — `continuity/` (**61** файл). Корневые `tests/` и `scripts/` — разработка и выпуск.
+В этом worktree **137** отслеживаемых файла. Устанавливаемый Skill — `continuity/` (**61** файл). Корневые `tests/` и `scripts/` — разработка и выпуск.
 
 ```text
 .
@@ -410,10 +424,12 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 │           ├── protocol/            # общие порты и CLI-клиент
 │           ├── graphify/            # заглушка
 │           └── migration/           # заглушка
+├── .cursor/                         # Cursor skills и rules (тонкие указатели)
+├── .grok/                           # Grok Build skills и rules (тонкие указатели)
 ├── tests/                           # тесты core, protocol, coordinator
 ├── scripts/                         # validate, install, package-release
 ├── examples/
-├── ARCHITECTURE.md PROTOCOL.md INSTALL.md
+├── AGENTS.md ARCHITECTURE.md PROTOCOL.md INSTALL.md
 ├── COORDINATOR.md ADAPTERS.md MIGRATION.md RELEASE.md CHANGELOG.md
 ├── README.md README.ru.md SECURITY.md LICENSE
 └── package.json

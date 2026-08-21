@@ -17,6 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  CANONICAL_SKILL_MANIFEST,
   DISTRIBUTABLE_FILES,
   REQUIRED_SKILL_FILES,
   RUNTIME_STORE_PREFIX,
@@ -35,10 +36,12 @@ import {
   expectedNpmPackFiles,
   inventoryFromGit,
   inventoryFromWorktree,
+  isAllowedVendorSkillManifest,
   listGitIndex,
   listRepositoryFiles,
   matchesDistributableAllowlist,
   parseNpmPackJson,
+  parseSkillFrontmatterName,
   runNpmPackDryRun,
 } from './package-inventory.mjs';
 import { assertCiWorkflowYaml } from './validate-package.mjs';
@@ -91,14 +94,26 @@ export const CASES = [
     id: 'PKG-001-classify-clean-repository-paths',
     run() {
       assert.equal(SKILL_PREFIX, 'continuity/');
+      assert.equal(CANONICAL_SKILL_MANIFEST, 'continuity/SKILL.md');
       assert.equal(classifyGitPath('continuity/SKILL.md'), 'skill');
       assert.equal(classifyGitPath('.autopilot/state.js'), 'forbidden');
       assert.equal(classifyGitPath('.continuity/CURRENT.json'), 'forbidden');
       assert.equal(classifyGitPath('.codex/project-memory/CURRENT.json'), 'forbidden');
       assert.equal(classifyGitPath('package.json'), 'repo-metadata');
+      assert.equal(classifyGitPath('AGENTS.md'), 'repo-metadata');
       assert.equal(classifyGitPath('scripts/validate-package.mjs'), 'repo-metadata');
+      assert.equal(classifyGitPath('.cursor/skills/continuity/SKILL.md'), 'repo-metadata');
+      assert.equal(classifyGitPath('.grok/skills/continuity/SKILL.md'), 'repo-metadata');
+      assert.equal(classifyGitPath('.agents/skills/continuity/SKILL.md'), 'repo-metadata');
+      assert.equal(classifyGitPath('.cursor/rules/continuity.mdc'), 'repo-metadata');
+      assert.equal(classifyGitPath('.grok/rules/continuity.md'), 'repo-metadata');
       assert.equal(classifyGitPath('docs/assets/hero.svg'), 'unclassified');
       assert.equal(classifyGitPath('other-skill/SKILL.md'), 'unclassified');
+      assert.equal(isAllowedVendorSkillManifest('.cursor/skills/continuity/SKILL.md'), true);
+      assert.equal(isAllowedVendorSkillManifest('.grok/skills/continuity/SKILL.md'), true);
+      assert.equal(isAllowedVendorSkillManifest('.agents/skills/continuity/SKILL.md'), true);
+      assert.equal(isAllowedVendorSkillManifest('other-skill/SKILL.md'), false);
+      assert.equal(parseSkillFrontmatterName('---\nname: continuity\n---\n'), 'continuity');
     },
   },
   {
@@ -171,10 +186,15 @@ export const CASES = [
     id: 'PKG-007-missing-required-skill-fails',
     run() {
       const inventory = buildInventory([
+        '.cursor/rules/continuity.mdc',
+        '.cursor/skills/continuity/SKILL.md',
         '.gitattributes',
         '.github/workflows/ci.yml',
         '.gitignore',
+        '.grok/rules/continuity.md',
+        '.grok/skills/continuity/SKILL.md',
         'ADAPTERS.md',
+        'AGENTS.md',
         'ARCHITECTURE.md',
         'CHANGELOG.md',
         'COORDINATOR.md',
@@ -388,6 +408,58 @@ export const CASES = [
       try {
         mkdirSync(path.join(root, 'other-skill'), { recursive: true });
         writeFileSync(path.join(root, 'other-skill', 'SKILL.md'), '---\nname: other-skill\n---\n');
+        assert.throws(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)), /exactly one Skill subtree/);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'PKG-028-allow-vendor-skill-pointers',
+    run() {
+      const root = makeBoundaryRoot('vendor-ok');
+      const pointer = '---\nname: continuity\ndescription: pointer\n---\n';
+      try {
+        for (const manifest of [
+          '.cursor/skills/continuity/SKILL.md',
+          '.grok/skills/continuity/SKILL.md',
+          '.agents/skills/continuity/SKILL.md',
+        ]) {
+          const absolute = path.join(root, ...manifest.split('/'));
+          mkdirSync(path.dirname(absolute), { recursive: true });
+          writeFileSync(absolute, pointer);
+        }
+        assert.doesNotThrow(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)));
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'PKG-029-reject-vendor-skill-wrong-name',
+    run() {
+      const root = makeBoundaryRoot('vendor-name');
+      try {
+        const absolute = path.join(root, '.cursor', 'skills', 'continuity', 'SKILL.md');
+        mkdirSync(path.dirname(absolute), { recursive: true });
+        writeFileSync(absolute, '---\nname: other\n---\n');
+        assert.throws(
+          () => assertRepositoryBoundaries(root, listRepositoryFiles(root)),
+          /frontmatter name: continuity/,
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  },
+  {
+    id: 'PKG-030-reject-vendor-skill-wrong-path',
+    run() {
+      const root = makeBoundaryRoot('vendor-path');
+      try {
+        const absolute = path.join(root, '.cursor', 'skills', 'other', 'SKILL.md');
+        mkdirSync(path.dirname(absolute), { recursive: true });
+        writeFileSync(absolute, '---\nname: continuity\n---\n');
         assert.throws(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)), /exactly one Skill subtree/);
       } finally {
         rmSync(root, { recursive: true, force: true });
