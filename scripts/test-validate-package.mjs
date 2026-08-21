@@ -174,9 +174,17 @@ export const CASES = [
         '.gitattributes',
         '.github/workflows/ci.yml',
         '.gitignore',
+        'ADAPTERS.md',
+        'ARCHITECTURE.md',
+        'CHANGELOG.md',
+        'COORDINATOR.md',
+        'INSTALL.md',
         'LICENSE',
+        'MIGRATION.md',
+        'PROTOCOL.md',
         'README.md',
         'README.ru.md',
+        'RELEASE.md',
         'SECURITY.md',
         'examples/coordinator.config.json',
         'examples/snapshot.minimal.json',
@@ -297,7 +305,23 @@ export const CASES = [
   {
     id: 'PKG-015-distributable-allowlist-exact',
     run() {
-      const expected = ['continuity', 'LICENSE', 'README.md', 'README.ru.md', 'SECURITY.md', 'examples', 'package.json'];
+      const expected = [
+        'continuity',
+        'ADAPTERS.md',
+        'ARCHITECTURE.md',
+        'CHANGELOG.md',
+        'COORDINATOR.md',
+        'INSTALL.md',
+        'LICENSE',
+        'MIGRATION.md',
+        'PROTOCOL.md',
+        'README.md',
+        'README.ru.md',
+        'RELEASE.md',
+        'SECURITY.md',
+        'examples',
+        'package.json',
+      ];
       const packageJson = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
       assert.deepEqual([...DISTRIBUTABLE_FILES], expected);
       assert.deepEqual(packageJson.files, expected);

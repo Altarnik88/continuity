@@ -19,9 +19,17 @@
   },
   "files": [
     "continuity",
+    "ADAPTERS.md",
+    "ARCHITECTURE.md",
+    "CHANGELOG.md",
+    "COORDINATOR.md",
+    "INSTALL.md",
     "LICENSE",
+    "MIGRATION.md",
+    "PROTOCOL.md",
     "README.md",
     "README.ru.md",
+    "RELEASE.md",
     "SECURITY.md",
     "examples",
     "package.json"

@@ -4,9 +4,52 @@
 
 **Локальная, source-backed непрерывность проекта, которая переживает смену чатов, моделей и исполнителей.**
 
-Continuity — это локальный Node.js CLI и Skill. Он пишет ограниченный журнал рядом с Git-репозиторием, чтобы следующий чат, другая модель или новый исполнитель могли восстановить цели, провалившиеся попытки, доказательства и следующие шаги вместо того, чтобы угадывать. Журнал авторитетен для того, что Continuity действительно записал. Живые файлы, Git и пользователь остаются авторитетны для самого проекта. Исторический PASS не является текущей истиной.
+Continuity — локальный Node.js продукт из трёх строго разделённых слоёв:
 
-Это самостоятельный, основанный на исходниках слой непрерывности проекта для coding agents, с необязательным протоколом координации для агентных сред.
+1. **Project Memory Core** — append-only журнал целей, попыток, evidence, verification и приёмки пользователя.
+2. **Continuity** — плоскость чтения: inspect, ready set, freshness, handoff.
+3. **Coordinator** — необязательный runtime исполнения. Он запускает адаптеры и пишет только через CLI Core.
+
+Журнал авторитетен для того, что Continuity действительно записал. Живые файлы, Git и пользователь остаются авторитетны для самого проекта. Исторический PASS не является текущей истиной.
+
+## Какой профиль скачивать
+
+| Профиль | Когда | Содержит | Нужен Coordinator? |
+| --- | --- | --- | --- |
+| **Continuity Full** | Нужны память и исполнение в одном дереве | Core + Continuity + Coordinator | Нет; Memory работает отдельно |
+| **Continuity Memory** | Нужны только журнал и inspect/handoff | Core + Continuity + protocol | Нет |
+| **Continuity Coordinator** | Уже есть Memory CLI и нужно исполнение | Coordinator + protocol client + adapters | Подключается к Memory CLI |
+
+Сборка zip:
+
+```bash
+node scripts/package-release.mjs dist
+```
+
+Скачайте подходящий zip. Проверьте `dist/SHA256SUMS` по файлам zip. Установка:
+
+```bash
+node scripts/install.mjs --profile full --dest /absolute/path/to/dest --dry-run
+node scripts/install.mjs --profile memory --dest /absolute/path/to/dest
+node scripts/install.mjs --profile coordinator --dest /absolute/path/to/dest
+```
+
+Затем doctor:
+
+```bash
+node continuity/scripts/continuity.mjs --version
+node continuity/scripts/coordinator.mjs --version
+node continuity/scripts/continuity.mjs doctor
+node continuity/scripts/coordinator.mjs doctor --root .
+```
+
+`--version` печатает `continuity 2.0.0` и `continuity-coordinator 1.0.0`. `doctor` только читает и не создаёт store.
+
+Первый сценарий после `journal=uninitialized`: отредактируйте `continuity/assets/init-v3.template.json`, чтобы goal и criterion были намерениями пользователя, затем `init --schema 3 --file ...`, `record task --class function`, приложите command/test evidence. Принять результат может только пользователь (`record accept --as user`). Подробности — в «Первые пять минут».
+
+Memory-режим автономен: init, record, inspect, handoff, rebuild и приёмка только пользователем. Coordinator-режиму нужен runtime-адаптер. Поставляемый live-адаптер — `local-process` (текущий Node.js). Coordinator не может принять работу за пользователя.
+
+Этот продукт не заявляет hosted-model execution, нативный discovery каждым coding agent, daemon или login task и то, что исторический PASS является текущим.
 
 ## Что это такое
 
@@ -16,9 +59,9 @@ Continuity — это не память модели. Это локальная,
 
 Запись хранит не только успехи, но и неудачи. Старая заметка не становится текущей истиной. `inspect` заново вычисляет freshness по живому Git. Принять или отклонить результат может только пользователь.
 
-Для работы нужны Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Continuity не запускает модели, агентов, planner или Coordinator. Он не поднимает daemon, сетевой сервис, interview или scheduler. Он может вызывать локальные команды Git, чтобы прочитать состояние репозитория. Другой Skill не требуется.
+Для работы нужны Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Memory CLI не запускает модели, агентов, planner или Coordinator. Отдельный Coordinator CLI — явный foreground-процесс; он не поднимает daemon, сетевой сервис, interview или login task. Continuity может вызывать локальные команды Git, чтобы прочитать состояние репозитория.
 
-Полный устанавливаемый Skill — это каталог `continuity/`.
+Устанавливаемое дерево продукта — каталог `continuity/` плюс профильные документы этого репозитория.
 
 GitHub по умолчанию показывает [английский README](README.md). Этот файл — русская версия.
 
@@ -39,7 +82,7 @@ GitHub по умолчанию показывает [английский README
 | Backlog скрывает обязательную работу | Обязательные criteria нельзя припарковать, чтобы их обойти | Запретить парковку необязательной работы |
 | Преемник видит только успешное резюме | Handoff включает провалы, ограничения, evidence и следующий шаг | Передать identity актора или закрыть старый Attempt |
 
-Coordinator в этом README — необязательный процесс в агентной среде. Continuity его не поставляет и не запускает.
+Coordinator — необязательный foreground-runtime, поставляемый как `continuity/scripts/coordinator.mjs`. Memory/Continuity его не запускает. Его нужно запускать явно. `--help` печатает `usage: coordinator.mjs <doctor|plan|run|resume|status|cancel>`. Отдельного `--help` по командам нет.
 
 ## Пять осей истины
 
@@ -126,7 +169,7 @@ flowchart TB
   continuity --> records["Акторы, assignments, attempts, evidence"]
   continuity --> status["Verification, freshness, провалы, backlog, lessons, handoff"]
   continuity --> standalone["Standalone: пользователь или coding agent"]
-  continuity --> coordinated["Необязательный внешний Coordinator"]
+  continuity --> coordinated["Необязательный Coordinator CLI"]
   standalone --> workers["Исполнители и независимый verifier"]
   coordinated --> workers
   workers --> validated["Проверенные записи возвращаются через CLI"]
@@ -154,7 +197,7 @@ Continuity не является process manager. Необязательный C
 
 ### Необязательный координированный режим
 
-Если в агентной среде уже есть Coordinator, он может:
+Если вы запускаете необязательный Coordinator CLI или в агентной среде уже есть Coordinator, он может:
 
 - читать `inspect ready` и `inspect wave`;
 - выбирать из зарегистрированных акторов и доступных моделей;
@@ -172,7 +215,7 @@ Continuity не является process manager. Необязательный C
 
 `project-memory.coordinator.v1` — стабильный compatibility identifier этого протокола. Это не имя продукта и не runtime-зависимость.
 
-Команды верхнего уровня `coordinate` нет. `interview.offered` всегда `false`.
+Команды верхнего уровня `coordinate` на Memory CLI нет. Команды Coordinator живут в `coordinator.mjs`. `interview.offered` всегда `false`.
 
 ## Установка
 
@@ -425,29 +468,41 @@ Continuity полезен, когда цена забвения выше цен�
 
 ## Структура репозитория
 
-Репозиторий на `19fe327b407308469ac2e6f9553d893d60b36b1e` плюс этот набор документации содержит 92 отслеживаемых файла. Устанавливаемый Skill — только `continuity/` (40 файлов). Корневые `tests/` и `scripts/` — разработка и release tooling. GitHub по умолчанию показывает [`README.md`](README.md); этот файл — русская версия.
+Это worktree содержит 132 файла. Устанавливаемый Skill — `continuity/` (61 файл). Корневые `tests/` и `scripts/` — разработка и release tooling. GitHub по умолчанию показывает [`README.md`](README.md); этот файл — русская версия.
 
 ```text
 .
 ├── continuity/                 # устанавливаемый Skill (копируйте этот каталог)
 │   ├── SKILL.md                # инструкции Skill и frontmatter
-│   ├── assets/                 # шаблоны init и snapshot
+│   ├── assets/                 # init, snapshot и coordinator.config.json
 │   ├── references/             # канонические протокольные документы и JSON Schema
 │   └── scripts/
-│       ├── continuity.mjs      # публичный CLI
-│       ├── project-memory.mjs  # compatibility alias того же CLI
+│       ├── continuity.mjs      # Memory/Continuity CLI
+│       ├── coordinator.mjs     # необязательный Coordinator CLI
+│       ├── project-memory.mjs  # compatibility alias для continuity.mjs
+│       ├── smokes/             # smokes профилей установки
 │       └── lib/
 │           ├── core/           # журнал, recipes, inspect, store
 │           │   └── coordination/
 │           ├── continuity/     # адаптер v2 inspect (в этой сборке stub)
+│           ├── coordinator/    # foreground runtime, адаптеры, run-state
+│           ├── protocol/       # общие ports и client
 │           ├── graphify/       # необязательный адаптер Graphify (stub)
 │           └── migration/      # явная миграция (stub)
 ├── tests/                      # тесты репозитория; после установки не нужны
-├── scripts/                    # проверка пакета и release checks
-├── examples/                   # примеры snapshot и agent snippet
+├── scripts/                    # validate, install, package-release
+├── examples/                   # snapshots, AGENTS snippet, coordinator.config.json
 ├── .github/workflows/          # CI
+├── ADAPTERS.md
+├── ARCHITECTURE.md
+├── CHANGELOG.md
+├── COORDINATOR.md
+├── INSTALL.md
+├── MIGRATION.md
+├── PROTOCOL.md
 ├── README.md
 ├── README.ru.md
+├── RELEASE.md
 ├── SECURITY.md
 ├── LICENSE
 ├── package.json
@@ -458,35 +513,47 @@ Continuity полезен, когда цена забвения выше цен�
 | --- | --- | --- | --- |
 | `continuity/` | Полный распространяемый Skill | Да | runtime |
 | `continuity/SKILL.md` | Инструкции установленного Skill (`name: continuity`) | Да | runtime docs |
-| `continuity/assets/` | `init-v3.template.json`, `init-v2.template.json`, `snapshot-v1.template.json` | Да, для `init` | runtime templates |
+| `continuity/assets/` | шаблоны init/snapshot и `coordinator.config.json` | Да, для `init` и Coordinator | runtime templates |
 | `continuity/references/` | Протокольные руководства и переносимые JSON Schema | Да, как справка | runtime docs |
-| `continuity/scripts/continuity.mjs` | Каноническая обёртка CLI | Да | runtime |
+| `continuity/scripts/continuity.mjs` | Канонический Memory/Continuity CLI | Да | runtime |
+| `continuity/scripts/coordinator.mjs` | Необязательный Coordinator CLI | Да, для Coordinator/Full | runtime |
 | `continuity/scripts/project-memory.mjs` | Compatibility alias, который импортирует `continuity.mjs` | Только для старых путей вызова | runtime alias |
 | `continuity/scripts/lib/core/` | Domain, журнал, recipes, inspect, workspace, store | Да | runtime |
 | `continuity/scripts/lib/core/coordination/` | TaskAccumulator, ready set, packets, registry, persist policy | Да | runtime |
+| `continuity/scripts/lib/coordinator/` | Coordinator engine, config, адаптеры, run-state | Да, для Coordinator/Full | runtime |
+| `continuity/scripts/lib/protocol/` | Общие protocol ports и CLI client | Да | runtime |
 | `continuity/scripts/lib/continuity/` | Точка входа v2 inspect | Есть; в этой сборке сообщает, что недоступна | runtime stub |
 | `continuity/scripts/lib/graphify/` | Команда Graphify | Есть; в этой сборке сообщает, что недоступна | runtime stub |
 | `continuity/scripts/lib/migration/` | Команда migrate | Есть; в этой сборке сообщает, что недоступна | runtime stub |
-| `tests/` | Тесты core, package и helpers | Нет | tests |
-| `scripts/` | `validate-package.mjs`, inventory, forward acceptance | Нет | release tooling |
+| `tests/` | Тесты core, protocol, coordinator, package и helpers | Нет | tests |
+| `scripts/` | validate, install, package-release, forward acceptance | Нет | release tooling |
 | `.github/workflows/` | Матрица CI | Нет | release tooling |
-| `examples/` | Snapshot-фикстуры и `AGENTS.snippet.md` | По желанию | examples |
-| `README.md`, `README.ru.md`, `SECURITY.md`, `LICENSE`, `package.json` | Документация продукта, лицензия, метаданные пакета | LICENSE едет вместе с копией Skill | docs / metadata |
+| `examples/` | Snapshot-фикстуры, `AGENTS.snippet.md`, `coordinator.config.json` | По желанию | examples |
+| Документы продукта, `LICENSE`, `package.json` | ARCHITECTURE, PROTOCOL, INSTALL, COORDINATOR, ADAPTERS, MIGRATION, RELEASE, CHANGELOG, README, SECURITY | LICENSE едет вместе с копией Skill | docs / metadata |
 
-`npm pack --dry-run` содержит 49 файлов: Skill, examples, лицензию, оба README, SECURITY и `package.json`. Этот tarball не является единицей установки. Установка копирует `continuity/`.
+`npm pack --dry-run` содержит 79 файлов: Skill, examples, лицензию, документы продукта, оба README и `package.json`. Этот tarball не является единицей установки. Установка копирует `continuity/` или zip профиля.
 
 <details>
-<summary>Отслеживаемые файлы (92)</summary>
+<summary>Файлы worktree (132)</summary>
 
 ```text
 .gitattributes
 .github/workflows/ci.yml
 .gitignore
+ADAPTERS.md
+ARCHITECTURE.md
+CHANGELOG.md
+COORDINATOR.md
+INSTALL.md
 LICENSE
+MIGRATION.md
+PROTOCOL.md
 README.md
 README.ru.md
+RELEASE.md
 SECURITY.md
 continuity/SKILL.md
+continuity/assets/coordinator.config.json
 continuity/assets/init-v2.template.json
 continuity/assets/init-v3.template.json
 continuity/assets/snapshot-v1.template.json
@@ -504,7 +571,17 @@ continuity/references/task-accumulator.md
 continuity/references/v2-contract.schema.json
 continuity/references/verification-swarm.md
 continuity/scripts/continuity.mjs
+continuity/scripts/coordinator.mjs
 continuity/scripts/lib/continuity/index.mjs
+continuity/scripts/lib/coordinator/adapters/fake.mjs
+continuity/scripts/lib/coordinator/adapters/index.mjs
+continuity/scripts/lib/coordinator/adapters/local-process.mjs
+continuity/scripts/lib/coordinator/adapters/local-worker.mjs
+continuity/scripts/lib/coordinator/cli.mjs
+continuity/scripts/lib/coordinator/config.mjs
+continuity/scripts/lib/coordinator/engine.mjs
+continuity/scripts/lib/coordinator/index.mjs
+continuity/scripts/lib/coordinator/run-state.mjs
 continuity/scripts/lib/core/cli-v3.mjs
 continuity/scripts/lib/core/cli.mjs
 continuity/scripts/lib/core/coordination/accumulator.mjs
@@ -525,20 +602,40 @@ continuity/scripts/lib/core/store.mjs
 continuity/scripts/lib/core/workspace-v3.mjs
 continuity/scripts/lib/graphify/index.mjs
 continuity/scripts/lib/migration/index.mjs
+continuity/scripts/lib/protocol/adapter.mjs
+continuity/scripts/lib/protocol/client.mjs
+continuity/scripts/lib/protocol/compatibility.mjs
+continuity/scripts/lib/protocol/index.mjs
+continuity/scripts/lib/protocol/ports.mjs
+continuity/scripts/lib/protocol/secrets.mjs
+continuity/scripts/lib/protocol/validate.mjs
 continuity/scripts/project-memory.mjs
+continuity/scripts/smokes/coordinator.mjs
+continuity/scripts/smokes/full.mjs
+continuity/scripts/smokes/memory.mjs
 examples/AGENTS.snippet.md
+examples/coordinator.config.json
 examples/snapshot.minimal.json
 examples/snapshot.source-backed.json
 examples/source-anchor.md
 package-lock.json
 package.json
+scripts/install.mjs
 scripts/package-inventory.mjs
+scripts/package-release.mjs
+scripts/release-profiles.mjs
 scripts/test-continuity.mjs
+scripts/test-coordinator.mjs
 scripts/test-forward-acceptance.mjs
 scripts/test-package-install.mjs
 scripts/test-package.mjs
+scripts/test-protocol.mjs
+scripts/test-release.mjs
 scripts/test-validate-package.mjs
 scripts/validate-package.mjs
+scripts/zip-store.mjs
+tests/coordinator/runtime.test.mjs
+tests/coordinator/security.test.mjs
 tests/core/actor-identity-cli.test.mjs
 tests/core/adverse-retry.test.mjs
 tests/core/all-event-paths.test.mjs
@@ -571,6 +668,7 @@ tests/core/workspace-fingerprint.test.mjs
 tests/helpers/repository.mjs
 tests/helpers/suite-aggregator.mjs
 tests/helpers/v2-contract-fixture.mjs
+tests/protocol/protocol.test.mjs
 ```
 
 </details>
@@ -618,9 +716,9 @@ Store по умолчанию — `.continuity`. Legacy-каталог `.codex/p
 - На v3 store `history` сейчас рисует inspect view, а не хвост событий. `--tail` относится к v1/v2 history.
 - `handoff` требует задачу. Это не замена `record context`.
 - `inspect` не инициализирует store. На пустом репозитории используйте `doctor`.
-- Отдельного `--help` для `inspect` или `record` нет.
+- Отдельного `--help` для `inspect`, `record` или команд Coordinator нет.
 - Рецепта `record register` нет. Акторы для assignment или verification должны быть сохранены через `record --file` как `agent.registered`.
-- Строка версии CLI — `2.0.0`; версия `package.json` — `1.0.0`.
+- Continuity `--version` печатает `2.0.0`; Coordinator `--version` печатает `continuity-coordinator 1.0.0`; версия `package.json` — `1.0.0`.
 - Node engines — `>=22 <25`. Формулировка «Node.js 22+» в тексте Skill всё равно означает поддерживаемый runtime Node 22 или 24.
 - Журнал ограничен (8 MiB) и линеен. Нет автоматического rollover, архива, upgrade или слияния журналов.
 - Multi-event recipes делают preflight, затем дописывают последовательно. Это не одна транзакционная запись.
@@ -630,39 +728,30 @@ Store по умолчанию — `.continuity`. Legacy-каталог `.codex/p
 
 ## Разработка и проверка
 
-Проверено против `main` на `19fe327b407308469ac2e6f9553d893d60b36b1e` (коммит: *Clarify standalone coordination architecture*). На момент аудита `main` совпадал с этим SHA.
-
-GitHub Actions run [CI #5](https://github.com/Altarnik88/continuity/actions/runs/32423914061) на этом SHA: **success**, 6 из 6 matrix jobs (`ubuntu-latest`, `windows-latest`, `macos-latest` × Node 22 и 24). Каждый job выполнял `npm ci --ignore-scripts`, `npm run check` и `npm run audit:dev`.
-
-Тот же SHA был проверен локально до добавления `README.ru.md`:
+Локальный `npm run validate` на этом трёхслойном worktree:
 
 ```text
-package validation: ok (worktree 91 files; skill 40; repo-only 0; metadata 51; npm-pack 48 files, not the standalone Skill artifact)
-continuity core suite: PASS (29 file(s))
-coordination cases: found=49 executed=49 passed=49 failed=0 skipped=0
-v3 cases: found=10 executed=10 passed=10 failed=0 skipped=0
-package tests: PASS (found=24 executed=24 passed=24 failed=0 skipped=0)
-forward acceptance: PASS (found=2 passed=2 failed=0)
-npm run audit:dev: found 0 vulnerabilities
+package validation: ok (worktree 132 files; skill 61; repo-only 0; metadata 71; npm-pack 79 files, not the standalone Skill artifact)
 ```
-
-После добавления `README.ru.md` и переключателя языка inventory — 92 файла worktree и 49 файлов `npm pack`. Skill-артефакт по-прежнему 40 файлов.
 
 `npm run check` это:
 
 ```bash
-npm run validate && npm test && npm run test:package && npm run test:forward
+npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:release
 ```
 
-Локальные пробы helper на этом SHA:
+GitHub Actions CI использует `ubuntu-latest`, `windows-latest` и `macos-latest` с Node 22 и 24, ровно один pinned checkout, `timeout-minutes: 15`, `npm ci --ignore-scripts`, именованные lane protocol/coordinator, Combined check (`npm run check`), smokes профилей и `npm run audit:dev`. Combined check выполняет локальный агрегат, а не только упоминает его.
+
+Локальные пробы helper:
 
 - `node continuity/scripts/continuity.mjs --version` → `continuity 2.0.0`
+- `node continuity/scripts/coordinator.mjs --version` → `continuity-coordinator 1.0.0`
 - `doctor` на пустом Git worktree → `journal=uninitialized`
+- `coordinator.mjs doctor --root .` → `daemon=false`, `adapter=local-process`, `adapter-class=live`
 - `init --schema 3 --file continuity/assets/init-v3.template.json` → `continuity v3 initialized`
 - `inspect`, `inspect ready --json`, `inspect wave --json` и `record task --class function` ведут себя как описано выше
 - `graphify observe` → Graphify support is not available (exit 4)
 - `migrate --to 2` → migration support is not available (exit 3)
-- `npm pack --dry-run --ignore-scripts` → 48 файлов на том SHA, 49 после `README.ru.md`
 
 Команды для контрибьютора:
 
@@ -680,7 +769,7 @@ npm run audit:dev
 
 **Нужен ли Continuity Coordinator?**
 
-Нет. Standalone-использование — полноценный продукт. Coordinator — необязательный потребитель в агентной среде.
+Нет. Standalone Memory/Continuity — полноценный продукт. Coordinator — необязательный поставляемый CLI (`continuity/scripts/coordinator.mjs`). Memory его не запускает.
 
 **Нужен ли Continuity planner?**
 
@@ -716,7 +805,7 @@ Assignment и независимая verification требуют сохранё�
 
 **Почему версии CLI и пакета разные?**
 
-`--version` печатает `continuity 2.0.0` из helper. Версия `package.json` — `1.0.0`. Это независимые строки.
+Continuity `--version` печатает `continuity 2.0.0`. Coordinator `--version` печатает `continuity-coordinator 1.0.0`. Версия `package.json` — `1.0.0`. Это независимые строки.
 
 ## Лицензия
 
@@ -725,13 +814,20 @@ Assignment и независимая verification требуют сохранё�
 ## Как начать
 
 1. Клонируйте [Altarnik88/continuity](https://github.com/Altarnik88/continuity).
-2. Вызывайте `scripts/continuity.mjs` абсолютным путём или скопируйте `continuity/` в skills-каталог своего агента.
+2. Вызывайте `continuity/scripts/continuity.mjs` абсолютным путём или скопируйте `continuity/` в skills-каталог своего агента.
 3. Из целевого Git-репозитория запустите `--version` и `doctor`.
 4. Если store неинициализирован, отредактируйте v3-шаблон и выполните `init --schema 3 --file .../init-v3.template.json`.
 5. Запишите задачу класса `function` или `connector`, приложите command/test evidence, проверьте зарегистрированным другим актором и run и дайте принять результат только пользователю.
 
 Дальше читайте:
 
+- [Install](INSTALL.md)
+- [Architecture](ARCHITECTURE.md)
+- [Coordinator](COORDINATOR.md)
+- [Adapters](ADAPTERS.md)
+- [Protocol](PROTOCOL.md)
+- [Migration](MIGRATION.md)
+- [Release](RELEASE.md)
 - [Инструкции Skill](continuity/SKILL.md)
 - [Установка](continuity/references/installation.md)
 - [Исполнение проекта](continuity/references/project-execution.md)
