@@ -42,7 +42,10 @@ export async function run() {
     assert.match(result.stderr, /event-based/);
     assert.equal(runCli(helper, root, ['inspect']).status, 3);
     assert.equal(runCli(helper, root, ['migrate', '--to', '2']).status, 3);
-    assert.equal(runCli(helper, root, ['graphify', 'observe']).status, 4);
+    const unknownGraphify = runCli(helper, root, ['graphify', 'observe']);
+    assert.equal(unknownGraphify.status, 2);
+    assert.equal(unknownGraphify.stdout, '');
+    assert.match(unknownGraphify.stderr, /usage: continuity\.mjs/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 
   result = spawnSync(process.execPath, [runner, '--suite', 'unknown'], { encoding: 'utf8' });

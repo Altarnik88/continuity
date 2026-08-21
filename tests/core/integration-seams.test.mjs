@@ -3178,8 +3178,6 @@ export async function run() {
     assert.equal(result.stdout, '');
 
     const graphRoot = makeRoot('integration-graphify-parser');
-    const graphifyCalls = [];
-    const graphifyCommandHandler = fakeHandler(graphifyCalls, 76);
     for (const args of [
       ['graphify', 'observe'],
       ['graphify', 'observe', '--graph', 'graphify-out/graph.json', '--json'],
@@ -3187,17 +3185,6 @@ export async function run() {
       ['graphify', 'query', '--graph', 'graphify-out/custom.json', '--timeout-ms', '2500', '--', 'path', 'symbol-name'],
       ['graphify', 'query', '--', 'explain', 'symbol-name'],
       ['graphify', 'query', '--graph', 'graphify-out/graph.json', '--', 'query', '--timeout-ms', '999999', '--graph', '../opaque-data'],
-    ]) {
-      result = await invokeMain(graphRoot, args, { graphifyCommandHandler });
-      assert.equal(result.status, 76, `${args.join(' ')}\n${result.stderr}`);
-    }
-    assert.equal(graphifyCalls.length, 6, 'valid Graphify argv did not reach the injected handler exactly once');
-    assert.deepEqual(graphifyCalls.map((call) => call.args), [
-      ['observe'], ['observe'], ['query'], ['query'], ['query'], ['query'],
-    ]);
-    assert.equal(existsSync(path.join(graphRoot, '.continuity')), false, 'Graphify routing created a Continuity store');
-
-    for (const args of [
       ['graphify', 'query', '--graph', 'graphify-out/graph.json'],
       ['graphify', 'query', '--graph', 'graphify-out/graph.json', '--'],
       ['graphify', 'query', '--graph', 'graphify-out/graph.json', '--', '--'],
@@ -3213,18 +3200,20 @@ export async function run() {
       ['graphify', 'observe', '--', 'query', 'symbol-name'],
       ['graphify', 'unknown'],
     ]) {
-      result = await invokeMain(graphRoot, args, { graphifyCommandHandler });
+      result = await invokeMain(graphRoot, args);
       assert.equal(result.status, 2, `${args.join(' ')}\n${result.stderr}`);
-      assert.equal(graphifyCalls.length, 6, 'rejected Graphify argv reached the injected handler');
+      assert.equal(result.stdout, '');
     }
+    assert.equal(existsSync(path.join(graphRoot, '.continuity')), false, 'unknown graphify command created a Continuity store');
 
     for (const args of [
       ['validate', '--graph', 'graphify-out/graph.json'],
       ['doctor', '--timeout-ms', '1000'],
       ['history', '--', 'query'],
     ]) {
-      result = runCli(helper, parserRoot, args);
+      result = await invokeMain(parserRoot, args);
       assert.equal(result.status, 2, `${args.join(' ')}\n${result.stderr}`);
+      assert.equal(result.stdout, '');
     }
   } finally {
     for (const root of roots) rmSync(root, { recursive: true, force: true });

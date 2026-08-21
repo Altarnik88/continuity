@@ -17,7 +17,7 @@ These states are independent:
 | Freshness | Inspect recomputes freshness from live Git state and evidence. A historical pass can become stale. |
 | Acceptance | Only `record accept --as user` or `record reject --as user --next "…"` changes acceptance. |
 
-Graphify is optional and never authorizes any truth axis. A Coordinator is optional and is not launched by Continuity. Continuity has no daemon, network client, interview mode, or top-level `coordinate` command.
+A Coordinator is optional and is not launched by Continuity. Continuity has no daemon, network client, interview mode, or top-level `coordinate` command.
 
 ## Resolve the CLI
 

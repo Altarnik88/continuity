@@ -50,7 +50,7 @@ Continuity — это не память модели и не скрытый за
 С Core и Continuity вы говорите через:
 
 ```text
-usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate|graphify>
+usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate>
 ```
 
 С управлением агентами — через **отдельный** foreground CLI:
@@ -399,11 +399,11 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 
 Заполнение контекста: `record context --next "Exact next step"`, затем read-only `handoff --task <id>`. Преемник берёт новый актор, run и Attempt.
 
-Рецепты v3: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` и `graphify` есть в usage и в этой сборке недоступны.
+Рецепты v3: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` есть в usage и в этой сборке недоступен.
 
 ## Структура репозитория
 
-В этом worktree **137** отслеживаемых файла. Устанавливаемый Skill — `continuity/` (**61** файл). Корневые `tests/` и `scripts/` — разработка и выпуск.
+В этом worktree **136** отслеживаемых файла. Устанавливаемый Skill — `continuity/` (**60** файлов). Корневые `tests/` и `scripts/` — разработка и выпуск.
 
 ```text
 .
@@ -422,7 +422,6 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 │           ├── continuity/          # заглушка v2 inspect
 │           ├── coordinator/         # engine, run-state, адаптеры
 │           ├── protocol/            # общие порты и CLI-клиент
-│           ├── graphify/            # заглушка
 │           └── migration/           # заглушка
 ├── .cursor/                         # Cursor skills и rules (тонкие указатели)
 ├── .grok/                           # Grok Build skills и rules (тонкие указатели)
@@ -444,7 +443,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 | `continuity/scripts/coordinator.mjs` | Публичный Coordinator CLI |
 | `.continuity/` у **целевого репозитория** | Данные проекта; не поставлять и не коммитить в это дерево |
 
-`npm pack --dry-run` показывает 79 файлов. Этот tarball — не единица установки. Ставят из `continuity/` или zip профиля.
+`npm pack --dry-run` показывает 78 файлов. Этот tarball — не единица установки. Ставят из `continuity/` или zip профиля.
 
 ## Модель безопасности
 
@@ -457,7 +456,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record result --expec
 ## Совместимость и ограничения
 
 - Идентификатор протокола `project-memory.coordinator.v1` стабилен.
-- Предпочтительны store схемы v3. Снимки v1 и событийные store v2 ещё есть. v2 inspect, `migrate` и `graphify` сообщают, что недоступны.
+- Предпочтительны store схемы v3. Снимки v1 и событийные store v2 ещё есть. v2 inspect и `migrate` сообщают, что недоступны.
 - Continuity `--version` — `2.0.0`; Coordinator `--version` — `continuity-coordinator 1.0.0`; `package.json` — `1.0.0`.
 - `local-process` доказывает реальный локальный процесс Node. Он не доказывает, что работала hosted-модель.
 - Планирование ready set детерминировано; Memory не запускает назначенных акторов. Coordinator запускает — через явно заданный адаптер.

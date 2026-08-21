@@ -156,7 +156,6 @@ export const EXPECTED_SKILL_FILES = Object.freeze([
   `${SKILL_PREFIX}scripts/lib/core/recipes-v3.mjs`,
   `${SKILL_PREFIX}scripts/lib/core/store.mjs`,
   `${SKILL_PREFIX}scripts/lib/core/workspace-v3.mjs`,
-  `${SKILL_PREFIX}scripts/lib/graphify/index.mjs`,
   `${SKILL_PREFIX}scripts/lib/migration/index.mjs`,
   `${SKILL_PREFIX}scripts/project-memory.mjs`,
   `${SKILL_PREFIX}assets/coordinator.config.json`,

@@ -48,7 +48,7 @@ Continuity is not the memory of a model and not a hidden agent runner. It is thr
 You talk to Core and Continuity through:
 
 ```text
-usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate|graphify>
+usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate>
 ```
 
 You talk to agent management through a **separate** foreground CLI:
@@ -397,11 +397,11 @@ Failure: `record fail --why … --impact … --next …`. Retry with a new `reco
 
 Context filling: `record context --next "Exact next step"` then read-only `handoff --task <id>`. The successor uses a new actor, run, and Attempt.
 
-v3 recipes: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` and `graphify` appear in usage and report unavailable in this build.
+v3 recipes: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` appears in usage and reports unavailable in this build.
 
 ## Repository structure
 
-This worktree contains **137** tracked files. The installable Skill is `continuity/` (**61** files). Root `tests/` and `scripts/` are development and release tooling.
+This worktree contains **136** tracked files. The installable Skill is `continuity/` (**60** files). Root `tests/` and `scripts/` are development and release tooling.
 
 ```text
 .
@@ -420,7 +420,6 @@ This worktree contains **137** tracked files. The installable Skill is `continui
 │           ├── continuity/          # v2 inspect stub
 │           ├── coordinator/         # engine, run-state, adapters
 │           ├── protocol/            # shared ports and CLI client
-│           ├── graphify/            # stub
 │           └── migration/           # stub
 ├── .cursor/                         # Cursor skills and rules (thin pointers)
 ├── .grok/                           # Grok Build skills and rules (thin pointers)
@@ -442,7 +441,7 @@ This worktree contains **137** tracked files. The installable Skill is `continui
 | `continuity/scripts/coordinator.mjs` | Public Coordinator CLI |
 | `.continuity/` at a **target repo** | Project data; never ship it; never put it in this Git tree |
 
-`npm pack --dry-run` lists 79 files. That tarball is not the installation unit. Install from `continuity/` or a profile zip.
+`npm pack --dry-run` lists 78 files. That tarball is not the installation unit. Install from `continuity/` or a profile zip.
 
 ## Security model
 
@@ -455,7 +454,7 @@ It is not a secret scanner, DLP, or tamper-proof audit database. Pattern guards 
 ## Compatibility and limitations
 
 - Protocol id `project-memory.coordinator.v1` is stable.
-- Preferred stores are schema v3. v1 snapshots and v2 event stores still exist. v2 inspect, `migrate`, and `graphify` report unavailable.
+- Preferred stores are schema v3. v1 snapshots and v2 event stores still exist. v2 inspect and `migrate` report unavailable.
 - Continuity `--version` is `2.0.0`; Coordinator `--version` is `continuity-coordinator 1.0.0`; `package.json` is `1.0.0`.
 - `local-process` proves a real local Node process. It does not prove a hosted model ran.
 - Ready-set scheduling is deterministic; Memory does not launch the scheduled actors. Coordinator does, through an adapter you configure explicitly.

@@ -7,17 +7,16 @@ import { appendV2, initializeV2, validateV2Append } from './journal-v2.mjs';
 import { renderLegacyInspectV1 } from './legacy-v1.mjs';
 import { assertMutationAllowed, detectStoreVersion, readV2Journal } from './store.mjs';
 import { handleMigrationCommand } from '../migration/index.mjs';
-import { handleGraphifyCommand } from '../graphify/index.mjs';
 import { handleInspectCommand } from '../continuity/index.mjs';
 import { handleV3Command } from './cli-v3.mjs';
 
 const VERSION = '2.0.0';
-const USAGE = 'usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate|graphify>';
+const USAGE = 'usage: continuity.mjs <init|record|inspect|history|handoff|validate|doctor|rebuild|migrate>';
 const HELP = `${USAGE}\n\nStore: .continuity (default)\nOverride: CONTINUITY_STORE_DIR=<repository-relative-directory>\nLegacy .codex/project-memory data is never read automatically.`;
 export const MAX_INPUT_BYTES = 64 * 1024;
 const MAIN_IO_KEYS = new Set([
   'stdin', 'stdout', 'stderr', 'clock', 'git',
-  'migrationCommandHandler', 'continuityCommandHandler', 'graphifyCommandHandler',
+  'migrationCommandHandler', 'continuityCommandHandler',
 ]);
 const MAIN_FUNCTION_VALUE_KEYS = new Set(['clock', 'git']);
 
@@ -112,7 +111,7 @@ function parse(argv) {
   const options = {
     positionals: [], root: process.cwd(), rootExplicit: false, file: null, stdin: false,
     dryRun: false, json: false, tail: 10, subject: null, handoff: null, schema: null, to: null,
-    migrationAction: 'start', graph: null, timeoutMs: 10000,
+    migrationAction: 'start',
     title: null, task: null, attempt: null, as: null, actorId: null, runId: null, why: null, result: null, approach: null,
     expected: null, actual: null, impact: null, criterion: null, goal: null, execution: null,
     next: null, blocked: false, kind: null, exitCode: null, assignee: null,
@@ -142,15 +141,6 @@ function parse(argv) {
     else if (value === '--to') { mark(value); options.to = Number(takeValue('--to requires a value')); }
     else if (value === '--resume') { mark(value); options.migrationAction = 'resume'; }
     else if (value === '--rollback') { mark(value); options.migrationAction = 'rollback'; }
-    else if (value === '--graph') {
-      mark(value);
-      options.graph = takeValue('--graph requires a path');
-    }
-    else if (value === '--timeout-ms') {
-      mark(value);
-      options.timeoutMs = Number(takeValue('--timeout-ms requires a value'));
-      if (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 1000 || options.timeoutMs > 30000) throw new MemoryError('--timeout-ms must be 1000..30000');
-    }
     else if (value === '--title') { mark(value); options.title = takeValue('--title requires a value'); }
     else if (value === '--task') { mark(value); options.task = takeValue('--task requires an ID'); }
     else if (value === '--attempt') { mark(value); options.attempt = takeValue('--attempt requires an ID'); }
@@ -265,7 +255,7 @@ async function dispatchCommandHandler(resolveIo, property, fallback, context, ar
 
 function scanInvocation(argv) {
   const valueFlags = new Set([
-    '--root', '--file', '--tail', '--subject', '--handoff', '--schema', '--to', '--graph', '--timeout-ms',
+    '--root', '--file', '--tail', '--subject', '--handoff', '--schema', '--to',
     '--title', '--task', '--attempt', '--as', '--actor-id', '--run-id', '--assignee', '--why', '--result', '--approach', '--expected', '--actual',
     '--impact', '--criterion', '--goal', '--execution', '--next', '--kind', '--exit-code',
     '--priority', '--size', '--complexity', '--risk', '--class', '--packet', '--assignment', '--slots',
@@ -294,8 +284,9 @@ export function isV2Invocation(argv) {
   const { command } = routing;
   if (routing.flags.has('--version') || routing.flags.has('--help')) return true;
   if (routing.flags.has('--resume') || routing.flags.has('--rollback')) return true;
-  if (routing.flags.has('--graph') || routing.flags.has('--timeout-ms') || routing.delimiter) return true;
-  if (['event', 'record', 'migrate', 'graphify', 'handoff', 'rebuild'].includes(command)) return true;
+  if (routing.delimiter) return true;
+  if (['event', 'record', 'migrate', 'handoff', 'rebuild'].includes(command)) return true;
+  if (command === 'graphify') return true;
   if (command === 'init' && routing.flags.has('--schema')) return true;
   if (command === 'inspect' && ['--json', '--subject', '--handoff'].some((flag) => routing.flags.has(flag))) return true;
   if (command === 'history' && ['--json', '--subject', '--handoff'].some((flag) => routing.flags.has(flag))) return true;
@@ -320,7 +311,7 @@ export async function main(argv, io = {}) {
     if (inspectedIo.error) throw inspectedIo.error;
     if (argv.length === 0) throw new MemoryError(USAGE);
     const options = parse(argv); const [command, subcommand, ...rest] = options.positionals;
-    if (options.delimiter && (command !== 'graphify' || subcommand !== 'query')) throw new MemoryError('query delimiter is only valid for graphify query');
+    if (options.delimiter) throw new MemoryError('command delimiter is not valid');
     if (command === '--version' && options.positionals.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', `continuity ${VERSION}`); return 0; }
     if (command === '--help' && options.positionals.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', HELP); return 0; }
     if (command === 'event' && subcommand === 'template' && rest.length === 1) { assertAllowedFlags(options, []); write(resolveIo, 'stdout', JSON.stringify(createDraftTemplate(rest[0]))); return 0; }
@@ -421,18 +412,6 @@ export async function main(argv, io = {}) {
       if ((resume && rollback) || (options.dryRun && (resume || rollback))) throw new MemoryError('migration actions are mutually exclusive');
       if (options.migrationAction === 'start') assertMutationAllowed(root);
       return await dispatchCommandHandler(resolveIo, 'migrationCommandHandler', handleMigrationCommand, commandContext(resolveIo, root, options, 'migrate'), []);
-    }
-    if (command === 'graphify') {
-      if (subcommand === 'observe') {
-        assertAllowedFlags(options, ['--root', '--graph', '--json']);
-        if (rest.length || options.delimiter) throw new MemoryError('invalid graphify observe arguments');
-      } else if (subcommand === 'query') {
-        assertAllowedFlags(options, ['--root', '--graph', '--timeout-ms']);
-        if (rest.length || !options.delimiter || !options.passthrough.length) throw new MemoryError('graphify query requires one non-empty -- command delimiter');
-      } else {
-        throw new MemoryError('invalid graphify command');
-      }
-      return await dispatchCommandHandler(resolveIo, 'graphifyCommandHandler', handleGraphifyCommand, commandContext(resolveIo, root, options), [subcommand]);
     }
     throw new MemoryError(USAGE);
   } catch (error) {

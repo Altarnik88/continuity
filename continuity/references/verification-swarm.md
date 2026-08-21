@@ -29,4 +29,4 @@ These axes stay independent:
 - freshness ≠ user acceptance
 - a historical PASS is not a current PASS
 
-Verification passed does not set freshness; freshness is recomputed from live Git (HEAD, dirty worktree) and evidence at inspect. `inspect ready` / `inspect wave` remain read-only. Acceptance stays `pending` until `record accept --as user`. Graphify is optional and never authorizes truth.
+Verification passed does not set freshness; freshness is recomputed from live Git (HEAD, dirty worktree) and evidence at inspect. `inspect ready` / `inspect wave` remain read-only. Acceptance stays `pending` until `record accept --as user`.
