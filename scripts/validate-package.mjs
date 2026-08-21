@@ -23,7 +23,11 @@ export const EXPECTED_PACKAGE_SCRIPTS = Object.freeze({
   validate: 'node scripts/validate-package.mjs',
   'test:package': 'node scripts/test-package.mjs',
   'test:forward': 'node scripts/test-forward-acceptance.mjs',
-  check: 'npm run validate && npm test && npm run test:package && npm run test:forward',
+  'test:protocol': 'node scripts/test-protocol.mjs',
+  'test:coordinator': 'node scripts/test-coordinator.mjs',
+  'test:release': 'node scripts/test-release.mjs',
+  'package:release': 'node scripts/package-release.mjs',
+  check: 'npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:release',
   'audit:dev': 'npm audit --audit-level=high',
 });
 

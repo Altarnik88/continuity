@@ -1,6 +1,7 @@
 node_modules/
 .codex/
 .continuity/
+dist/
 coverage/
 *.tmp
 *.log
