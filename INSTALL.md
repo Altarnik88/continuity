@@ -17,7 +17,10 @@ git clone https://github.com/Altarnik88/continuity.git
 cd continuity
 node continuity/scripts/continuity.mjs --version
 node continuity/scripts/coordinator.mjs --version
+npm start
 ```
+
+`npm start` immediately starts memory and the parallel swarm (control surface on port 43147). In Cursor or Grok, `/continuity` makes the host agent the Conductor and dispatches isolated sub-agents from that task database.
 
 From another Git repository:
 

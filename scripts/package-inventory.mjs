@@ -167,6 +167,17 @@ export const EXPECTED_SKILL_FILES = Object.freeze([
   `${SKILL_PREFIX}scripts/smokes/coordinator.mjs`,
   `${SKILL_PREFIX}scripts/smokes/full.mjs`,
   `${SKILL_PREFIX}scripts/smokes/memory.mjs`,
+  `${SKILL_PREFIX}assets/control-surface.html`,
+  `${SKILL_PREFIX}references/autonomous-swarm.md`,
+  `${SKILL_PREFIX}references/conductor-orchestration.md`,
+  `${SKILL_PREFIX}scripts/control-surface.mjs`,
+  `${SKILL_PREFIX}scripts/dispatch.mjs`,
+  `${SKILL_PREFIX}scripts/launch.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/contract.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/craft.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/engine.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/planner.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/store.mjs`,
 ]);
 export const REQUIRED_SKILL_FILES = EXPECTED_SKILL_FILES;
 export const ALLOWED_GIT_MODES = Object.freeze(new Set(['100644', '100755']));

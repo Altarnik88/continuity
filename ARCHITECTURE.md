@@ -1,6 +1,6 @@
 # Architecture
 
-Continuity is three layers in one repository. They share a versioned protocol. They do not share write authority.
+Continuity is four layers in one repository. They share a versioned protocol. They do not share write authority.
 
 Product version comes from `package.json` at runtime (`3.0.0`). Store schema is **v3** and is printed separately (`--help`, `init --schema 3`, inspect/history documents). Do not treat those numbers as the same thing.
 
@@ -10,13 +10,15 @@ Product version comes from `package.json` at runtime (`3.0.0`). Store schema is 
 | --- | --- | --- |
 | **Project Memory Core** | Own long-term recorded truth | Choose a model, launch a process, accept work for the user |
 | **Continuity** | Read/continuity plane for the next chat or actor | Become Coordinator or start executors |
-| **Coordinator** | Execution plane: packets, adapters, waves, resume | Edit the journal, treat reports as proof, accept for the user |
+| **Coordinator** | Sequential execution plane: packets, adapters, waves, resume | Edit the journal, treat reports as proof, accept for the user |
+| **Swarm** | Parallel execution plane: task database, 5–20 agents, path leases, standing order | Edit the journal, accept for the user, overlap path ownership |
 
 1. **Project Memory Core** owns the append-only journal `.continuity/HISTORY.ndjson`. `.continuity/CURRENT.json` is a rebuildable projection, not a second source of truth. The journal fails closed at 8 MiB. Unknown fields and recognizable secret patterns are rejected. A rejected write leaves the store unchanged.
-2. **Continuity** orients a new chat (`doctor`, `inspect`), emits bounded handoff, and recomputes freshness from live Git. It does not launch actors.
+2. **Continuity** orients a new chat (`doctor`, `inspect`), emits bounded handoff, and recomputes freshness from live Git. The Memory CLI does not launch actors. The Skill `/continuity` makes the host coding agent the Conductor: it recovers memory and dispatches the Swarm.
 3. **Coordinator** consumes ready work through the protocol, launches adapters, and writes back only through the Continuity CLI.
+4. **Swarm** is the parallel runtime that starts on launch. It owns `data/swarm.sqlite` and `forge/`, not the journal. It never accepts for the user. Sub-agents cover analysis, implementation, independent verification, security, and review on disjoint path leases. A Manager appears at size 10+.
 
-Core never selects a model, launches a process, or accepts work for the user. Coordinator never edits the journal or projection files.
+Core never selects a model, launches a process, or accepts work for the user. Coordinator never edits the journal or projection files. Swarm never edits the journal.
 
 You talk to Core and Continuity through `continuity.mjs`. You talk to agent management through a separate foreground CLI, `coordinator.mjs`. Memory never starts Coordinator. Coordinator never starts as a daemon, watcher, login task, or network service.
 

@@ -1,11 +1,14 @@
 # Agent instructions
 
-This checkout is Continuity. Use the Continuity Memory CLI from this worktree. Use the Coordinator CLI only when the user wants agent management. Do not require any other Skill. Do not fork journal logic.
+This checkout is Continuity. On `/continuity` you are immediately the **Conductor**: recover memory, fill the task database, and dispatch 5–20 isolated sub-agents across analysis, implementation, blind verification, security, and review. Appoint a Manager at size 10+. Only the user may accept.
+
+Use the Continuity Memory CLI from this worktree. Use the Coordinator CLI only when the user wants sequential agent management. Do not require any other Skill. Do not fork journal logic.
 
 ## Resolve the CLIs
 
 ```bash
 node continuity/scripts/continuity.mjs
+node continuity/scripts/launch.mjs
 node continuity/scripts/coordinator.mjs
 ```
 
