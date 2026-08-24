@@ -283,8 +283,8 @@ export function createEngine(options = {}) {
       recordMemory({
         id: `mem-fail-${shortId()}`,
         kind: 'failure',
-        title: `${task.title} failed`,
-        body: rawOutput,
+        title: safe.title,
+        body: safe.body,
         taskId: task.id,
       });
       if (task.spec.repairTaskId) {
