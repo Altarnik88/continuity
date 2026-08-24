@@ -115,3 +115,51 @@ export function planPulse() {
     },
   ];
 }
+
+export function planContinuations(state) {
+  const existing = new Set((state.tasks ?? []).map((task) => task.id));
+  const succeeded = new Set((state.tasks ?? []).filter((task) => task.status === 'succeeded').map((task) => task.id));
+  if (!succeeded.has('task-handoff')) return [];
+  const next = [
+    {
+      id: 'task-memory-digest',
+      title: 'Write product memory from swarm lessons',
+      kind: 'digest',
+      priority: 100,
+      paths: ['forge/MEMORY.md'],
+      deps: ['task-handoff'],
+      spec: {},
+    },
+    {
+      id: 'task-changelog',
+      title: 'Record what the swarm learned in the changelog',
+      kind: 'write',
+      priority: 110,
+      paths: ['forge/CHANGELOG.md'],
+      deps: ['task-handoff'],
+      spec: { files: { 'forge/CHANGELOG.md': 'CHANGELOG.md' } },
+    },
+    {
+      id: 'task-metrics',
+      title: 'Add Pulse risk metrics',
+      kind: 'write',
+      priority: 120,
+      paths: ['forge/src/metrics.mjs'],
+      deps: ['task-handoff'],
+      spec: { files: { 'forge/src/metrics.mjs': 'src/metrics.mjs' } },
+    },
+    {
+      id: 'task-metrics-test',
+      title: 'Verify Pulse risk metrics',
+      kind: 'test',
+      priority: 130,
+      paths: ['forge/test/metrics.test.mjs'],
+      deps: ['task-metrics'],
+      spec: {
+        files: { 'forge/test/metrics.test.mjs': 'test/metrics.test.mjs' },
+        run: ['--test', 'forge/test/metrics.test.mjs'],
+      },
+    },
+  ];
+  return next.filter((task) => !existing.has(task.id));
+}

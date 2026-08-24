@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -27,14 +27,38 @@ export async function run() {
     const done = await swarm.waitUntilIdle({ timeoutMs: 45_000 });
     assert.ok(done.files.includes('forge/src/domain.mjs'), 'domain was not written');
     assert.ok(done.files.includes('forge/HANDOFF.md'), 'handoff was missing');
+    assert.ok(done.files.includes('forge/MEMORY.md'), 'product memory was missing');
+    assert.ok(done.files.includes('forge/src/metrics.mjs'), 'continuation metrics were missing');
     assert.equal(done.counts.failed, 0, `failed tasks: ${done.tasks.filter((task) => task.status === 'failed').map((task) => task.id).join(',')}`);
-    assert.ok(done.counts.succeeded >= 11, `expected the Pulse wave to finish, got ${done.counts.succeeded}`);
+    assert.ok(done.counts.succeeded >= 15, `expected Pulse plus continuation wave to finish, got ${done.counts.succeeded}`);
+    assert.ok(done.maxInflight >= 2, `expected parallel agents, maxInflight=${done.maxInflight}`);
     assert.ok(done.memory.some((item) => item.kind === 'failure'), 'the buggy store should have produced a remembered failure');
     assert.ok(done.memory.some((item) => item.kind === 'playbook'), 'passing verification should record a playbook');
     assert.equal(done.mission.accepted, 'pending');
+    assert.equal(done.mission.status, 'waiting_accept');
+    assert.ok(existsSync(path.join(root, 'data', 'memory.ndjson')), 'append-only memory log was missing');
+    assert.ok(
+      readFileSync(path.join(root, 'data', 'memory.ndjson'), 'utf8').trim().split('\n').length >= 4,
+      'memory log did not keep lessons across the wave',
+    );
     swarm.accept();
     assert.equal(swarm.getSnapshot().mission.accepted, 'accepted');
   } finally {
     swarm.stop();
   }
+
+  const resumed = launchSwarm({ root, autoStart: false, swarmSize: 8, paceMs: 0 });
+  try {
+    const snap = resumed.getSnapshot();
+    assert.ok(snap.memory.length >= 4, 'memory did not survive relaunch');
+    assert.ok(snap.files.includes('forge/MEMORY.md'), 'product files did not survive relaunch');
+    assert.equal(snap.mission.accepted, 'accepted');
+    assert.ok(existsSync(path.join(root, 'data', 'swarm.sqlite')), 'sqlite task database did not survive relaunch');
+    assert.ok(existsSync(path.join(root, 'data', 'memory.ndjson')), 'memory log did not survive relaunch');
+  } finally {
+    resumed.stop();
+  }
+
+  assert.equal(buildRoster(5).length, 5);
+  assert.equal(buildRoster(20).length, 20);
 }

@@ -11,9 +11,10 @@ import {
   leaseConflict,
   nowIso,
 } from './contract.mjs';
-import { planPulse } from './planner.mjs';
+import { planContinuations, planPulse } from './planner.mjs';
 import {
   all,
+  appendMemoryLog,
   get,
   insertTask,
   logLine,
@@ -57,8 +58,10 @@ export function createEngine(options = {}) {
   const inflight = new Set();
   let timer = null;
   let swarmSize = clampSwarmSize(options.swarmSize ?? 8);
+  let maxInflight = 0;
 
-  seed(db, { swarmSize, clock });
+  seed(db, { swarmSize, clock, root });
+  recoverOrphans(db, clock);
 
   const engine = {
     root,
@@ -69,18 +72,30 @@ export function createEngine(options = {}) {
         standingOrder: STANDING_ORDER,
         files: listForge(root),
         inflight: inflight.size,
+        maxInflight,
       };
     },
     start() {
-      run(db, "UPDATE mission SET status = 'running', started_at = COALESCE(started_at, ?), updated_at = ? WHERE id = ?", [
-        nowIso(clock), nowIso(clock), 'mission-primary',
+      const added = enqueueContinuations();
+      const pending = Number(get(db, "SELECT COUNT(*) AS n FROM tasks WHERE status NOT IN ('succeeded', 'failed')")?.n ?? 0);
+      const accepted = get(db, 'SELECT accepted FROM mission WHERE id = ?', ['mission-primary'])?.accepted;
+      const status = pending > 0 ? 'running' : accepted === 'accepted' ? 'idle' : 'waiting_accept';
+      run(db, 'UPDATE mission SET status = ?, started_at = COALESCE(started_at, ?), updated_at = ? WHERE id = ?', [
+        status, nowIso(clock), nowIso(clock), 'mission-primary',
       ]);
-      logLine(db, { agentId: 'agent-conductor', message: 'Standing order is active. Autonomous development continues.' }, clock);
-      if (!timer) {
-        timer = setInterval(() => { void tick(); }, 80);
-        timer.unref?.();
+      logLine(db, {
+        agentId: 'agent-conductor',
+        message: pending > 0
+          ? `Standing order is active. Autonomous development continues${added ? ` with ${added} new task(s)` : ''}.`
+          : 'Standing order holds. No ready work remains; only the user may accept.',
+      }, clock);
+      if (status === 'running') {
+        if (!timer) {
+          timer = setInterval(() => { void tick(); }, 80);
+          timer.unref?.();
+        }
+        void tick();
       }
-      void tick();
     },
     pause() {
       run(db, "UPDATE mission SET status = 'paused', updated_at = ? WHERE id = ?", [nowIso(clock), 'mission-primary']);
@@ -90,13 +105,13 @@ export function createEngine(options = {}) {
       this.start();
     },
     accept() {
-      run(db, "UPDATE mission SET accepted = 'accepted', updated_at = ? WHERE id = ?", [nowIso(clock), 'mission-primary']);
-      remember(db, {
+      run(db, "UPDATE mission SET accepted = 'accepted', status = 'idle', updated_at = ? WHERE id = ?", [nowIso(clock), 'mission-primary']);
+      recordMemory({
         id: `mem-accept-${shortId()}`,
         kind: 'decision',
         title: 'User accepted the current product state',
         body: 'Acceptance is a user act. The swarm will not treat this as its own proof.',
-      }, clock);
+      });
       logLine(db, { agentId: 'user', message: 'User accepted. The swarm did not accept on the user\'s behalf.' }, clock);
     },
     setSwarmSize(size) {
@@ -118,6 +133,9 @@ export function createEngine(options = {}) {
       const started = Date.now();
       while (Date.now() - started < timeoutMs) {
         await tick();
+        if (enqueueContinuations() > 0) {
+          run(db, "UPDATE mission SET status = 'running', updated_at = ? WHERE id = ?", [nowIso(clock), 'mission-primary']);
+        }
         const state = snapshot(db);
         const pending = state.tasks.some((task) => !['succeeded', 'failed'].includes(task.status));
         if (!pending && inflight.size === 0) return engine.getSnapshot();
@@ -184,11 +202,13 @@ export function createEngine(options = {}) {
   async function execute(agent, task) {
     const token = `${task.id}:${agent.id}`;
     inflight.add(token);
+    maxInflight = Math.max(maxInflight, inflight.size);
     try {
       if (paceMs) await sleep(paceMs);
       if (task.kind === 'write') await writeProduct(task, agent);
       else if (task.kind === 'test') await verifyProduct(task, agent);
       else if (task.kind === 'handoff') await writeHandoff(agent);
+      else if (task.kind === 'digest') await writeDigest(agent);
       else throw new Error(`unknown kind ${task.kind}`);
     } catch (error) {
       finish(task, agent, { ok: false, message: error instanceof Error ? error.message : String(error) });
@@ -205,13 +225,13 @@ export function createEngine(options = {}) {
       writeFileSync(target, fileContents(key));
     }
     if (task.spec.buggyFiles && task.attempts <= (task.spec.buggyUntilAttempt ?? 0)) {
-      remember(db, {
+      recordMemory({
         id: `mem-lesson-${shortId()}`,
         kind: 'lesson',
         title: 'First store write skipped durability',
         body: 'An in-memory store is not evidence. The next attempt must persist.',
         taskId: task.id,
-      }, clock);
+      });
     }
     finish(task, agent, { ok: true, message: `Wrote ${Object.keys(files).join(', ')}` });
   }
@@ -225,13 +245,13 @@ export function createEngine(options = {}) {
     const result = await runNode(task.spec.run ?? ['--test'], root);
     if (result.code !== 0) {
       const message = (result.stderr || result.stdout || 'verification failed').slice(0, 1200);
-      remember(db, {
+      recordMemory({
         id: `mem-fail-${shortId()}`,
         kind: 'failure',
         title: `${task.title} failed`,
         body: message,
         taskId: task.id,
-      }, clock);
+      });
       if (task.spec.repairTaskId) {
         const ts = nowIso(clock);
         run(db, "UPDATE tasks SET status = 'queued', updated_at = ? WHERE id = ?", [ts, task.spec.repairTaskId]);
@@ -243,13 +263,13 @@ export function createEngine(options = {}) {
       finish(task, agent, { ok: false, message });
       return;
     }
-    remember(db, {
+    recordMemory({
       id: `mem-playbook-${shortId()}`,
       kind: 'playbook',
       title: `${task.title} passed`,
       body: 'A verifier, not the writer, ran the focused check.',
       taskId: task.id,
-    }, clock);
+    });
     finish(task, agent, { ok: true, message: 'Verification passed' });
   }
 
@@ -279,6 +299,46 @@ export function createEngine(options = {}) {
     finish({ id: 'task-handoff', kind: 'handoff' }, agent, { ok: true, message: 'Handoff written' });
   }
 
+  async function writeDigest(agent) {
+    const state = snapshot(db);
+    const lines = [
+      '# Product memory',
+      '',
+      'Written by the Continuity swarm so the next session does not guess.',
+      '',
+      `Standing order: ${STANDING_ORDER}`,
+      '',
+      '## Lessons, failures, and playbooks',
+      ...(state.memory.length ? state.memory.map((item) => `- (${item.kind}) ${item.title} — ${item.body}`) : ['- none yet']),
+      '',
+    ];
+    const target = path.join(root, 'forge', 'MEMORY.md');
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, `${lines.join('\n')}\n`);
+    recordMemory({
+      id: `mem-digest-${shortId()}`,
+      kind: 'playbook',
+      title: 'Product memory file written',
+      body: 'Lessons were copied into forge/MEMORY.md for the next actor.',
+      taskId: 'task-memory-digest',
+    });
+    finish({ id: 'task-memory-digest', kind: 'digest' }, agent, { ok: true, message: 'Product memory written' });
+  }
+
+  function recordMemory(entry) {
+    remember(db, entry, clock);
+    appendMemoryLog(root, { ...entry, at: nowIso(clock) });
+  }
+
+  function enqueueContinuations() {
+    const next = planContinuations(snapshot(db));
+    for (const task of next) insertTask(db, task, clock);
+    if (next.length) {
+      logLine(db, { agentId: 'agent-conductor', message: `Queued ${next.length} continuation task(s). Standing order still holds.` }, clock);
+    }
+    return next.length;
+  }
+
   function finish(task, agent, { ok, message }) {
     const ts = nowIso(clock);
     clearAssignment(task, agent, ts);
@@ -296,8 +356,21 @@ export function createEngine(options = {}) {
     }, clock);
     const remaining = Number(get(db, "SELECT COUNT(*) AS n FROM tasks WHERE status NOT IN ('succeeded', 'failed')")?.n ?? 0);
     if (remaining === 0) {
-      run(db, "UPDATE mission SET status = 'idle', updated_at = ? WHERE id = ?", [ts, 'mission-primary']);
-      logLine(db, { agentId: 'agent-conductor', message: 'Wave complete. User acceptance remains pending.' }, clock);
+      const added = enqueueContinuations();
+      if (added > 0) {
+        run(db, "UPDATE mission SET status = 'running', updated_at = ? WHERE id = ?", [ts, 'mission-primary']);
+        queueMicrotask(() => { void tick(); });
+        return;
+      }
+      const accepted = get(db, 'SELECT accepted FROM mission WHERE id = ?', ['mission-primary'])?.accepted;
+      const status = accepted === 'accepted' ? 'idle' : 'waiting_accept';
+      run(db, 'UPDATE mission SET status = ?, updated_at = ? WHERE id = ?', [status, ts, 'mission-primary']);
+      logLine(db, {
+        agentId: 'agent-conductor',
+        message: status === 'idle'
+          ? 'Work is idle after user acceptance.'
+          : 'Ready wave is complete. Standing order holds until the user accepts.',
+      }, clock);
     }
   }
 
@@ -309,7 +382,14 @@ export function createEngine(options = {}) {
   return engine;
 }
 
-function seed(db, { swarmSize, clock }) {
+function recoverOrphans(db, clock) {
+  const ts = nowIso(clock);
+  run(db, "UPDATE tasks SET status = 'queued', assignee = NULL, updated_at = ? WHERE status = 'running'", [ts]);
+  run(db, 'DELETE FROM leases');
+  run(db, "UPDATE agents SET status = 'idle', task_id = NULL, detail = '', updated_at = ?", [ts]);
+}
+
+function seed(db, { swarmSize, clock, root }) {
   const ts = nowIso(clock);
   if (!get(db, 'SELECT id FROM mission WHERE id = ?', ['mission-primary'])) {
     run(db, `
@@ -327,18 +407,24 @@ function seed(db, { swarmSize, clock }) {
       swarmSize,
       ts,
     ]);
-    remember(db, {
-      id: `mem-order-${shortId()}`,
-      kind: 'decision',
-      title: 'Standing order',
-      body: STANDING_ORDER,
-    }, clock);
-    remember(db, {
-      id: `mem-isolation-${shortId()}`,
-      kind: 'playbook',
-      title: 'Path leases isolate parallel work',
-      body: 'Two ready tasks may run at the same time only when their paths do not overlap.',
-    }, clock);
+    const opening = [
+      {
+        id: `mem-order-${shortId()}`,
+        kind: 'decision',
+        title: 'Standing order',
+        body: STANDING_ORDER,
+      },
+      {
+        id: `mem-isolation-${shortId()}`,
+        kind: 'playbook',
+        title: 'Path leases isolate parallel work',
+        body: 'Two ready tasks may run at the same time only when their paths do not overlap.',
+      },
+    ];
+    for (const entry of opening) {
+      remember(db, entry, clock);
+      appendMemoryLog(root, { ...entry, at: ts });
+    }
     for (const task of planPulse()) insertTask(db, task, clock);
   }
   const count = Number(get(db, 'SELECT COUNT(*) AS n FROM agents')?.n ?? 0);
@@ -347,7 +433,7 @@ function seed(db, { swarmSize, clock }) {
 
 function pickAgent(idle, task) {
   if (task.kind === 'test') return idle.find((agent) => agent.role === 'verifier') ?? null;
-  if (task.kind === 'handoff') {
+  if (task.kind === 'handoff' || task.kind === 'digest') {
     return idle.find((agent) => agent.role === 'archivist')
       ?? idle.find((agent) => agent.role === 'conductor')
       ?? idle.find((agent) => agent.role === 'integrator')

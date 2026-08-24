@@ -315,6 +315,51 @@ test('service lists and updates pulse status', async () => {
   assert.equal(service.listPulses().length, 1);
 });
 `,
+
+  'src/metrics.mjs': `export function countByStatus(pulses) {
+  const counts = { on_track: 0, at_risk: 0, blocked: 0, total: 0 };
+  for (const pulse of pulses) {
+    if (counts[pulse.status] != null) counts[pulse.status] += 1;
+    counts.total += 1;
+  }
+  return counts;
+}
+
+export function riskRatio(pulses) {
+  const counts = countByStatus(pulses);
+  if (counts.total === 0) return 0;
+  return (counts.at_risk + counts.blocked) / counts.total;
+}
+`,
+
+  'test/metrics.test.mjs': `import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { countByStatus, riskRatio } from '../src/metrics.mjs';
+
+test('metrics count pulse risk', () => {
+  const pulses = [
+    { status: 'on_track' },
+    { status: 'at_risk' },
+    { status: 'blocked' },
+  ];
+  assert.deepEqual(countByStatus(pulses), { on_track: 1, at_risk: 1, blocked: 1, total: 3 });
+  assert.equal(riskRatio(pulses), 2 / 3);
+  assert.equal(riskRatio([]), 0);
+});
+`,
+
+  'CHANGELOG.md': `# Pulse changelog
+
+## 0.2.0
+
+- Persist pulses on disk after the swarm remembered that an in-memory store is not evidence.
+- Add risk metrics so a later session can see blocked work without guessing.
+
+## 0.1.0
+
+- Initial tracker: domain, store, service, CLI, HTTP, and status page.
+`,
 };
 
 export function fileContents(key) {

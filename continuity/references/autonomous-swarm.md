@@ -15,7 +15,10 @@ npm run launch
 ## What is stored
 
 - `data/swarm.sqlite` — mission, agents, tasks, path leases, lessons, failures, playbooks
-- `forge/` — the product the swarm is building
+- `data/memory.ndjson` — append-only copy of the same lessons so a killed process is not the last copy
+- `forge/` — the product the swarm is building, including `MEMORY.md` after the continuation wave
 - `.continuity/` — the original append-only journal, if you initialized Memory in this repository
+
+The first wave builds Pulse. The next wave writes product memory, a changelog, and risk metrics. When those tasks are done, status is `waiting_accept`. That is not acceptance. Only an explicit user accept flips `accepted`. Relaunching the same root reloads sqlite and the memory log; it does not invent a new standing order.
 
 The swarm does not edit `HISTORY.ndjson`. Memory remains the long-term journal. The swarm is the execution plane that was missing: parallel work, a task database, and a standing order that survives a new session.

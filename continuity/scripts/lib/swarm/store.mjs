@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -130,6 +130,12 @@ export function remember(db, { id, kind, title, body, taskId = null }, clock) {
     INSERT INTO memory (id, kind, title, body, task_id, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `, [id, kind, title, body, taskId, nowIso(clock)]);
+}
+
+export function appendMemoryLog(root, record) {
+  const directory = path.join(root, 'data');
+  mkdirSync(directory, { recursive: true });
+  appendFileSync(path.join(directory, 'memory.ndjson'), `${JSON.stringify(record)}\n`);
 }
 
 export function snapshot(db) {
