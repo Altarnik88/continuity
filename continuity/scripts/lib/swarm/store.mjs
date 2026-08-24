@@ -4,8 +4,12 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { nowIso } from './contract.mjs';
 
+export function swarmDataDirectory(root) {
+  return path.join(root, 'data');
+}
+
 export function openStore(root) {
-  const directory = path.join(root, 'data');
+  const directory = swarmDataDirectory(root);
   mkdirSync(directory, { recursive: true });
   const file = path.join(directory, 'swarm.sqlite');
   const db = new DatabaseSync(file);
@@ -133,7 +137,7 @@ export function remember(db, { id, kind, title, body, taskId = null }, clock) {
 }
 
 export function appendMemoryLog(root, record) {
-  const directory = path.join(root, 'data');
+  const directory = swarmDataDirectory(root);
   mkdirSync(directory, { recursive: true });
   appendFileSync(path.join(directory, 'memory.ndjson'), `${JSON.stringify(record)}\n`);
 }
