@@ -3,8 +3,9 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { buildDispatchPacket, buildRoster, clampSwarmSize, isBlindKind, leaseConflict, pathsOverlap } from '../../continuity/scripts/lib/swarm/contract.mjs';
+import { buildDispatchPacket, buildRoster, clampSwarmSize, isBlindKind, leaseConflict, pathsOverlap, selectDispatchWave } from '../../continuity/scripts/lib/swarm/contract.mjs';
 import { launchSwarm } from '../../continuity/scripts/lib/swarm/engine.mjs';
+import { planPulse } from '../../continuity/scripts/lib/swarm/planner.mjs';
 
 export async function run() {
   assert.equal(clampSwarmSize(3), 5);
@@ -37,6 +38,16 @@ export async function run() {
     ),
     true,
   );
+  const seeds = planPulse().filter((task) => task.deps.length === 0);
+  assert.equal(selectDispatchWave(seeds).length, 3);
+  assert.equal(
+    selectDispatchWave([
+      { id: 'a', priority: 1, paths: ['forge/src/store.mjs'] },
+      { id: 'b', priority: 2, paths: ['forge/src/store.mjs'] },
+      { id: 'c', priority: 3, paths: ['forge/src/cli.mjs'] },
+    ]).map((task) => task.id).join(','),
+    'a,c',
+  );
 
   const root = mkdtempSync(path.join(os.tmpdir(), 'continuity-swarm-'));
   const swarm = launchSwarm({ root, autoStart: true, swarmSize: 8, paceMs: 0 });
@@ -64,7 +75,15 @@ export async function run() {
       const agent = done.agents.find((item) => item.id === task.assignee);
       return agent && (agent.role === 'conductor' || agent.role === 'manager');
     }), 'conductor/manager must not take product leases');
-    assert.ok(done.maxInflight >= 2, `expected parallel agents, maxInflight=${done.maxInflight}`);
+    assert.ok(done.maxInflight >= 3, `expected parallel agents, maxInflight=${done.maxInflight}`);
+    assert.match(
+      readFileSync(path.join(root, 'forge', 'SECURITY.md'), 'utf8'),
+      /Observed without implementer notes/,
+    );
+    assert.match(
+      readFileSync(path.join(root, 'forge', 'REVIEW.md'), 'utf8'),
+      /createPulse|changeStatus|writeFileSync/,
+    );
     assert.ok(done.memory.some((item) => item.kind === 'failure'), 'the buggy store should have produced a remembered failure');
     assert.ok(done.memory.some((item) => item.kind === 'playbook'), 'passing verification should record a playbook');
     assert.equal(done.mission.accepted, 'pending');

@@ -15,11 +15,11 @@ Continuity requires Node.js 22+ and Git. Memory/Continuity is local and self-con
 
 1. Recover memory: run `doctor` and `inspect` from this checkout against the user's Git worktree.
 2. Open the task database with `node continuity/scripts/launch.mjs` (or `--once`). If a swarm already listens on port 43147, read `http://127.0.0.1:43147/api/swarm` instead of starting a second copy.
-3. If the task database is empty, slice the user's product into isolated tasks covering analysis, implementation, tests, security, and review. Paths must not overlap. Persist them in `data/swarm.sqlite`.
-4. Dispatch **5–20 sub-agents in parallel in this same turn**. If the Task tool exists, spawn one sub-agent per ready packet whose paths do not overlap. Use `packets[].brief` verbatim for blind kinds. Do not implement leased paths yourself while a sub-agent owns them.
+3. Run `node continuity/scripts/dispatch.mjs`. If the task database is empty, slice the user's product into isolated tasks covering analysis, implementation, tests, security, and review. Paths must not overlap. Persist them in `data/swarm.sqlite`.
+4. Dispatch **every `wave[]` packet in this same turn**. If the Task tool exists, spawn one isolated sub-agent per wave packet. Use `wave[].brief` verbatim for blind kinds (`blind: true`). Do not add chat history, implementer notes, or other agents' reasoning. Do not implement leased paths yourself while a sub-agent owns them. Spawn all wave packets together; do not serialize them. When they return, run `dispatch.mjs` again and spawn the next wave until `wave` is empty.
 5. Verifiers, security, and review start **blind**: no implementer notes, no chat history, no other agents' reasoning. Give paths, commands, and checks only.
 6. Sub-agents must use available Skills, MCP servers, and plugins that help their task. They must not accept the product.
-7. At swarm size 10 or more, appoint a **Manager** sub-agent that watches the task database and reports blockers. The Manager does not edit product files.
+7. At swarm size 10 or more, appoint a **Manager** sub-agent that watches the task database and reports blockers. The Manager does not edit product files. `dispatch.mjs` sets `manager: true` when that role exists.
 8. You stay Conductor: merge evidence, requeue failures, keep leases honest. Only the user may accept.
 
 Protocol: [references/conductor-orchestration.md](references/conductor-orchestration.md). Local runtime: [references/autonomous-swarm.md](references/autonomous-swarm.md).
@@ -31,9 +31,10 @@ The downloaded product also runs a local swarm so work continues without a new c
 ```bash
 node "/absolute/path/to/continuity/scripts/launch.mjs"
 node "/absolute/path/to/continuity/scripts/launch.mjs" --once --swarm-size 8
+node "/absolute/path/to/continuity/scripts/dispatch.mjs"
 ```
 
-The swarm keeps a standing order, a SQLite task database, lessons/failures/playbooks, and path leases. It does not accept work for the user. The control surface is `node continuity/scripts/launch.mjs` (port 43147). `GET /api/swarm` includes `packets[]` for the Conductor to copy into sub-agent prompts.
+The swarm keeps a standing order, a SQLite task database, lessons/failures/playbooks, and path leases. It does not accept work for the user. The control surface is `node continuity/scripts/launch.mjs` (port 43147). `GET /api/swarm` includes `packets[]` and a disjoint `wave[]`. The Conductor copies `wave[]` into isolated sub-agent prompts. `dispatch.mjs` prints that wave as JSON.
 
 ## Resolve the CLI
 

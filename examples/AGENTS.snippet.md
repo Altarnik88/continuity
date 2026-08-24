@@ -2,7 +2,7 @@
 
 Adapt this section to the repository-level instruction format supported by your coding agent. It assumes the single `continuity/` directory is already installed or cloned and that the agent can resolve its `scripts/continuity.mjs` path.
 
-- On `/continuity`, the host agent is the Conductor. Recover memory, fill the task database, and dispatch 5–20 isolated sub-agents in one turn.
+- On `/continuity`, the host agent is the Conductor. Recover memory, run `dispatch.mjs`, and spawn 5–20 isolated sub-agents in one turn. Repeat waves until empty.
 - Cover analysis, implementation, independent verification, security, and review. Paths must not overlap. Blind roles receive no implementer context.
 - At swarm size 10 or more, appoint a Manager who watches the task database and does not edit product files.
 - At the start of nontrivial repository work, run read-only `doctor`, `inspect`, and `inspect ready --json` from the target worktree.

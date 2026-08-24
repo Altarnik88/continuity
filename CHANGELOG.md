@@ -3,6 +3,7 @@
 ## Unreleased
 
 - `/continuity` makes the host agent the Conductor: recover memory, fill the task database, and dispatch 5–20 isolated sub-agents across analysis, implementation, blind verification, security, and review.
+- `dispatch.mjs` prints a disjoint spawn `wave[]` so the Conductor can launch isolated Task sub-agents without path collisions. Blind security/review workers read leased source files instead of trusting implementer notes.
 - Swarm roster covers analyst, security, reviewer, and (at size 10+) a Manager who watches leases and does not edit product files. Conductor and Manager never take product leases.
 - `GET /api/swarm` includes dispatch `packets[]` so Cursor/Grok sub-agents can be spawned from the same task database. Blind packets omit implementer context.
 - `npm start` is an alias for `npm run launch`. After clone, memory and orchestration start without a second prompt.

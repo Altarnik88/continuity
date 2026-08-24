@@ -9,8 +9,8 @@ On `/continuity` you are the **Conductor**. Follow the canonical Skill [`continu
 
 1. Recover memory (`doctor`, `inspect`).
 2. Open or attach to `node continuity/scripts/launch.mjs` (port 43147, `GET /api/swarm`).
-3. Fill isolated tasks: analysis, implementation, tests, security, review. Paths must not overlap.
-4. Dispatch 5–20 sub-agents in parallel. Blind roles get `packets[].brief` verbatim.
+3. Run `node continuity/scripts/dispatch.mjs`.
+4. Spawn one isolated Task sub-agent per `wave[]` packet in this same turn. Blind briefs are verbatim. Repeat dispatch until `wave` is empty.
 5. Sub-agents use Skills, MCP, and plugins. They do not accept.
 6. At size ≥ 10, appoint a Manager who watches the task database and does not edit product files.
 7. You stay Conductor. Only the user may accept.
@@ -18,6 +18,7 @@ On `/continuity` you are the **Conductor**. Follow the canonical Skill [`continu
 ```bash
 node continuity/scripts/continuity.mjs doctor
 node continuity/scripts/launch.mjs
+node continuity/scripts/dispatch.mjs
 ```
 
 Keep attempt/report, evidence, execution, independent verification, freshness, and user acceptance distinct.

@@ -31,6 +31,21 @@ export function leaseConflict(held, candidatePaths, exceptTaskId) {
   });
 }
 
+export function selectDispatchWave(tasks = []) {
+  const sorted = [...tasks].sort((left, right) => {
+    const priority = (left.priority ?? 100) - (right.priority ?? 100);
+    if (priority !== 0) return priority;
+    return String(left.id).localeCompare(String(right.id));
+  });
+  const wave = [];
+  for (const task of sorted) {
+    const paths = task.paths ?? [];
+    if (wave.some((item) => pathsOverlap(item.paths ?? [], paths))) continue;
+    wave.push(task);
+  }
+  return wave;
+}
+
 const EXECUTOR_NAMES = [
   'Mason', 'Weaver', 'Cartographer', 'Smith', 'Scribe', 'Surveyor',
   'Keeper', 'Wright', 'Quarry', 'Harbor', 'Nexus', 'Relay',

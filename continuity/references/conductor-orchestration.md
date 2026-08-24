@@ -59,7 +59,7 @@ At size ≥ 10 the Conductor appoints one Manager. The Manager reads the task da
 
 ## Local runtime packets
 
-`GET /api/swarm` includes `packets` for ready and running tasks. Each packet has `id`, `kind`, `paths`, `blind`, and `brief`. Use `brief` as the sub-agent prompt. Do not expand a blind brief with extra context.
+`GET /api/swarm` includes `packets` for ready and running tasks and `wave` for the maximal disjoint spawn set. Each packet has `id`, `kind`, `paths`, `blind`, and `brief`. Run `scripts/dispatch.mjs` and use `wave` as the sub-agent prompts. Do not expand a blind brief with extra context. When the wave returns, dispatch again until `wave` is empty.
 
 ## Never
 

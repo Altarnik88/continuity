@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -11,6 +11,7 @@ import {
   clampSwarmSize,
   leaseConflict,
   nowIso,
+  selectDispatchWave,
 } from './contract.mjs';
 import { planContinuations, planPulse } from './planner.mjs';
 import {
@@ -68,15 +69,24 @@ export function createEngine(options = {}) {
     root,
     db,
     getSnapshot() {
+      const state = snapshot(db);
+      const held = state.leases.map((lease) => ({
+        taskId: lease.task_id,
+        paths: [lease.path],
+      }));
+      const ready = state.tasks.filter((task) => task.status === 'ready');
+      const spawnable = ready.filter((task) => !leaseConflict(held, task.paths));
+      const packets = state.tasks
+        .filter((task) => task.status === 'ready' || task.status === 'running')
+        .map(buildDispatchPacket);
       return {
-        ...snapshot(db),
+        ...state,
         standingOrder: STANDING_ORDER,
         files: listForge(root),
         inflight: inflight.size,
         maxInflight,
-        packets: snapshot(db).tasks
-          .filter((task) => task.status === 'ready' || task.status === 'running')
-          .map(buildDispatchPacket),
+        packets,
+        wave: selectDispatchWave(spawnable).map(buildDispatchPacket),
       };
     },
     start() {
@@ -240,10 +250,18 @@ export function createEngine(options = {}) {
 
   async function writeProduct(task, agent) {
     const files = selectFiles(task);
+    const observed = observeSources(root, task.paths);
     for (const [relative, key] of Object.entries(files)) {
       const target = path.join(root, relative);
       mkdirSync(path.dirname(target), { recursive: true });
-      writeFileSync(target, fileContents(key));
+      let body = fileContents(key);
+      if (
+        observed.length
+        && (task.kind === 'analyze' || task.kind === 'security' || task.kind === 'review')
+      ) {
+        body += `\n## Observed without implementer notes\n\n${observed.map((line) => `- ${line}`).join('\n')}\n`;
+      }
+      writeFileSync(target, body);
     }
     if (task.spec.buggyFiles && task.attempts <= (task.spec.buggyUntilAttempt ?? 0)) {
       recordMemory({
@@ -483,6 +501,25 @@ function selectFiles(task) {
     return task.spec.buggyFiles;
   }
   return task.spec.files ?? {};
+}
+
+function observeSources(root, paths = []) {
+  const notes = [];
+  for (const relative of paths) {
+    if (relative.endsWith('.md') || relative.endsWith('.html') || relative.endsWith('.json')) continue;
+    const full = path.join(root, relative);
+    if (!existsSync(full)) continue;
+    const body = readFileSync(full, 'utf8');
+    const names = [...body.matchAll(/export (?:async )?function ([A-Za-z0-9_]+)/g)].map((match) => match[1]);
+    const markers = ['STATUSES', 'createPulse', 'changeStatus', 'writeFileSync', 'createServer', 'addPulse']
+      .filter((token) => body.includes(token));
+    notes.push(
+      names.length
+        ? `${relative} exports ${names.join(', ')}${markers.length ? `; markers ${markers.join(', ')}` : ''}`
+        : `${relative} read (${body.length} bytes)${markers.length ? `; markers ${markers.join(', ')}` : ''}`,
+    );
+  }
+  return notes;
 }
 
 function listForge(root) {
