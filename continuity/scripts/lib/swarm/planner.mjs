@@ -1,3 +1,4 @@
+/** Test fixture only. Do not call from live engine seed. */
 export function planPulse() {
   return [
     {

@@ -13,7 +13,7 @@ import {
   nowIso,
   selectDispatchWave,
 } from './contract.mjs';
-import { planContinuations, planPulse } from './planner.mjs';
+import { planContinuations } from './planner.mjs';
 import {
   all,
   appendMemoryLog,
@@ -438,10 +438,10 @@ function seed(db, { swarmSize, clock, root }) {
       ) VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, 'pending', NULL, ?)
     `, [
       'mission-primary',
-      'Build Pulse autonomously and keep going',
+      'Awaiting journal goal',
       STANDING_ORDER,
       STANDING_ORDER,
-      'Pulse',
+      'unspecified',
       'forge',
       swarmSize,
       ts,
@@ -464,7 +464,6 @@ function seed(db, { swarmSize, clock, root }) {
       remember(db, entry, clock);
       appendMemoryLog(root, { ...entry, at: ts });
     }
-    for (const task of planPulse()) insertTask(db, task, clock);
   }
   const count = Number(get(db, 'SELECT COUNT(*) AS n FROM agents')?.n ?? 0);
   if (count === 0) replaceAgents(db, buildRoster(swarmSize), clock);
