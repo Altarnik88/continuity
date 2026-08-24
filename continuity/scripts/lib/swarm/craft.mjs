@@ -28,6 +28,34 @@ node --test test/*.test.mjs
 Statuses: \`on_track\`, \`at_risk\`, \`blocked\`.
 `,
 
+  'ANALYSIS.md': `# Pulse analysis
+
+Goal: a small tracker that records whether a project is on track, at risk, or blocked.
+
+Risks: an in-memory store loses state; a writer must not verify its own change; overlapping edits corrupt the tracker.
+
+Slice: domain and tests first, then a durable store, then service, CLI, HTTP, an independent security note, and a review that does not reuse writer context.
+`,
+
+  'SECURITY.md': `# Pulse security
+
+- Reject unknown statuses. Do not coerce them into \`on_track\`.
+- Truncate project names and notes. Do not execute note text.
+- The HTTP listener binds loopback in the swarm demo. Do not treat that as a public deployment.
+- Persistence must stay in \`data/pulse.json\` inside the product directory. Do not follow user-supplied paths.
+`,
+
+  'REVIEW.md': `# Pulse independent review
+
+Reviewed without implementer notes.
+
+- Domain rejects empty projects and unknown statuses.
+- Store upserts by id and rereads from disk after write.
+- Service changes status only for ids that exist.
+- CLI and HTTP are thin adapters over the service.
+- Remaining risk: this demo is not an authenticated multi-user service.
+`,
+
   'src/domain.mjs': `export const STATUSES = Object.freeze(['on_track', 'at_risk', 'blocked']);
 
 export function normalizeProject(value) {

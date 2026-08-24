@@ -4,6 +4,7 @@ export const STANDING_ORDER = [
   'Keep context: goals, failures, lessons, and playbooks must survive every session.',
   'Slice work into a task database. Run 5-20 sub-agents in parallel.',
   'Never let two agents own overlapping paths at the same time.',
+  'Cover analysis, implementation, independent verification, security, and review when paths do not overlap.',
   'An attempt is not evidence. A report is not verification. Only the user may accept.',
 ].join(' ');
 
@@ -43,8 +44,20 @@ export function buildRoster(size) {
     { id: 'agent-archivist', role: 'archivist', name: 'Archivist' },
     { id: 'agent-sentinel', role: 'verifier', name: 'Sentinel' },
   ];
+  if (swarmSize >= 6) {
+    roster.push({ id: 'agent-analyst', role: 'analyst', name: 'Analyst' });
+  }
   if (swarmSize >= 7) {
+    roster.push({ id: 'agent-warden', role: 'security', name: 'Warden' });
+  }
+  if (swarmSize >= 8) {
+    roster.push({ id: 'agent-reviewer', role: 'reviewer', name: 'Reviewer' });
+  }
+  if (swarmSize >= 9) {
     roster.push({ id: 'agent-auditor', role: 'verifier', name: 'Auditor' });
+  }
+  if (swarmSize >= 10) {
+    roster.push({ id: 'agent-manager', role: 'manager', name: 'Manager' });
   }
   if (swarmSize >= 12) {
     roster.push({ id: 'agent-integrator', role: 'integrator', name: 'Integrator' });
@@ -61,6 +74,26 @@ export function buildRoster(size) {
     index += 1;
   }
   return roster;
+}
+
+export function isBlindKind(kind) {
+  return kind === 'test' || kind === 'security' || kind === 'review';
+}
+
+export function buildDispatchPacket(task) {
+  const paths = (task.paths ?? []).join(', ');
+  const blind = isBlindKind(task.kind);
+  return {
+    id: task.id,
+    title: task.title,
+    kind: task.kind,
+    paths: task.paths ?? [],
+    deps: task.deps ?? [],
+    blind,
+    brief: blind
+      ? `${task.title}. Read only ${paths}. Do not read implementer notes, chat history, or other agents' reasoning. Use tests, the listed files, and available skills, MCP, and plugins.`
+      : `${task.title}. Own only ${paths}. Use available skills, MCP, and plugins. Do not edit paths you do not own.`,
+  };
 }
 
 export function nowIso(clock = () => new Date()) {

@@ -169,6 +169,7 @@ export const EXPECTED_SKILL_FILES = Object.freeze([
   `${SKILL_PREFIX}scripts/smokes/memory.mjs`,
   `${SKILL_PREFIX}assets/control-surface.html`,
   `${SKILL_PREFIX}references/autonomous-swarm.md`,
+  `${SKILL_PREFIX}references/conductor-orchestration.md`,
   `${SKILL_PREFIX}scripts/control-surface.mjs`,
   `${SKILL_PREFIX}scripts/launch.mjs`,
   `${SKILL_PREFIX}scripts/lib/swarm/contract.mjs`,

@@ -35,11 +35,11 @@ git clone https://github.com/Altarnik88/continuity.git
 cd continuity
 npm install
 node continuity/scripts/continuity.mjs --version
+npm start
 node continuity/scripts/launch.mjs --once
-npm run launch
 ```
 
-`npm run launch` opens the control surface on port 43147 and immediately starts the standing order: keep context, slice the product, and develop it with a parallel swarm. `launch.mjs --once` runs that swarm headlessly until the current wave is idle. User acceptance stays pending until you click **Accept** or call accept yourself.
+`npm start` (same as `npm run launch`) opens the control surface on port 43147 and immediately starts memory plus orchestration. In Cursor or Grok, `/continuity` makes the host agent the **Conductor**: it recovers memory, fills the task database, and dispatches 5–20 isolated sub-agents across analysis, implementation, blind verification, security, and review. At size 10+ it appoints a Manager. `launch.mjs --once` runs that swarm headlessly until the current wave is idle. User acceptance stays pending until you click **Accept** or call accept yourself.
 
 From the Git repository Continuity should remember:
 

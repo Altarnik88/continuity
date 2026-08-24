@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Autonomous swarm: SQLite task database, 5–20 parallel sub-agents, path leases, standing order on launch, and a local control surface (`npm run launch`).
+- `/continuity` makes the host agent the Conductor: recover memory, fill the task database, and dispatch 5–20 isolated sub-agents across analysis, implementation, blind verification, security, and review.
+- Swarm roster covers analyst, security, reviewer, and (at size 10+) a Manager who watches leases and does not edit product files. Conductor and Manager never take product leases.
+- `GET /api/swarm` includes dispatch `packets[]` so Cursor/Grok sub-agents can be spawned from the same task database. Blind packets omit implementer context.
+- `npm start` is an alias for `npm run launch`. After clone, memory and orchestration start without a second prompt.
+- Autonomous swarm: SQLite task database, 5–20 parallel sub-agents, path leases, standing order on launch, and a local control surface.
 - Swarm memory records lessons, failures, and playbooks. User acceptance stays pending until an explicit accept.
 - Default wave builds Pulse under `forge/` and writes `forge/HANDOFF.md` so the next session does not guess.
 - Package validation inventories a Git worktree from `git ls-files --cached`, so ignored or untracked local notes (including `.superpowers/`) are not scanned as public product text.

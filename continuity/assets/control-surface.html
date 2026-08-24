@@ -38,7 +38,9 @@
     .agent { border: 1px solid #27272a; border-radius: 12px; padding: 12px; background: #09090b; }
     .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     .working { background: #34d399; }
+    .watching { background: #fbbf24; }
     .idle { background: #52525b; }
+    .blind { color: #fbbf24; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #a1a1aa; }
     li { margin: 0 0 10px; }
     ul { padding-left: 18px; }
@@ -48,9 +50,9 @@
   <main>
     <header>
       <div>
-        <div class="kicker">Continuity · autonomous mode</div>
+        <div class="kicker">Continuity · conductor mode</div>
         <h1>Долгая разработка без потери контекста</h1>
-        <p class="lede">Память, нарезка задач и 5–20 субагентов с изоляцией путей. Рой стартует сам. Принять работу можете только вы.</p>
+        <p class="lede">Память и оркестрация стартуют сразу. Дирижёр режет работу в базу задач и ведёт 5–20 субагентов: анализ, разработка, слепая проверка, безопасность, ревью. Пути не пересекаются. Принять работу можете только вы.</p>
       </div>
       <div class="row">
         <button id="pause">Пауза</button>
@@ -60,7 +62,7 @@
     </header>
     <section class="order">
       <div class="kicker">Standing order</div>
-      <p>Разрабатывать продукт автономно и долгосрочно. Не ждать новый чат. Держать цели, ошибки и лучшие решения. Нарезать работу в базу задач. Вести 5–20 субагентов параллельно без пересечения файлов. Принять работу можете только вы.</p>
+      <p>Разрабатывать продукт автономно и долгосрочно. Не ждать новый чат. Держать цели, ошибки и лучшие решения. Нарезать работу в базу задач. Вести 5–20 субагентов параллельно: анализ, реализация, независимая проверка, безопасность, ревью. Файлы не пересекаются. С размера 10 дирижёр назначает управляющего. Принять работу можете только вы.</p>
       <p class="mono" id="order-en"></p>
     </section>
     <section class="grid" id="stats"></section>
@@ -122,16 +124,18 @@
         ['Живые агенты', String(counts.agentsLive || 0), 'рой ' + (mission.swarm_size || 0)],
         ['Память', (counts.lessons || 0) + ' / ' + (counts.failures || 0), 'уроки / ошибки'],
       ].map((row) => '<article class="card"><div class="muted">' + esc(row[0]) + '</div><div class="value">' + esc(row[1]) + '</div><div class="mono">' + esc(row[2]) + '</div></article>').join('');
-      document.getElementById('sizes').innerHTML = [5, 8, 12, 16, 20].map((size) => (
+      document.getElementById('sizes').innerHTML = [5, 8, 10, 12, 16, 20].map((size) => (
         '<button data-size="' + size + '"' + (mission.swarm_size === size ? ' class="primary"' : '') + '>' + size + '</button>'
       )).join(' ');
       document.getElementById('agents').innerHTML = (state.agents || []).map((agent) => (
-        '<article class="agent"><div class="row" style="justify-content:space-between"><strong>' + esc(agent.name) + '</strong><span><span class="dot ' + (agent.status === 'working' ? 'working' : 'idle') + '"></span> ' + esc(agent.status) + '</span></div><div class="mono">' + esc(agent.role) + '</div><div class="mono">' + esc(agent.detail || 'waiting for a ready task with a free path lease') + '</div></article>'
+        '<article class="agent"><div class="row" style="justify-content:space-between"><strong>' + esc(agent.name) + '</strong><span><span class="dot ' + (agent.status === 'working' ? 'working' : agent.status === 'watching' ? 'watching' : 'idle') + '"></span> ' + esc(agent.status) + '</span></div><div class="mono">' + esc(agent.role) + '</div><div class="mono">' + esc(agent.detail || 'waiting for a ready task with a free path lease') + '</div></article>'
       )).join('');
       document.getElementById('memory').innerHTML = (state.memory || []).slice(0, 8).map((item) => (
         '<p><span class="kicker">' + esc(item.kind) + '</span><br><strong>' + esc(item.title) + '</strong><br><span class="mono">' + esc(item.body) + '</span></p>'
       )).join('');
-      document.getElementById('tasks').innerHTML = (state.tasks || []).map((task) => (
+      document.getElementById('tasks').innerHTML = (state.packets || []).map((packet) => (
+        '<li><strong>' + esc(packet.title) + '</strong> ' + (packet.blind ? '<span class="blind">blind</span>' : '') + '<div class="mono">' + esc(packet.kind + ' · ' + (packet.paths || []).join(', ')) + '</div><div class="mono">' + esc(packet.brief) + '</div></li>'
+      )).join('') + (state.tasks || []).map((task) => (
         '<li><strong>' + esc(task.title) + '</strong><div class="mono">' + esc(task.id + ' · ' + task.status + ' · ' + (task.paths || []).join(', ')) + '</div></li>'
       )).join('');
       document.getElementById('files').innerHTML = (state.files || []).map((file) => '<li>' + esc(file) + '</li>').join('') || '<li>product files appear here</li>';

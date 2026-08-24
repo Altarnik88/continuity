@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { fileContents } from './craft.mjs';
 import {
   STANDING_ORDER,
+  buildDispatchPacket,
   buildRoster,
   clampSwarmSize,
   leaseConflict,
@@ -73,6 +74,9 @@ export function createEngine(options = {}) {
         files: listForge(root),
         inflight: inflight.size,
         maxInflight,
+        packets: snapshot(db).tasks
+          .filter((task) => task.status === 'ready' || task.status === 'running')
+          .map(buildDispatchPacket),
       };
     },
     start() {
@@ -163,6 +167,22 @@ export function createEngine(options = {}) {
       }
     }
     assignReady();
+    briefWatchers();
+  }
+
+  function briefWatchers() {
+    const counts = snapshot(db).counts;
+    const leases = all(db, 'SELECT path, agent_id FROM leases');
+    const leaseText = leases.map((row) => `${row.agent_id}:${row.path}`).join('; ') || 'none';
+    const ts = nowIso(clock);
+    const managerDetail = `watching ${counts.succeeded}/${counts.tasks} done, ${counts.queued} queued, ${counts.running} live; leases ${leaseText}`;
+    const conductorDetail = `orchestrating ${counts.running} live / ${counts.queued} ready of ${counts.tasks}; packets on GET /api/swarm`;
+    run(db, "UPDATE agents SET status = 'watching', detail = ?, updated_at = ? WHERE role = 'manager' AND status != 'working'", [
+      managerDetail, ts,
+    ]);
+    run(db, "UPDATE agents SET status = 'watching', detail = ?, updated_at = ? WHERE role = 'conductor' AND status != 'working'", [
+      conductorDetail, ts,
+    ]);
   }
 
   function assignReady() {
@@ -205,8 +225,9 @@ export function createEngine(options = {}) {
     maxInflight = Math.max(maxInflight, inflight.size);
     try {
       if (paceMs) await sleep(paceMs);
-      if (task.kind === 'write') await writeProduct(task, agent);
-      else if (task.kind === 'test') await verifyProduct(task, agent);
+      if (task.kind === 'write' || task.kind === 'analyze' || task.kind === 'security' || task.kind === 'review') {
+        await writeProduct(task, agent);
+      } else if (task.kind === 'test') await verifyProduct(task, agent);
       else if (task.kind === 'handoff') await writeHandoff(agent);
       else if (task.kind === 'digest') await writeDigest(agent);
       else throw new Error(`unknown kind ${task.kind}`);
@@ -345,7 +366,7 @@ export function createEngine(options = {}) {
     run(db, 'UPDATE tasks SET status = ?, error = ?, verifier = ?, updated_at = ? WHERE id = ?', [
       ok ? 'succeeded' : 'failed',
       ok ? null : String(message).slice(0, 800),
-      task.kind === 'test' ? agent.id : null,
+      task.kind === 'test' || task.kind === 'security' || task.kind === 'review' ? agent.id : null,
       ts,
       task.id,
     ]);
@@ -432,14 +453,29 @@ function seed(db, { swarmSize, clock, root }) {
 }
 
 function pickAgent(idle, task) {
-  if (task.kind === 'test') return idle.find((agent) => agent.role === 'verifier') ?? null;
-  if (task.kind === 'handoff' || task.kind === 'digest') {
-    return idle.find((agent) => agent.role === 'archivist')
-      ?? idle.find((agent) => agent.role === 'conductor')
-      ?? idle.find((agent) => agent.role === 'integrator')
+  const workers = idle.filter((agent) => agent.role !== 'conductor' && agent.role !== 'manager');
+  if (task.kind === 'test') return workers.find((agent) => agent.role === 'verifier') ?? null;
+  if (task.kind === 'security') {
+    return workers.find((agent) => agent.role === 'security')
+      ?? workers.find((agent) => agent.role === 'verifier')
       ?? null;
   }
-  return idle.find((agent) => agent.role === 'executor') ?? null;
+  if (task.kind === 'review') {
+    return workers.find((agent) => agent.role === 'reviewer')
+      ?? workers.find((agent) => agent.role === 'verifier')
+      ?? null;
+  }
+  if (task.kind === 'analyze') {
+    return workers.find((agent) => agent.role === 'analyst')
+      ?? workers.find((agent) => agent.role === 'archivist')
+      ?? null;
+  }
+  if (task.kind === 'handoff' || task.kind === 'digest') {
+    return workers.find((agent) => agent.role === 'archivist')
+      ?? workers.find((agent) => agent.role === 'integrator')
+      ?? null;
+  }
+  return workers.find((agent) => agent.role === 'executor') ?? null;
 }
 
 function selectFiles(task) {

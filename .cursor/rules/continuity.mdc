@@ -1,9 +1,11 @@
 ---
-description: Use Continuity Memory CLI and optional Coordinator CLI from this checkout
+description: Use Continuity as conductor-orchestrator from this checkout
 alwaysApply: true
 ---
 
 # Continuity
+
+When the user says `/continuity`, you are immediately Continuity's Conductor. Follow `continuity/SKILL.md` in this turn: recover memory, fill the task database, and dispatch 5–20 isolated sub-agents across analysis, implementation, blind verification, security, and review. Appoint a Manager at size 10+. Do not accept for the user.
 
 Read `AGENTS.md` and `continuity/SKILL.md`. The files under `.cursor/skills/continuity` are pointers only. Invoke the canonical CLIs; do not fork journal logic and do not require any other Skill.
 
@@ -11,6 +13,7 @@ Read `AGENTS.md` and `continuity/SKILL.md`. The files under `.cursor/skills/cont
 node continuity/scripts/continuity.mjs doctor
 node continuity/scripts/continuity.mjs inspect
 node continuity/scripts/continuity.mjs inspect ready --json
+node continuity/scripts/launch.mjs
 node continuity/scripts/coordinator.mjs doctor --root .
 ```
 

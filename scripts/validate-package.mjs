@@ -25,6 +25,7 @@ export const EXPECTED_PACKAGE_SCRIPTS = Object.freeze({
   'test:coordinator': 'node scripts/test-coordinator.mjs',
   'test:release': 'node scripts/test-release.mjs',
   'package:release': 'node scripts/package-release.mjs',
+  start: 'node continuity/scripts/launch.mjs',
   launch: 'node continuity/scripts/launch.mjs',
   'test:swarm': 'node tests/swarm/run.mjs',
   check: 'npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:protocol && npm run test:coordinator && npm run test:release && npm run test:swarm',
