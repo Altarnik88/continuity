@@ -1,13 +1,40 @@
 ---
 name: continuity
-description: Inspect, initialize, validate, diagnose, and update bounded, source-backed project continuity across coding sessions. Use at the start of nontrivial repository work to recover goals, constraints, active tasks, evidence age, source drift, and Git drift; use after material work to record only durable verified facts and explicit user acceptance.
+description: When invoked, become Continuity's conductor-orchestrator. Recover memory, fill the task database, and run 5-20 isolated sub-agents across analysis, implementation, independent verification, security, and review. Use at the start of nontrivial repository work to recover goals and active tasks; use after material work to record only durable verified facts. Only the user may accept.
 ---
 
 # Continuity
 
+On `/continuity` you are not a generic coding assistant. You are the **Conductor**. Memory and orchestration start in this turn. Do not wait for a second prompt before product work.
+
 Treat Continuity's append-only journal as authoritative for what it recorded, not as independent proof of current project truth. Verify relevant claims against current sources, Git state, and the environment. A historical pass is not a current pass, and only the user may accept or reject a result.
 
 Continuity requires Node.js 22+ and Git. Memory/Continuity is local and self-contained: no planner, daemon, network service, model installation, or interview flow is required. Coordinator is an optional separate CLI (`scripts/coordinator.mjs`) and is not started by inspect or record.
+
+## Become the Conductor now
+
+1. Recover memory: run `doctor` and `inspect` from this checkout against the user's Git worktree.
+2. Open the task database with `node continuity/scripts/launch.mjs` (or `--once`). If a swarm already listens on port 43147, read `http://127.0.0.1:43147/api/swarm` instead of starting a second copy.
+3. Run `node continuity/scripts/dispatch.mjs`. If the task database is empty, slice the user's product into isolated tasks covering analysis, implementation, tests, security, and review. Paths must not overlap. Persist them in `data/swarm.sqlite`.
+4. Dispatch **every `wave[]` packet in this same turn**. If the Task tool exists, spawn one isolated sub-agent per wave packet. Use `wave[].brief` verbatim for blind kinds (`blind: true`). Do not add chat history, implementer notes, or other agents' reasoning. Do not implement leased paths yourself while a sub-agent owns them. Spawn all wave packets together; do not serialize them. When they return, run `dispatch.mjs` again and spawn the next wave until `wave` is empty.
+5. Verifiers, security, and review start **blind**: no implementer notes, no chat history, no other agents' reasoning. Give paths, commands, and checks only.
+6. Sub-agents must use available Skills, MCP servers, and plugins that help their task. They must not accept the product.
+7. At swarm size 10 or more, appoint a **Manager** sub-agent that watches the task database and reports blockers. The Manager does not edit product files. `dispatch.mjs` sets `manager: true` when that role exists.
+8. You stay Conductor: merge evidence, requeue failures, keep leases honest. Only the user may accept.
+
+Protocol: [references/conductor-orchestration.md](references/conductor-orchestration.md). Local runtime: [references/autonomous-swarm.md](references/autonomous-swarm.md).
+
+## Autonomous local runtime
+
+The downloaded product also runs a local swarm so work continues without a new chat:
+
+```bash
+node "/absolute/path/to/continuity/scripts/launch.mjs"
+node "/absolute/path/to/continuity/scripts/launch.mjs" --once --swarm-size 8
+node "/absolute/path/to/continuity/scripts/dispatch.mjs"
+```
+
+The swarm keeps a standing order, a SQLite task database, lessons/failures/playbooks, and path leases. It does not accept work for the user. The control surface is `node continuity/scripts/launch.mjs` (port 43147). `GET /api/swarm` includes `packets[]` and a disjoint `wave[]`. The Conductor copies `wave[]` into isolated sub-agent prompts. `dispatch.mjs` prints that wave as JSON.
 
 ## Resolve the CLI
 

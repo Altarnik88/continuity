@@ -11,3 +11,8 @@ coverage/
 .env.*
 !.env.example
 __pycache__/
+.next/
+out/
+data/
+forge/
+*.sqlite
