@@ -92,8 +92,7 @@ export function createEngine(options = {}) {
     start() {
       const added = enqueueContinuations();
       const pending = Number(get(db, "SELECT COUNT(*) AS n FROM tasks WHERE status NOT IN ('succeeded', 'failed')")?.n ?? 0);
-      const accepted = get(db, 'SELECT accepted FROM mission WHERE id = ?', ['mission-primary'])?.accepted;
-      const status = pending > 0 ? 'running' : accepted === 'accepted' ? 'idle' : 'waiting_accept';
+      const status = pending > 0 ? 'running' : 'waiting_accept';
       run(db, 'UPDATE mission SET status = ?, started_at = COALESCE(started_at, ?), updated_at = ? WHERE id = ?', [
         status, nowIso(clock), nowIso(clock), 'mission-primary',
       ]);
@@ -117,16 +116,6 @@ export function createEngine(options = {}) {
     },
     resume() {
       this.start();
-    },
-    accept() {
-      run(db, "UPDATE mission SET accepted = 'accepted', status = 'idle', updated_at = ? WHERE id = ?", [nowIso(clock), 'mission-primary']);
-      recordMemory({
-        id: `mem-accept-${shortId()}`,
-        kind: 'decision',
-        title: 'User accepted the current product state',
-        body: 'Acceptance is a user act. The swarm will not treat this as its own proof.',
-      });
-      logLine(db, { agentId: 'user', message: 'User accepted. The swarm did not accept on the user\'s behalf.' }, clock);
     },
     setSwarmSize(size) {
       swarmSize = clampSwarmSize(size);
@@ -401,14 +390,10 @@ export function createEngine(options = {}) {
         queueMicrotask(() => { void tick(); });
         return;
       }
-      const accepted = get(db, 'SELECT accepted FROM mission WHERE id = ?', ['mission-primary'])?.accepted;
-      const status = accepted === 'accepted' ? 'idle' : 'waiting_accept';
-      run(db, 'UPDATE mission SET status = ?, updated_at = ? WHERE id = ?', [status, ts, 'mission-primary']);
+      run(db, "UPDATE mission SET status = 'waiting_accept', updated_at = ? WHERE id = ?", [ts, 'mission-primary']);
       logLine(db, {
         agentId: 'agent-conductor',
-        message: status === 'idle'
-          ? 'Work is idle after user acceptance.'
-          : 'Ready wave is complete. Standing order holds until the user accepts.',
+        message: 'Ready wave is complete. Standing order holds until the user accepts.',
       }, clock);
     }
   }

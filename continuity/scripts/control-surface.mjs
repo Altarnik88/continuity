@@ -23,7 +23,6 @@ export function startControlSurface(swarm, { port = 43147, host = '127.0.0.1' } 
         const body = JSON.parse(await readBody(req) || '{}');
         if (body.action === 'pause') swarm.pause();
         else if (body.action === 'resume') swarm.resume();
-        else if (body.action === 'accept') swarm.accept();
         else if (body.action === 'resize') swarm.setSwarmSize(Number(body.swarmSize || 8));
         else {
           json(res, 400, { error: 'unknown action' });
