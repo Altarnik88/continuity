@@ -1,8 +1,69 @@
+import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { nowIso } from './contract.mjs';
+
+const MEMORY_TITLE_MAX = 200;
+const MEMORY_BODY_MAX = 800;
+const TAP_LINE = /^(?:ok|not ok)\b|^TAP version\b|^\s*#(?:\s+TAP\b|\s+(?:tests|pass|fail|skip|todo)\b)/i;
+const ABS_UNIX = /(?:^|[^\w./-])(\/(?:tmp|home|Users|var|etc|private|root|opt|usr|mnt|Volumes|workspace)\/[^\s"'`)]+)/g;
+const ABS_WIN = /(?:^|[^\w./-])([A-Za-z]:\\[^\s"'`)]+)/g;
+const ABS_GENERIC = /(^|[\s"'`=(])(\/[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+)/g;
+const ENV_ASSIGN_BLOCK = /(?:(?:^|\n)[A-Z_][A-Z0-9_]{1,}=[^\n]*){3,}/;
+
+function boundText(value, max) {
+  const text = String(value ?? '');
+  if (text.length <= max) return text;
+  return text.slice(0, max);
+}
+
+function redactAbsPaths(line) {
+  return line
+    .replace(ABS_UNIX, (match, abs) => match.replace(abs, '<path>'))
+    .replace(ABS_WIN, (match, abs) => match.replace(abs, '<path>'))
+    .replace(ABS_GENERIC, '$1<path>');
+}
+
+function sanitizeMemoryText(raw) {
+  let text = String(raw ?? '');
+  const envDump = ENV_ASSIGN_BLOCK.test(text) || (/\bprocess\.env\b/.test(text) && /(?:PATH|HOME|USER)=/.test(text));
+  if (envDump) return boundText('Output withheld.', MEMORY_BODY_MAX);
+  const kept = [];
+  let withheld = false;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (TAP_LINE.test(trimmed) || /# TAP\b/i.test(trimmed) || /\bnot ok\b/i.test(trimmed)) {
+      withheld = true;
+      continue;
+    }
+    const redacted = redactAbsPaths(trimmed);
+    if (redacted !== trimmed) withheld = true;
+    if (redacted) kept.push(redacted);
+  }
+  const summary = kept.join(' ').trim();
+  const body = withheld
+    ? (summary ? `${summary} Output withheld.` : 'Output withheld.')
+    : (summary || 'Output withheld.');
+  return boundText(body, MEMORY_BODY_MAX);
+}
+
+export function sanitizeMemoryRecord(record = {}) {
+  const rawBody = record.body == null ? '' : String(record.body);
+  const clean = {
+    kind: record.kind == null ? '' : String(record.kind),
+    title: boundText(record.title ?? '', MEMORY_TITLE_MAX),
+    body: sanitizeMemoryText(rawBody),
+    sha256: createHash('sha256').update(rawBody).digest('hex'),
+    length: rawBody.length,
+  };
+  if (record.id != null) clean.id = record.id;
+  if (record.taskId != null) clean.taskId = record.taskId;
+  if (record.at != null) clean.at = record.at;
+  return clean;
+}
 
 export function swarmDataDirectory(root) {
   return path.join(root, 'data');
@@ -66,7 +127,9 @@ export function openStore(root) {
       title TEXT NOT NULL,
       body TEXT NOT NULL,
       task_id TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      sha256 TEXT,
+      length INTEGER
     );
     CREATE TABLE IF NOT EXISTS logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +139,9 @@ export function openStore(root) {
       message TEXT NOT NULL
     );
   `);
+  const memoryCols = new Set(all(db, 'PRAGMA table_info(memory)').map((row) => row.name));
+  if (!memoryCols.has('sha256')) db.exec('ALTER TABLE memory ADD COLUMN sha256 TEXT');
+  if (!memoryCols.has('length')) db.exec('ALTER TABLE memory ADD COLUMN length INTEGER');
   return db;
 }
 
@@ -129,17 +195,19 @@ export function logLine(db, { agentId = null, level = 'info', message }, clock) 
   run(db, 'DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY id DESC LIMIT 400)');
 }
 
-export function remember(db, { id, kind, title, body, taskId = null }, clock) {
+export function remember(db, entry, clock) {
+  const clean = sanitizeMemoryRecord(entry);
   run(db, `
-    INSERT INTO memory (id, kind, title, body, task_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `, [id, kind, title, body, taskId, nowIso(clock)]);
+    INSERT INTO memory (id, kind, title, body, task_id, created_at, sha256, length)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `, [clean.id, clean.kind, clean.title, clean.body, clean.taskId ?? null, nowIso(clock), clean.sha256, clean.length]);
 }
 
 export function appendMemoryLog(root, record) {
+  const clean = sanitizeMemoryRecord(record);
   const directory = swarmDataDirectory(root);
   mkdirSync(directory, { recursive: true });
-  appendFileSync(path.join(directory, 'memory.ndjson'), `${JSON.stringify(record)}\n`);
+  appendFileSync(path.join(directory, 'memory.ndjson'), `${JSON.stringify(clean)}\n`);
 }
 
 export function snapshot(db) {

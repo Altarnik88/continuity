@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
+import { sanitizedSpawnEnv } from '../protocol/client.mjs';
 import { fileContents } from './craft.mjs';
 import {
   STANDING_ORDER,
@@ -25,6 +26,7 @@ import {
   remember,
   replaceAgents,
   run,
+  sanitizeMemoryRecord,
   snapshot,
 } from './store.mjs';
 
@@ -272,23 +274,28 @@ export function createEngine(options = {}) {
     }
     const result = await runNode(task.spec.run ?? ['--test'], root);
     if (result.code !== 0) {
-      const message = (result.stderr || result.stdout || 'verification failed').slice(0, 1200);
+      const rawOutput = String(result.stderr || result.stdout || 'verification failed');
+      const safe = sanitizeMemoryRecord({
+        kind: 'failure',
+        title: `${task.title} failed`,
+        body: rawOutput,
+      });
       recordMemory({
         id: `mem-fail-${shortId()}`,
         kind: 'failure',
         title: `${task.title} failed`,
-        body: message,
+        body: rawOutput,
         taskId: task.id,
       });
       if (task.spec.repairTaskId) {
         const ts = nowIso(clock);
         run(db, "UPDATE tasks SET status = 'queued', updated_at = ? WHERE id = ?", [ts, task.spec.repairTaskId]);
-        run(db, "UPDATE tasks SET status = 'queued', error = ?, updated_at = ? WHERE id = ?", [message.slice(0, 500), ts, task.id]);
+        run(db, "UPDATE tasks SET status = 'queued', error = ?, updated_at = ? WHERE id = ?", [safe.body.slice(0, 500), ts, task.id]);
         clearAssignment(task, agent, ts);
         logLine(db, { agentId: agent.id, level: 'warn', message: `${task.id} failed closed. ${task.spec.repairTaskId} reopened.` }, clock);
         return;
       }
-      finish(task, agent, { ok: false, message });
+      finish(task, agent, { ok: false, message: safe.body });
       return;
     }
     recordMemory({
@@ -302,8 +309,9 @@ export function createEngine(options = {}) {
   }
 
   async function writeHandoff(agent) {
+    finish({ id: 'task-handoff', kind: 'handoff' }, agent, { ok: true, message: 'Handoff written' });
     const state = snapshot(db);
-    const leftover = state.tasks.filter((task) => task.status !== 'succeeded');
+    const leftover = state.tasks.filter((task) => task.status === 'failed' || task.status === 'queued' || task.status === 'ready');
     const lines = [
       '# Continuity handoff',
       '',
@@ -324,7 +332,6 @@ export function createEngine(options = {}) {
     const target = path.join(root, 'forge', 'HANDOFF.md');
     mkdirSync(path.dirname(target), { recursive: true });
     writeFileSync(target, `${lines.join('\n')}\n`);
-    finish({ id: 'task-handoff', kind: 'handoff' }, agent, { ok: true, message: 'Handoff written' });
   }
 
   async function writeDigest(agent) {
@@ -337,7 +344,12 @@ export function createEngine(options = {}) {
       `Standing order: ${STANDING_ORDER}`,
       '',
       '## Lessons, failures, and playbooks',
-      ...(state.memory.length ? state.memory.map((item) => `- (${item.kind}) ${item.title} — ${item.body}`) : ['- none yet']),
+      ...(state.memory.length
+        ? state.memory.map((item) => {
+          const clean = sanitizeMemoryRecord({ kind: item.kind, title: item.title, body: item.body });
+          return `- (${clean.kind}) ${clean.title} — ${clean.body}`;
+        })
+        : ['- none yet']),
       '',
     ];
     const target = path.join(root, 'forge', 'MEMORY.md');
@@ -523,7 +535,7 @@ function listForge(root) {
 
 function runNode(args, cwd) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, args, { cwd, env: { ...process.env } });
+    const child = spawn(process.execPath, args, { cwd, env: sanitizedSpawnEnv() });
     let stdout = '';
     let stderr = '';
     child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
