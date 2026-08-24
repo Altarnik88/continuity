@@ -9,6 +9,17 @@ Treat Continuity's append-only journal as authoritative for what it recorded, no
 
 Continuity requires Node.js 22+ and Git. Memory/Continuity is local and self-contained: no planner, daemon, network service, model installation, or interview flow is required. Coordinator is an optional separate CLI (`scripts/coordinator.mjs`) and is not started by inspect or record.
 
+## Autonomous launch
+
+If the user wants long-running product work, start the swarm instead of waiting for another prompt:
+
+```bash
+node "/absolute/path/to/continuity/scripts/launch.mjs"
+node "/absolute/path/to/continuity/scripts/launch.mjs" --once --swarm-size 8
+```
+
+The swarm keeps a standing order, a SQLite task database, lessons/failures/playbooks, and path leases. It does not accept work for the user. The control surface is `node scripts/launch.mjs` (port 43147). Details: [references/autonomous-swarm.md](references/autonomous-swarm.md).
+
 ## Resolve the CLI
 
 Invoke `scripts/continuity.mjs` from this installed or cloned directory. In the examples below, `/absolute/path/to/continuity` means this directory. Run the CLI from the target Git worktree; optional `--root` must name that worktree's exact top level.

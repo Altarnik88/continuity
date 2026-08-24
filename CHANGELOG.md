@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Autonomous swarm: SQLite task database, 5–20 parallel sub-agents, path leases, standing order on launch, and a local control surface (`npm run launch`).
+- Swarm memory records lessons, failures, and playbooks. User acceptance stays pending until an explicit accept.
+- Default wave builds Pulse under `forge/` and writes `forge/HANDOFF.md` so the next session does not guess.
 - Package validation inventories a Git worktree from `git ls-files --cached`, so ignored or untracked local notes (including `.superpowers/`) are not scanned as public product text.
 - `.superpowers/` is gitignored.
 - Coordinator closes only the completed packet's open attempt (`taskId` + `runId`), not every attempt that shares the executor run id.

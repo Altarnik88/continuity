@@ -2,12 +2,13 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-**A local control plane for long-running coding-agent work: memory that survives chats, and explicit management of executors and verifiers.**
+**A local control plane for long-running coding-agent work: memory that survives chats, a task database, and a parallel swarm that starts on launch.**
 
-Continuity is a downloadable Node.js product for a Git repository. It does two jobs that coding sessions usually mix together and then lose:
+Continuity is a downloadable Node.js product for a Git repository. It does three jobs that coding sessions usually mix together and then lose:
 
-1. **Remember the project truth** — goals, failed attempts, evidence, independent verification, freshness, and whether the *user* accepted the result.
-2. **Manage agents as a swarm, not as one chat** — ready work, ownership isolation, WorkPackets, executor launch, independent verification, restart, and stop. Words from an executor are never treated as proof.
+1. **Remember the project truth** — goals, failed attempts, lessons, playbooks, evidence, independent verification, freshness, and whether the *user* accepted the result.
+2. **Slice work into a database** — ready tasks, path leases, and a standing order that does not wait for a new chat.
+3. **Run 5–20 sub-agents in parallel** — isolated ownership, independent verification, restart, and stop. Words from an executor are never treated as proof. Only the user may accept.
 
 You download it when a later chat, a different model, or a replacement executor must continue without guessing — and when more than one actor must work on the same repository without colliding or marking the work done for you.
 
@@ -32,9 +33,13 @@ Do **not** download it as a Git replacement, issue tracker, secret store, hosted
 ```bash
 git clone https://github.com/Altarnik88/continuity.git
 cd continuity
+npm install
 node continuity/scripts/continuity.mjs --version
-node continuity/scripts/coordinator.mjs --version
+node continuity/scripts/launch.mjs --once
+npm run launch
 ```
+
+`npm run launch` opens the control surface on port 43147 and immediately starts the standing order: keep context, slice the product, and develop it with a parallel swarm. `launch.mjs --once` runs that swarm headlessly until the current wave is idle. User acceptance stays pending until you click **Accept** or call accept yourself.
 
 From the Git repository Continuity should remember:
 

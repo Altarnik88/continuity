@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Continuity</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.45 "IBM Plex Sans", "Segoe UI", sans-serif;
+      background: #09090b;
+      color: #fafafa;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 80px; }
+    header { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; border-bottom: 1px solid #27272a; padding-bottom: 24px; }
+    .kicker { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: #fbbf24; }
+    h1 { margin: 8px 0 0; font-size: 32px; letter-spacing: -.04em; }
+    .lede { max-width: 640px; color: #a1a1aa; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button {
+      border: 1px solid #3f3f46;
+      background: transparent;
+      color: #fafafa;
+      border-radius: 999px;
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+    button.primary { background: #fbbf24; color: #18181b; border-color: #fbbf24; }
+    .order { margin: 24px 0; padding: 16px 18px; border: 1px solid rgba(251,191,36,.25); background: rgba(251,191,36,.06); border-radius: 16px; }
+    .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .card, .panel { border: 1px solid #27272a; background: #18181b; border-radius: 16px; padding: 16px; }
+    .muted { color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { font-size: 28px; margin-top: 8px; }
+    .cols { display: grid; gap: 16px; grid-template-columns: 1.2fr .8fr; }
+    @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+    .agent { border: 1px solid #27272a; border-radius: 12px; padding: 12px; background: #09090b; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .working { background: #34d399; }
+    .idle { background: #52525b; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #a1a1aa; }
+    li { margin: 0 0 10px; }
+    ul { padding-left: 18px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="kicker">Continuity · autonomous mode</div>
+        <h1>Долгая разработка без потери контекста</h1>
+        <p class="lede">Память, нарезка задач и 5–20 субагентов с изоляцией путей. Рой стартует сам. Принять работу можете только вы.</p>
+      </div>
+      <div class="row">
+        <button id="pause">Пауза</button>
+        <button id="resume">Продолжить</button>
+        <button class="primary" id="accept">Принять (только вы)</button>
+      </div>
+    </header>
+    <section class="order">
+      <div class="kicker">Standing order</div>
+      <p>Разрабатывать продукт автономно и долгосрочно. Не ждать новый чат. Держать цели, ошибки и лучшие решения. Нарезать работу в базу задач. Вести 5–20 субагентов параллельно без пересечения файлов. Принять работу можете только вы.</p>
+      <p class="mono" id="order-en"></p>
+    </section>
+    <section class="grid" id="stats"></section>
+    <section class="row" style="margin: 18px 0;">
+      <span class="muted">Размер роя</span>
+      <span id="sizes"></span>
+      <span class="mono" id="accepted"></span>
+    </section>
+    <section class="cols">
+      <div class="panel">
+        <div class="muted">Рой</div>
+        <div id="agents" class="grid" style="margin-top:12px;"></div>
+      </div>
+      <div class="panel">
+        <div class="muted">Память</div>
+        <div id="memory"></div>
+      </div>
+    </section>
+    <section class="cols" style="margin-top:16px;">
+      <div class="panel">
+        <div class="muted">База задач</div>
+        <ul id="tasks"></ul>
+      </div>
+      <div class="panel">
+        <div class="muted">Артефакты</div>
+        <ul id="files" class="mono"></ul>
+        <div class="muted">Журнал</div>
+        <ul id="logs"></ul>
+      </div>
+    </section>
+  </main>
+  <script>
+    async function pull() {
+      const state = await (await fetch('/api/swarm', { cache: 'no-store' })).json();
+      render(state);
+    }
+    async function send(action, extra = {}) {
+      await fetch('/api/swarm/control', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action, ...extra }),
+      });
+      await pull();
+    }
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    }
+    function render(state) {
+      const mission = state.mission || {};
+      const counts = state.counts || {};
+      const progress = counts.tasks ? Math.round((counts.succeeded / counts.tasks) * 100) : 0;
+      document.getElementById('order-en').textContent = state.standingOrder || '';
+      document.getElementById('accepted').textContent = mission.accepted === 'accepted'
+        ? 'принятие: пользователь принял'
+        : 'принятие: ожидает пользователя';
+      document.getElementById('stats').innerHTML = [
+        ['Миссия', mission.status || '—', mission.title || ''],
+        ['Прогресс', progress + '%', (counts.succeeded || 0) + '/' + (counts.tasks || 0) + ' задач'],
+        ['Живые агенты', String(counts.agentsLive || 0), 'рой ' + (mission.swarm_size || 0)],
+        ['Память', (counts.lessons || 0) + ' / ' + (counts.failures || 0), 'уроки / ошибки'],
+      ].map((row) => '<article class="card"><div class="muted">' + esc(row[0]) + '</div><div class="value">' + esc(row[1]) + '</div><div class="mono">' + esc(row[2]) + '</div></article>').join('');
+      document.getElementById('sizes').innerHTML = [5, 8, 12, 16, 20].map((size) => (
+        '<button data-size="' + size + '"' + (mission.swarm_size === size ? ' class="primary"' : '') + '>' + size + '</button>'
+      )).join(' ');
+      document.getElementById('agents').innerHTML = (state.agents || []).map((agent) => (
+        '<article class="agent"><div class="row" style="justify-content:space-between"><strong>' + esc(agent.name) + '</strong><span><span class="dot ' + (agent.status === 'working' ? 'working' : 'idle') + '"></span> ' + esc(agent.status) + '</span></div><div class="mono">' + esc(agent.role) + '</div><div class="mono">' + esc(agent.detail || 'waiting for a ready task with a free path lease') + '</div></article>'
+      )).join('');
+      document.getElementById('memory').innerHTML = (state.memory || []).slice(0, 8).map((item) => (
+        '<p><span class="kicker">' + esc(item.kind) + '</span><br><strong>' + esc(item.title) + '</strong><br><span class="mono">' + esc(item.body) + '</span></p>'
+      )).join('');
+      document.getElementById('tasks').innerHTML = (state.tasks || []).map((task) => (
+        '<li><strong>' + esc(task.title) + '</strong><div class="mono">' + esc(task.id + ' · ' + task.status + ' · ' + (task.paths || []).join(', ')) + '</div></li>'
+      )).join('');
+      document.getElementById('files').innerHTML = (state.files || []).map((file) => '<li>' + esc(file) + '</li>').join('') || '<li>product files appear here</li>';
+      document.getElementById('logs').innerHTML = (state.logs || []).slice(0, 12).map((item) => '<li class="mono">' + esc(item.message) + '</li>').join('');
+      document.querySelectorAll('#sizes button').forEach((button) => {
+        button.onclick = () => send('resize', { swarmSize: Number(button.dataset.size) });
+      });
+    }
+    document.getElementById('pause').onclick = () => send('pause');
+    document.getElementById('resume').onclick = () => send('resume');
+    document.getElementById('accept').onclick = () => send('accept');
+    pull();
+    setInterval(pull, 900);
+  </script>
+</body>
+</html>
