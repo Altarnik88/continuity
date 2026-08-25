@@ -1,6 +1,6 @@
 ---
 name: continuity
-description: When invoked, become Continuity's conductor-orchestrator. Recover memory, fill the task database, and run 5-20 isolated sub-agents across analysis, implementation, independent verification, security, and review. Use at the start of nontrivial repository work to recover goals and active tasks; use after material work to record only durable verified facts. Only the user may accept.
+description: When invoked, become Continuity's conductor-orchestrator. Recover memory and fill the task database from authorized journal work. Node does not spawn host Task; launch.mjs runs deterministic role-workers. The host LLM dispatches Task sub-agents across analysis, implementation, independent verification, security, and review. Use at the start of nontrivial repository work to recover goals and active tasks; use after material work to record only durable verified facts. Only record accept --as user accepts.
 ---
 
 # Continuity
@@ -15,12 +15,12 @@ Continuity requires Node.js 22+ and Git. Memory/Continuity is local and self-con
 
 1. Recover memory: run `doctor` and `inspect` from this checkout against the user's Git worktree.
 2. Open the task database with `node continuity/scripts/launch.mjs` (or `--once`). If a swarm already listens on port 43147, read `http://127.0.0.1:43147/api/swarm` instead of starting a second copy.
-3. Run `node continuity/scripts/dispatch.mjs`. If the task database is empty, slice the user's product into isolated tasks covering analysis, implementation, tests, security, and review. Paths must not overlap. Persist them in `data/swarm.sqlite`.
-4. Dispatch **every `wave[]` packet in this same turn**. If the Task tool exists, spawn one isolated sub-agent per wave packet. Use `wave[].brief` verbatim for blind kinds (`blind: true`). Do not add chat history, implementer notes, or other agents' reasoning. Do not implement leased paths yourself while a sub-agent owns them. Spawn all wave packets together; do not serialize them. When they return, run `dispatch.mjs` again and spawn the next wave until `wave` is empty.
+3. Run `node continuity/scripts/dispatch.mjs`. Persist only journal-authorized, path-disjoint work in `data/swarm.sqlite`. If `inspect ready` reports `plan.missing`, stop assigning; do not invent missing requirements.
+4. Dispatch **every `wave[]` packet in this same turn**. Node does not spawn host Task. If the host Task tool exists, the host LLM dispatches one isolated Task sub-agent per wave packet. Use `wave[].brief` verbatim for blind kinds (`blind: true`). Do not add chat history, implementer notes, or other agents' reasoning. Do not implement leased paths yourself while a sub-agent owns them. Dispatch all wave packets together; do not serialize them. When they return, run `dispatch.mjs` again and dispatch the next wave until `wave` is empty.
 5. Verifiers, security, and review start **blind**: no implementer notes, no chat history, no other agents' reasoning. Give paths, commands, and checks only.
 6. Sub-agents must use available Skills, MCP servers, and plugins that help their task. They must not accept the product.
 7. At swarm size 10 or more, appoint a **Manager** sub-agent that watches the task database and reports blockers. The Manager does not edit product files. `dispatch.mjs` sets `manager: true` when that role exists.
-8. You stay Conductor: merge evidence, requeue failures, keep leases honest. Only the user may accept.
+8. You stay Conductor: merge evidence, requeue failures, keep leases honest. `mission.accepted` is not user accept. Only `record accept --as user` accepts.
 
 Protocol: [references/conductor-orchestration.md](references/conductor-orchestration.md). Local runtime: [references/autonomous-swarm.md](references/autonomous-swarm.md).
 
@@ -34,7 +34,9 @@ node "/absolute/path/to/continuity/scripts/launch.mjs" --once --swarm-size 8
 node "/absolute/path/to/continuity/scripts/dispatch.mjs"
 ```
 
-The swarm keeps a standing order, a SQLite task database, lessons/failures/playbooks, and path leases. It does not accept work for the user. The control surface is `node continuity/scripts/launch.mjs` (port 43147). `GET /api/swarm` includes `packets[]` and a disjoint `wave[]`. The Conductor copies `wave[]` into isolated sub-agent prompts. `dispatch.mjs` prints that wave as JSON.
+`launch.mjs` runs deterministic role-workers against a standing order, a SQLite execution projection, lessons/failures/playbooks, and path leases. Node does not spawn host Task or MCP sub-agents. The host LLM dispatches Task sub-agents. The swarm does not accept work for the user. The control surface is `node continuity/scripts/launch.mjs` (port 43147). `GET /api/swarm` includes `packets[]` and a disjoint `wave[]`. The Conductor copies `wave[]` into isolated Task prompts. `dispatch.mjs` prints that wave as JSON.
+
+Core `HISTORY` is truth. Swarm sqlite is an execution projection. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store. `mission.accepted` is not user accept. Only `record accept --as user` accepts.
 
 ## Resolve the CLI
 
@@ -50,7 +52,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect
 node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect ready --json
 ```
 
-`inspect`, `inspect ready`, and `inspect wave` do not repair or rewrite the projection. Use `rebuild` only when an operator intentionally repairs a missing, stale, or invalid projection. If `inspect ready` reports `plan.missing`, stop assigning work; do not invent missing requirements.
+`inspect`, `inspect ready`, and `inspect wave` do not repair or rewrite the Core projection. Use `rebuild` only when an operator intentionally repairs a missing, stale, or invalid projection. If `inspect ready` reports `plan.missing`, stop assigning work; do not invent missing requirements.
 
 ## Initialize only an empty store
 
@@ -86,7 +88,7 @@ Keep these truth axes distinct:
 - verification is not freshness;
 - freshness is not user acceptance.
 
-Authorizing evidence is a linked `command` or `test` observation with exit code `0`. `record evidence --run` executes the current Node.js binary under the CLI sandbox (no shell) and records `provenance: observed` plus sha256 and length of truncated output; never raw logs. Self-reported `--exit-code` is `provenance: claimed`. Using both flags is a no-effect rejection. A report without `--exit-code` or `--run` is an `agent_report` and cannot authorize success. Independent verification requires a different actor and run plus explicit counts. Acceptance and rejection require `--as user`; rejection also requires `--next`.
+Authorizing evidence is a linked `command` or `test` observation with exit code `0`. `record evidence --run` executes the current Node.js binary under the CLI sandbox (no shell) and records `provenance: observed` plus sha256 and length of truncated output; never raw logs. Self-reported `--exit-code` is `provenance: claimed`. Using both flags is a no-effect rejection. A report without `--exit-code` or `--run` is an `agent_report` and cannot authorize success. Independent verification requires a different actor and run plus explicit counts. Acceptance and rejection require `--as user`; rejection also requires `--next`. `mission.accepted` is not user accept. Only `record accept --as user` accepts.
 
 Read-only, trivial, no-op, or inconclusive tasks should not write continuity data. Never record secrets, personal data, raw logs, raw diffs, command output, or private absolute paths.
 
