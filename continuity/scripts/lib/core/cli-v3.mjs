@@ -5,7 +5,10 @@ import path from 'node:path';
 import { sanitizedSpawnEnv } from '../protocol/client.mjs';
 import { buildCoordinatorView } from './coordination/index.mjs';
 import { ACTOR_KINDS, MemoryError } from './domain-v3.mjs';
-import { buildHandoffV3, buildInspectV3, liveContextFromRoot, renderCoordinatorText, renderInspectJson, renderInspectText } from './inspect-v3.mjs';
+import {
+  buildHandoffV3, buildHistoryV3, buildInspectV3, liveContextFromRoot,
+  renderCoordinatorText, renderHistoryText, renderInspectJson, renderInspectText,
+} from './inspect-v3.mjs';
 import { appendV3, initializeV3, readV3Journal, rebuildV3, validateV3Append, validateV3Batch } from './journal-v3.mjs';
 import {
   applyRecipes, recipeAccept, recipeAssign, recipeAttemptReport, recipeBacklog, recipeContextHandoff,
@@ -221,6 +224,11 @@ export async function handleV3Command({ command, subcommand, options, root, writ
   if (command === 'inspect' || command === 'handoff' || command === 'history') {
     const store = readV3Journal(root);
     const live = liveContextFromRoot(root, store.state.workspaceAtLastEvent);
+    if (command === 'history') {
+      const view = buildHistoryV3(store, { tail: options.tail });
+      writeOut(write, options.json ? renderInspectJson(view) : renderHistoryText(view));
+      return 0;
+    }
     if (command === 'inspect' && (subcommand === 'ready' || subcommand === 'wave')) {
       let agents = store.state.agents ?? [];
       let slots = options.slots ?? 1;
@@ -234,6 +242,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
         agents,
         slots,
         resourceLimit: options.resourceLimit,
+        bound: true,
       });
       writeOut(write, options.json || subcommand === 'wave' ? renderInspectJson(view) : renderCoordinatorText(view));
       return 0;
