@@ -3,7 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
-import { sanitizedSpawnEnv } from '../protocol/client.mjs';
+import { createCliClient, parseRecordedEvent, sanitizedSpawnEnv } from '../protocol/client.mjs';
 import { fileContents } from './craft.mjs';
 import {
   STANDING_ORDER,
@@ -68,8 +68,275 @@ export function createEngine(options = {}) {
   let swarmSize = clampSwarmSize(options.swarmSize ?? 8);
   let maxInflight = 0;
 
+  const client = createCliClient();
+  let journalReady = null;
+
   seed(db, { swarmSize, clock, root });
   recoverOrphans(db, clock, root);
+
+  function continuityStoreDir() {
+    return path.join(root, '.continuity');
+  }
+
+  function canRecordJournal() {
+    if (journalReady != null) return journalReady;
+    if (!existsSync(continuityStoreDir())) {
+      journalReady = false;
+      return false;
+    }
+    try {
+      journalReady = String(client.doctor({ root }).stdout || '').includes('journal=valid');
+    } catch {
+      journalReady = false;
+    }
+    return journalReady;
+  }
+
+  function safeRecord(fn) {
+    if (!canRecordJournal()) return null;
+    try {
+      return fn();
+    } catch {
+      return null;
+    }
+  }
+
+  function readLiveTask(task) {
+    if (!task?.id) return task ?? null;
+    return parseTask(get(db, 'SELECT * FROM tasks WHERE id = ?', [task.id])) || task;
+  }
+
+  function persistBridge(taskId, patch) {
+    if (!taskId || !patch) return;
+    const cleaned = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value != null && value !== ''),
+    );
+    if (!Object.keys(cleaned).length) return;
+    const row = get(db, 'SELECT spec_json FROM tasks WHERE id = ?', [taskId]);
+    if (!row) return;
+    let spec = {};
+    try {
+      spec = JSON.parse(row.spec_json || '{}');
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) spec = {};
+    } catch {
+      spec = {};
+    }
+    run(db, 'UPDATE tasks SET spec_json = ? WHERE id = ?', [JSON.stringify({ ...spec, ...cleaned }), taskId]);
+  }
+
+  function actorRef(agent) {
+    const raw = agent?.id ? String(agent.id) : 'agent-conductor';
+    const actorId = /^[a-z][a-z0-9_]*-[a-z0-9][a-z0-9-]{1,72}$/.test(raw) ? raw : 'agent-conductor';
+    return { actorId, runId: `run-${actorId}` };
+  }
+
+  function classForKind(kind) {
+    if (kind === 'handoff') return 'handoff';
+    if (kind === 'test') return 'tests';
+    if (kind === 'security') return 'security';
+    if (kind === 'review') return 'report';
+    return 'function';
+  }
+
+  function safeText(title, body, fallback) {
+    const clean = sanitizeMemoryRecord({
+      kind: 'lesson',
+      title: title || fallback,
+      body: body || fallback,
+    });
+    const text = String(clean.title || clean.body || fallback).replace(/\s+/g, ' ').trim();
+    return (text || fallback).slice(0, 200);
+  }
+
+  function ensureJournalTask(task) {
+    if (!task?.id) return null;
+    const live = readLiveTask(task) || task;
+    if (live.spec?.continuity_task_id) return live.spec.continuity_task_id;
+    const recorded = safeRecord(() => client.recordTask({
+      root,
+      title: String(live.title || live.id).slice(0, 200),
+      priority: live.kind === 'test' ? 'verification' : 'core',
+      class: classForKind(live.kind),
+    }));
+    const continuityTaskId = parseRecordedEvent(recorded?.stdout)?.subjectId;
+    if (!continuityTaskId) return null;
+    persistBridge(live.id, {
+      continuity_task_id: continuityTaskId,
+      continuity_event_id: continuityTaskId,
+    });
+    return continuityTaskId;
+  }
+
+  function mirrorStart(task, agent) {
+    const live = readLiveTask(task);
+    const continuityTaskId = ensureJournalTask(live);
+    if (!continuityTaskId) return;
+    const { actorId, runId } = actorRef(agent);
+    persistBridge(live.id, { continuity_actor_id: actorId, continuity_run_id: runId });
+    const recorded = safeRecord(() => client.recordStart({
+      root,
+      taskId: continuityTaskId,
+      approach: 'Run the assigned swarm task',
+      actorId,
+      runId,
+    }));
+    const attemptId = parseRecordedEvent(recorded?.stdout)?.subjectId;
+    if (attemptId) {
+      persistBridge(live.id, { continuity_attempt_id: attemptId, continuity_event_id: attemptId });
+    }
+  }
+
+  function mirrorFailure(task, agent, why) {
+    const live = readLiveTask(task);
+    const continuityTaskId = ensureJournalTask(live);
+    if (!continuityTaskId) return;
+    const { actorId, runId } = actorRef(agent);
+    const reason = safeText(live?.title, why, 'attempt failed');
+    safeRecord(() => client.recordReport({
+      root, actorId, runId, execution: 'failed', summary: reason,
+    }));
+    const recorded = safeRecord(() => client.recordFail({
+      root,
+      actorId,
+      runId,
+      why: reason,
+      impact: 'Task is not complete',
+      next: 'Change approach after the recorded failure',
+    }));
+    persistBridge(live?.id, {
+      continuity_event_id: parseRecordedEvent(recorded?.stdout)?.subjectId,
+    });
+  }
+
+  function mirrorBlocked(task, why) {
+    const live = readLiveTask(task);
+    const continuityTaskId = ensureJournalTask(live);
+    if (!continuityTaskId) return;
+    const { actorId, runId } = actorRef({ id: 'agent-conductor' });
+    safeRecord(() => client.recordStart({
+      root,
+      taskId: continuityTaskId,
+      approach: 'Dependency check',
+      actorId,
+      runId,
+    }));
+    safeRecord(() => client.recordFail({
+      root,
+      actorId,
+      runId,
+      why: safeText(live?.title, why, 'a dependency failed'),
+      impact: 'Task is not complete',
+      next: 'Unblock the failed dependency',
+    }));
+  }
+
+  function mirrorVerify(task, agent, evidence) {
+    const { actorId, runId } = actorRef(agent);
+    for (const depId of task.deps || []) {
+      const dep = readLiveTask({ id: depId });
+      const resultId = dep?.spec?.continuity_result_id;
+      const writer = dep?.spec?.continuity_actor_id;
+      if (!resultId || writer === actorId) continue;
+      const exitCode = Number.isInteger(evidence?.exitCode) ? evidence.exitCode : 0;
+      const recorded = safeRecord(() => client.recordVerify({
+        root,
+        resultId,
+        actorId,
+        runId,
+        found: 1,
+        executed: 1,
+        passed: exitCode === 0 ? 1 : 0,
+        failed: exitCode === 0 ? 0 : 1,
+        skipped: 0,
+        exitCode,
+      }));
+      persistBridge(task.id, {
+        continuity_verify_id: parseRecordedEvent(recorded?.stdout)?.subjectId,
+      });
+      return;
+    }
+  }
+
+  function mirrorFinish(task, agent, { ok, message, evidence } = {}) {
+    const live = readLiveTask(task);
+    const continuityTaskId = ensureJournalTask(live);
+    if (!continuityTaskId) return;
+    const { actorId, runId } = actorRef(agent);
+    persistBridge(live.id, { continuity_actor_id: actorId, continuity_run_id: runId });
+    const summary = safeText(live.title, message, ok ? 'task succeeded' : 'task failed');
+    safeRecord(() => client.recordReport({
+      root, actorId, runId, execution: ok ? 'succeeded' : 'failed', summary,
+    }));
+    if (!ok) {
+      const recorded = safeRecord(() => client.recordFail({
+        root,
+        actorId,
+        runId,
+        why: summary,
+        impact: 'Task is not complete',
+        next: 'Retry with a different approach and a new attempt',
+      }));
+      persistBridge(live.id, {
+        continuity_event_id: parseRecordedEvent(recorded?.stdout)?.subjectId,
+      });
+      return;
+    }
+    const recordedEvidence = safeRecord(() => client.recordEvidence({
+      root,
+      actorId,
+      runId,
+      taskId: continuityTaskId,
+      expected: evidence?.expected || 'focused check exits 0',
+      actual: evidence?.actual || 'exit 0',
+      kind: evidence?.kind || 'command',
+      exitCode: Number.isInteger(evidence?.exitCode) ? evidence.exitCode : 0,
+    }));
+    const evidenceId = recordedEvidence?.evidenceId;
+    if (!evidenceId) return;
+    persistBridge(live.id, { continuity_evidence_id: evidenceId });
+    const recorded = safeRecord(() => client.recordResult({
+      root,
+      actorId,
+      runId,
+      expected: 'focused check exits 0',
+      actual: 'authorizing command evidence recorded',
+      execution: 'succeeded',
+      evidence: evidenceId,
+    }));
+    const resultId = recorded?.resultId;
+    if (resultId) {
+      persistBridge(live.id, {
+        continuity_result_id: resultId,
+        continuity_event_id: resultId,
+      });
+    }
+    if (live.kind === 'test') mirrorVerify(live, agent, evidence);
+    if (live.kind === 'handoff' || live.kind === 'digest') {
+      safeRecord(() => client.recordContext({
+        root,
+        taskId: continuityTaskId,
+        next: 'Resume from written memory; do not guess',
+        actorId,
+        runId,
+      }));
+    }
+  }
+
+  function mirrorMemory(entry) {
+    if (entry.kind !== 'lesson' && entry.kind !== 'playbook') return;
+    const task = entry.taskId ? readLiveTask({ id: entry.taskId }) : null;
+    const continuityTaskId = task ? ensureJournalTask(task) : null;
+    if (!continuityTaskId) return;
+    const assignee = task?.assignee ? { id: task.assignee } : { id: 'agent-conductor' };
+    const { actorId, runId } = actorRef(assignee);
+    safeRecord(() => client.recordContext({
+      root,
+      taskId: continuityTaskId,
+      next: safeText(entry.title, entry.body, 'Keep the recorded lesson'),
+      actorId,
+      runId,
+    }));
+  }
 
   const engine = {
     root,
@@ -165,6 +432,7 @@ export function createEngine(options = {}) {
         run(db, "UPDATE tasks SET status = 'failed', error = ?, updated_at = ? WHERE id = ?", [
           'a dependency failed', nowIso(clock), task.id,
         ]);
+        mirrorBlocked(task, 'a dependency failed');
         continue;
       }
       if (task.deps.every((id) => byId[id]?.status === 'succeeded')) {
@@ -220,6 +488,7 @@ export function createEngine(options = {}) {
       ]);
       const live = parseTask(get(db, 'SELECT * FROM tasks WHERE id = ?', [task.id]));
       logLine(db, { agentId: agent.id, message: `${agent.name} claimed ${task.id}: ${task.title}` }, clock);
+      mirrorStart(live, agent);
       void execute(agent, live);
     }
   }
@@ -297,6 +566,7 @@ export function createEngine(options = {}) {
         run(db, "UPDATE tasks SET status = 'queued', error = ?, updated_at = ? WHERE id = ?", [safe.body.slice(0, 500), ts, task.id]);
         clearAssignment(task, agent, ts);
         logLine(db, { agentId: agent.id, level: 'warn', message: `${task.id} failed closed. ${task.spec.repairTaskId} reopened.` }, clock);
+        mirrorFailure(task, agent, safe.body);
         return;
       }
       finish(task, agent, { ok: false, message: safe.body });
@@ -309,7 +579,16 @@ export function createEngine(options = {}) {
       body: 'A verifier, not the writer, ran the focused check.',
       taskId: task.id,
     });
-    finish(task, agent, { ok: true, message: 'Verification passed' });
+    finish(task, agent, {
+      ok: true,
+      message: 'Verification passed',
+      evidence: {
+        expected: 'focused check exits 0',
+        actual: 'exit 0',
+        kind: 'test',
+        exitCode: 0,
+      },
+    });
   }
 
   async function writeHandoff(agent) {
@@ -372,20 +651,25 @@ export function createEngine(options = {}) {
   function recordMemory(entry) {
     remember(db, entry, clock);
     appendMemoryLog(root, { ...entry, at: nowIso(clock) });
+    mirrorMemory(entry);
   }
 
   function enqueueContinuations() {
     const next = planContinuations(snapshot(db));
-    for (const task of next) insertTask(db, task, clock);
+    for (const task of next) {
+      insertTask(db, task, clock);
+      ensureJournalTask(task);
+    }
     if (next.length) {
       logLine(db, { agentId: 'agent-conductor', message: `Queued ${next.length} continuation task(s). Standing order still holds.` }, clock);
     }
     return next.length;
   }
 
-  function finish(task, agent, { ok, message }) {
+  function finish(task, agent, { ok, message, evidence } = {}) {
     const ts = nowIso(clock);
     clearAssignment(task, agent, ts);
+    mirrorFinish(task, agent, { ok, message, evidence });
     run(db, 'UPDATE tasks SET status = ?, error = ?, verifier = ?, updated_at = ? WHERE id = ?', [
       ok ? 'succeeded' : 'failed',
       ok ? null : String(message).slice(0, 800),
