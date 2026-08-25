@@ -14,7 +14,7 @@ import {
   nowIso,
   selectDispatchWave,
 } from './contract.mjs';
-import { planContinuations } from './planner.mjs';
+import { planContinuations, planFromGoal } from './planner.mjs';
 import {
   all,
   appendMemoryLog,
@@ -72,7 +72,7 @@ export function createEngine(options = {}) {
   let journalReady = null;
   const registeredActors = new Set();
 
-  seed(db, { swarmSize, clock, root });
+  seed(db, { swarmSize, clock, root, client });
   recoverOrphans(db, clock, root);
 
   function continuityStoreDir() {
@@ -384,7 +384,7 @@ export function createEngine(options = {}) {
       };
     },
     start() {
-      const added = enqueueContinuations();
+      const added = seedPlanFromGoal(db, { clock, root, client }) + enqueueContinuations();
       const pending = Number(get(db, "SELECT COUNT(*) AS n FROM tasks WHERE status NOT IN ('succeeded', 'failed')")?.n ?? 0);
       const status = pending > 0 ? 'running' : 'waiting_accept';
       run(db, 'UPDATE mission SET status = ?, started_at = COALESCE(started_at, ?), updated_at = ? WHERE id = ?', [
@@ -785,7 +785,34 @@ function isEngineLockExpired(record, file) {
   }
 }
 
-function seed(db, { swarmSize, clock, root }) {
+function readJournalInspect(root, client) {
+  if (!client || !existsSync(path.join(root, '.continuity'))) return null;
+  for (const method of ['inspectReady', 'inspect']) {
+    try {
+      const document = client[method]({ root })?.document;
+      if (document && typeof document === 'object' && !Array.isArray(document)) return document;
+    } catch {
+      /* inspectReady can fail closed; inspect may still show a goal */
+    }
+  }
+  return null;
+}
+
+function seedPlanFromGoal(db, { clock, root, client }) {
+  const planned = planFromGoal(readJournalInspect(root, client));
+  if (!planned.length) return 0;
+  const existing = new Set(all(db, 'SELECT id FROM tasks').map((row) => row.id));
+  let added = 0;
+  for (const task of planned) {
+    if (!task?.id || existing.has(task.id)) continue;
+    insertTask(db, task, clock);
+    existing.add(task.id);
+    added += 1;
+  }
+  return added;
+}
+
+function seed(db, { swarmSize, clock, root, client }) {
   const ts = nowIso(clock);
   if (!get(db, 'SELECT id FROM mission WHERE id = ?', ['mission-primary'])) {
     run(db, `
@@ -822,6 +849,7 @@ function seed(db, { swarmSize, clock, root }) {
       appendMemoryLog(root, { ...entry, at: ts });
     }
   }
+  seedPlanFromGoal(db, { clock, root, client });
   const count = Number(get(db, 'SELECT COUNT(*) AS n FROM agents')?.n ?? 0);
   if (count === 0) replaceAgents(db, buildRoster(swarmSize), clock);
 }
