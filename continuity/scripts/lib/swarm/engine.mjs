@@ -70,6 +70,7 @@ export function createEngine(options = {}) {
 
   const client = createCliClient();
   let journalReady = null;
+  const registeredActors = new Set();
 
   seed(db, { swarmSize, clock, root });
   recoverOrphans(db, clock, root);
@@ -230,6 +231,25 @@ export function createEngine(options = {}) {
     }));
   }
 
+  function ensureRegisteredActor(actorId, capabilityProfiles) {
+    if (!actorId || registeredActors.has(actorId)) return;
+    safeRecord(() => client.registerAgent({
+      root,
+      agent: {
+        actorId,
+        providerFamily: 'local',
+        modelFamily: 'node-worker',
+        capabilityProfiles,
+        costTier: 'low',
+        speedTier: 'fast',
+        trustTier: 'standard',
+        calibrationStatus: 'calibrated',
+        kind: 'subagent',
+      },
+    }));
+    registeredActors.add(actorId);
+  }
+
   function mirrorVerify(task, agent, evidence) {
     const { actorId, runId } = actorRef(agent);
     for (const depId of task.deps || []) {
@@ -237,6 +257,7 @@ export function createEngine(options = {}) {
       const resultId = dep?.spec?.continuity_result_id;
       const writer = dep?.spec?.continuity_actor_id;
       if (!resultId || writer === actorId) continue;
+      ensureRegisteredActor(actorId, ['implementation', 'integration']);
       const exitCode = Number.isInteger(evidence?.exitCode) ? evidence.exitCode : 0;
       const recorded = safeRecord(() => client.recordVerify({
         root,
