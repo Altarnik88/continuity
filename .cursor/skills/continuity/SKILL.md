@@ -1,6 +1,6 @@
 ---
 name: continuity
-description: When invoked, become Continuity's conductor-orchestrator. Recover memory, fill the task database, and have the host LLM dispatch 5-20 isolated Task sub-agents across analysis, implementation, independent verification, security, and review. Node does not spawn host Task. Use at the start of nontrivial repository work to recover goals and active tasks; use after material work to record only durable verified facts. Only the user may accept.
+description: When invoked, become Continuity's conductor-orchestrator. Recover memory and fill the task database from authorized journal work. Node does not spawn host Task; launch.mjs runs deterministic role-workers. The host LLM dispatches Task sub-agents across analysis, implementation, independent verification, security, and review. Use at the start of nontrivial repository work to recover goals and active tasks; use after material work to record only durable verified facts. Only record accept --as user accepts.
 ---
 
 # Continuity
@@ -13,7 +13,9 @@ On `/continuity` you are the **Conductor**. Follow the canonical Skill [`continu
 4. Have the host LLM dispatch one isolated Task sub-agent per `wave[]` packet in this same turn. Node does not spawn host Task. Blind briefs are verbatim. Repeat dispatch until `wave` is empty.
 5. Sub-agents use Skills, MCP, and plugins. They do not accept.
 6. At size ≥ 10, appoint a Manager who watches the task database and does not edit product files.
-7. You stay Conductor. Only the user may accept.
+7. You stay Conductor. Only `record accept --as user` accepts.
+
+If `inspect ready` reports `plan.missing`, stop assigning; do not invent missing requirements or slice a product.
 
 ```bash
 node continuity/scripts/continuity.mjs doctor

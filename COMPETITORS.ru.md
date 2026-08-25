@@ -50,7 +50,12 @@ Continuity **дополняет каждый coding-агент 2026 из это�
 | Windsurf / Devin Desktop | [docs.windsurf.com](https://docs.windsurf.com/windsurf/cascade/memories) | Локальные memories не в git; Devin Local их не держит | Cascade пишет сам | Их же доки советуют Rules/`AGENTS.md` |
 | Codex `AGENTS.md` + Memories | [developers.openai.com](https://developers.openai.com/codex/guides/agents-md) | Цепочка `AGENTS.md`; экспериментальные memories | Файлы человека; Codex может генерировать | Chronicle может слать скриншоты в OpenAI (их доки) |
 | Superpowers | [github.com/obra/superpowers](https://github.com/obra/superpowers) | Библиотека `SKILL.md`; «evidence over claims» как **промпты** | Sign-off дизайна человеком | Совпадает *дисциплина*, нет хранилища |
-| Mem0 / Zep / Letta | [mem0.ai](https://mem0.ai/) · [getzep.com](https://www.getzep.com/product/agent-memory/) · [letta.com](https://www.letta.com/) | SaaS или self-host память разговоров | API приложения | Семантический recall, которого Continuity не обещает |
+| Mem0 / Zep / Letta | [mem0.ai](https://mem0.ai/) · [getzep.com](https://www.getzep.com/product/agent-memory/) · [letta.com](https://www.letta.com/) | SaaS или self-host; у Letta Code ещё git-backed MemFS | API; dream-апдейты Letta могут обойти пользователя | Семантический recall Continuity не обещает; MemFS — заметки агента, не `--as user` |
+| ByteRover | [docs.byterover.dev](https://docs.byterover.dev/) | Локальное markdown-дерево `.brv/`; **daemon** | Человек/агент правят файлы | Ближайшая локальная память; **daemon ≠ Continuity** |
+| LangMem | [langchain-ai.github.io/langmem](https://langchain-ai.github.io/langmem/) | Библиотека manage/search на store LangGraph | Агент create/update/delete | In-process recall, не журнал worktree |
+| Graphiti | [github.com/getzep/graphiti](https://github.com/getzep/graphiti) | Временные графы контекста (OSS-движок Zep) | API | Семантический граф vs append-only HISTORY |
+| Cognee | [cognee.ai](https://www.cognee.ai/) | Граф+вектор `remember`/`recall`; MCP | Агент/API | Дополняющий recall; не печать журнала |
+| Qwen Code memory | [qwenlm.github.io memory](https://qwenlm.github.io/qwen-code-docs/en/users/features/memory/) | `QWEN.md`/`AGENTS.md` плюс auto-memory в `~/.qwen/` | Агент пишет; человек `/forget` | Память host; team-memory — заметки, не observed run |
 | SpecStory | [specstory.com](https://specstory.com/) | Local-first захват чатов | Люди шарят транскрипты | Continuity не кладёт сырые логи в store |
 | Augment Code Memories | [augmentcode.com Memory Review](https://www.augmentcode.com/blog/how-we-built-memory-review) | Долгая память workspace; агент предлагает черновик | Пользователь approve / edit / discard | HITL-память, не observed `command`/`test` |
 | Kiro steering / memory | [kiro.dev/ide](https://kiro.dev/ide/) | Steering-файлы + память сессии в IDE AWS | Человек рулит; агенты по событиям | Spec-driven host, не переносимый журнал |
@@ -93,6 +98,9 @@ Continuity **дополняет каждый coding-агент 2026 из это�
 | Trae (ByteDance) | [trae.ai](https://www.trae.ai/) / [docs subagents](https://docs.trae.ai/ide/subagents) | IDE на VS Code; SOLO + Markdown-субагенты | Песочница / режимы прав | Режимы прав IDE | Host с субагентами; не аренда путей |
 | Zed Agent Panel | [zed.dev Agent Panel](https://zed.dev/docs/ai/agent-panel) | Агент в редакторе; опционально параллельные threads | Проект редактора | Tool permissions allow / deny / confirm | Дополняющий редактор; нет HISTORY |
 | CodeRabbit | [coderabbit.ai](https://www.coderabbit.ai/) | Review-агент PR / IDE / CLI | Git host / local CLI | Люди мержат; Learnings из ответов | Слой ревью рядом с Continuity, не замена |
+| Copilot cloud agent | [docs.github.com cloud-agent](https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent) | Эфемерный GitHub Actions; ~59 мин | Actions VM | Итерации, затем merge PR | Честный hosted Task |
+| Linear coding sessions | [linear.app coding-sessions](https://linear.app/docs/coding-sessions) | Issue → Claude Code или Codex в sandbox Linear | Cloud sandbox | Человек смотрит diff в Linear | Host, оборачивающий другие hosts |
+| Antigravity | [antigravity.google](https://antigravity.google/docs/artifacts) | Harness Google (desktop + CLI); async subagents | Vendor sandbox | Artifacts для HITL | Дополняющий Google host; artifacts ≠ exit 0 |
 
 **Ближайшие родственники, не клоны:** Factory Missions (validators), worktree Claude Code, VM Cursor Cloud, fan-out OpenClaw, canvas OpenHands, история Temporal, plan/apply Plandex, Warp Oz.
 
@@ -115,16 +123,23 @@ Continuity **не заменяет** эти продукты. Они пишут 
 | Factory Droid | [factory.ai](https://factory.ai) | CLI / cloud Missions | Дополняющий host |
 | Goose | [github.com/aaif-goose/goose](https://github.com/aaif-goose/goose) | Local CLI/desktop | Дополняющий host |
 | Kiro | [kiro.dev](https://kiro.dev) | Spec-driven IDE + CLI AWS | Дополняющий host |
-| Gemini CLI | [github.com/google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) | Local CLI Google | Дополняющий host |
+| Gemini CLI | [github.com/google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) | Local CLI Google | Дополняющий **enterprise** host; consumer ушёл в Antigravity (2026-06-18) |
+| Antigravity | [antigravity.google](https://antigravity.google/docs/artifacts) | Agent-first CLI/desktop Google | Дополняющий host |
 | Jules | [jules.google](https://jules.google/) | Асинхронная cloud VM + GitHub PR | Дополняющий hosted agent |
 | Tabnine | [tabnine.com](https://www.tabnine.com/) | Enterprise IDE + CLI (Tricentis) | Дополняющий host; context engine ≠ журнал |
 | OpenCode | [opencode.ai](https://opencode.ai/) | OSS terminal / desktop / IDE agent | Дополняющий host |
+| Qwen Code | [qwenlm.github.io/qwen-code-docs](https://qwenlm.github.io/qwen-code-docs/en/users/overview/) | Apache-2.0 CLI | Дополняющий host с локальной памятью |
 | Warp Agent | [warp.dev/agent-cli](https://www.warp.dev/agent-cli) | Terminal-агент + Oz | Дополняющий host |
 | Zed | [zed.dev](https://zed.dev) | Редактор + Agent Panel | Дополняющий host |
 | Augment Code | [augmentcode.com](https://www.augmentcode.com) | IDE-агент + Context Engine | Дополняющий host |
 | Trae | [trae.ai](https://www.trae.ai/) | AI IDE ByteDance | Дополняющий host |
-| Plandex | [plandex.ai](https://plandex.ai/) | Локальный plan/execute CLI | Дополняющий host |
+| Plandex | [plandex.ai](https://plandex.ai/) | Локальный plan/execute CLI | Дополняющий host (OSS; Cloud закрыт) |
+| GitHub Copilot CLI | [docs.github.com Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-copilot-cli) | Local terminal agent | Дополняющий host; транскрипты ≠ HISTORY |
+| Linear Agent | [linear.app/docs/linear-agent](https://linear.app/docs/linear-agent) | Issues + coding sandboxes | Дополняющий issue-host |
+| Graphite Agent | [graphite.com](https://graphite.com/) | PR review/stacking | Дополняющий review/merge; сделка Cursor, продукт жив |
 | CodeRabbit | [coderabbit.ai](https://www.coderabbit.ai/) | Review-агент | Дополняющее ревью, не control plane |
+| Claude Cowork | [anthropic.com/claude-cowork](https://www.anthropic.com/product/claude-cowork) | Knowledge-work агент | Дополняет; не coding-продукт |
+| Manus | [manus.im](https://manus.im/) | Общий cloud-агент | Сосед; не coding-host в смысле Continuity |
 
 Снимок не покрывает каждый LLM-wrapper. В нём first-party страницы, которые на 2026-08-25 продают coding-агента, память агента или multi-agent runtime для кода.
 
@@ -134,10 +149,13 @@ Continuity **не заменяет** эти продукты. Они пишут 
 - **Continue** как отдельный продукт — сделка Cursor; репозиторий read-only.
 - **Cody Free/Pro**, **Copilot Workspace** (закрыт 2025), бренд **Codeium**, Sweep как GitHub-бот.
 - **Amazon Q Developer** плагины IDE — AWS [end-of-support](https://aws.amazon.com/blogs/devops/amazon-q-developer-end-of-support-announcement/): новые регистрации закрыты 2026-05-15; плагины EOS 2027-04-30; наследник — Kiro.
-- **Plandex Cloud** — сворачивается (local/self-host остаётся).
+- **Gemini CLI (consumer)** — Google [перестал обслуживать](https://developers.googleblog.com/en/an-important-update-transitioning-gemini-cli-to-antigravity-cli/) individual/Pro/Ultra 2026-06-18; наследник — Antigravity. Enterprise Gemini CLI остаётся.
+- **Plandex Cloud** — закрыт (local/self-host остаётся).
+- **Mentat CLI** — архив. Бот mentat.ai **не верифицирован** без first-party подтверждения.
+- **Graphite** — сделка Cursor; продукт по-прежнему продаётся.
 
-Команды, уже сидящие на Devin Cloud, Copilot cloud agent, Jules, Amp orbs, Factory Missions, Warp Oz или OpenHands Canvas, могут не брать swarm Continuity и пользоваться только журналом — или не брать Continuity вовсе.
+Команды, уже сидящие на Devin Cloud, Copilot cloud agent, Jules, Amp orbs, Factory Missions, Warp Oz, Linear coding sessions, Antigravity или OpenHands Canvas, могут не брать swarm Continuity и пользоваться только журналом — или не брать Continuity вовсе.
 
 ## Источники
 
-Обзоры вендорских док субагентами 2026-08-25 и `README.md` / `ARCHITECTURE.md` / `continuity/SKILL.md` этого репозитория. Неверифицированное (IDE Memories Cursor в текущих официальных доках, часть облачных цен, страница Factory `--worktree`, живёт ли Google Antigravity под этим именем) в жёсткие утверждения не входит. Агенты issue-tracker (Linear), общие агенты (Manus) и CLI-обёртки без first-party страницы памяти или swarm в этот снимок не входят.
+Обзоры вендорских док субагентами 2026-08-25 и `README.md` / `ARCHITECTURE.md` / `continuity/SKILL.md` этого репозитория. Неверифицированное (IDE Memories Cursor в текущих официальных доках, часть облачных цен, страница Factory `--worktree`, Zed Delta кроме тизера, жив ли бот Mentat, GA Warp Agent Memory, «OpenCode не хранит код») в жёсткие утверждения не входит.

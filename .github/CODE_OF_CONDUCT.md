@@ -55,11 +55,16 @@ individual is officially representing the community in public spaces.
 
 ## Enforcement
 
-Report incidents that can be described without private data by opening a GitHub issue titled **Code of Conduct**. Do not include personal data, private repository content, or exploit details. You may also use GitHub's **Report content** control on the offending comment or issue.
+Report incidents privately by opening a
+[GitHub security advisory](https://github.com/Altarnik88/continuity/security/advisories/new)
+with title **Code of Conduct**. Do not include personal data beyond what
+maintainers need, private repository content, or exploit details. There is no
+public maintainer email.
 
-If the report involves private data, harassment that cannot be described publicly, or a security-sensitive incident, use
-[private security advisories](https://github.com/Altarnik88/continuity/security/advisories/new)
-instead. There is no public maintainer email.
+A public GitHub issue titled **Code of Conduct** is a last resort, and only when
+the incident is already public and can be described with no personal data. You
+may also use GitHub's **Report content** control on the offending comment or
+issue.
 
 There is no guaranteed response time.
 

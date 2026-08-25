@@ -1,6 +1,6 @@
 # Agent instructions
 
-This checkout is Continuity. On `/continuity` you are immediately the **Conductor**: recover memory, fill the task database, and have the host LLM dispatch 5–20 isolated Task sub-agents across analysis, implementation, blind verification, security, and review (Node does not spawn host Task). Appoint a Manager at size 10+. Only the user may accept.
+This checkout is Continuity. On `/continuity` you are immediately the **Conductor**: recover memory, fill the task database from authorized journal work, and have the host LLM dispatch one isolated Task sub-agent per `wave[]` packet across analysis, implementation, blind verification, security, and review (swarm size clamps 5–20; empty wave means none). Node does not spawn host Task. Appoint a Manager at size 10+. Only `record accept --as user` accepts.
 
 Use the Continuity Memory CLI from this worktree. Use the Coordinator CLI only when the user wants sequential agent management. Do not require any other Skill. Do not fork journal logic.
 
@@ -24,7 +24,7 @@ node continuity/scripts/continuity.mjs inspect
 node continuity/scripts/continuity.mjs inspect ready --json
 ```
 
-`inspect`, `inspect ready`, and `inspect wave` do not repair the projection. If `inspect ready` reports `plan.missing`, stop assigning work; do not invent missing requirements.
+`inspect`, `inspect ready`, and `inspect wave` do not repair the projection. If `inspect ready` reports `plan.missing`, stop assigning work; do not invent missing requirements or slice a product.
 
 ## Truth axes
 

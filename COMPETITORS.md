@@ -50,7 +50,12 @@ Instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules`, Copilot instructio
 | Windsurf / Devin Desktop memories | [docs.windsurf.com … memories](https://docs.windsurf.com/windsurf/cascade/memories) | Local memories not in git; Devin Local does not persist Cascade memories | Cascade auto-writes | Rules/`AGENTS.md` preferred in their own docs |
 | OpenAI Codex `AGENTS.md` + Memories | [developers.openai.com/codex/guides/agents-md](https://developers.openai.com/codex/guides/agents-md) | Git `AGENTS.md` chain; experimental `~/.codex/memories/` | Human files; Codex may generate memories | Chronicle can send screenshots to OpenAI (their docs) |
 | Superpowers | [github.com/obra/superpowers](https://github.com/obra/superpowers) | `SKILL.md` library; “evidence over claims” as **prompts** | Human design sign-off in brainstorming | Overlapping *discipline*, no store |
-| Mem0 / Zep / Letta | [mem0.ai](https://mem0.ai/) · [getzep.com](https://www.getzep.com/product/agent-memory/) · [letta.com](https://www.letta.com/) | SaaS or self-host conversational memory | App/API, not software accept | Semantic recall Continuity does not claim |
+| Mem0 / Zep / Letta | [mem0.ai](https://mem0.ai/) · [getzep.com](https://www.getzep.com/product/agent-memory/) · [letta.com](https://www.letta.com/) | SaaS or self-host conversational memory; Letta Code also has git-backed MemFS | App/API; Letta dream updates may skip the user | Semantic recall Continuity does not claim; MemFS is agent-owned git notes, not `--as user` |
+| ByteRover | [docs.byterover.dev](https://docs.byterover.dev/) | Local markdown context tree under `.brv/`; **background daemon** | Human/agent curate files; no typed evidence | Closest local coding-agent memory; **daemon ≠ Continuity** |
+| LangMem | [langchain-ai.github.io/langmem](https://langchain-ai.github.io/langmem/) | Library: manage/search tools on a LangGraph store | Agent create/update/delete | In-process recall, not a worktree journal |
+| Graphiti | [github.com/getzep/graphiti](https://github.com/getzep/graphiti) | Temporal context graphs (Zep’s OSS engine) | API/app | Semantic/temporal graph vs append-only HISTORY |
+| Cognee | [cognee.ai](https://www.cognee.ai/) | Graph+vector `remember`/`recall`; optional MCP | Agent/API | Complementary recall; not a sealed journal |
+| Qwen Code memory | [qwenlm.github.io memory](https://qwenlm.github.io/qwen-code-docs/en/users/features/memory/) | `QWEN.md`/`AGENTS.md` plus auto-memory under `~/.qwen/` | Agent writes; human `/forget` | Host memory; team-memory is notes, not observed runs |
 | SpecStory | [specstory.com](https://specstory.com/) | Local-first chat capture | Humans share transcripts | Continuity refuses raw chat logs in the store |
 | Augment Code Memories | [augmentcode.com Memory Review](https://www.augmentcode.com/blog/how-we-built-memory-review) | Workspace long-term memory; agent proposes drafts | User approve / edit / discard in chat | HITL memory gate, not observed `command`/`test` |
 | Kiro steering / memory | [kiro.dev/ide](https://kiro.dev/ide/) | Steering files + session memory in an AWS IDE | Human steers; agents may run on events | Spec-driven host; not a portable journal |
@@ -80,7 +85,7 @@ Instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules`, Copilot instructio
 | Claude Code Agent / teams | [code.claude.com/docs/en/sub-agents](https://code.claude.com/docs/en/sub-agents) | Local CLI | Optional `isolation: worktree`; teams often share cwd | Interactive session | Host **does** spawn Agent/Task (honest opposite of Continuity Node) |
 | Cursor Cloud Agents / Bugbot | [cursor.com/docs/cloud-agent](https://cursor.com/docs/cloud-agent) | Hosted microVMs | Per-agent VM | You merge the PR | Honest hosted Task; not a local journal |
 | Aider architect/editor | [aider.chat/docs/usage/modes.html](https://aider.chat/docs/usage/modes.html) | Local CLI | One process, two models | User confirms architect plan | Sequential, not a fake swarm |
-| MetaGPT / ChatDev | GitHub FoundationAgents / OpenBMB | Local Python / local UI | Shared generated tree | Pipeline completion | “Software company” **is** the demo metaphor |
+| MetaGPT / ChatDev | [FoundationAgents/MetaGPT](https://github.com/FoundationAgents/MetaGPT) · [OpenBMB/ChatDev](https://github.com/OpenBMB/ChatDev) | Local Python / local UI | Shared generated tree | Pipeline completion | “Software company” **is** the demo metaphor |
 | SWE-agent | [swe-agent.com](https://swe-agent.com) | Local / Codespaces | Per-instance env | Batch/eval | Research ACI, not leases |
 | Ruflo (ex Claude Flow) | [github.com/ruvnet/ruflo](https://github.com/ruvnet/ruflo) | Local + MCP daemon | Unverified | Unverified | High marketing load; daemon |
 | OpenClaw Swarm | [docs.openclaw.ai/tools/swarm](https://docs.openclaw.ai/tools/swarm) | Local Gateway; **installs a daemon** | Session isolation + caps | Collector fail-closed; parent script decides | Local fan-out; **daemon ≠ Continuity** |
@@ -93,6 +98,9 @@ Instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules`, Copilot instructio
 | Trae (ByteDance) | [trae.ai](https://www.trae.ai/) / [docs subagents](https://docs.trae.ai/ide/subagents) | VS Code–based IDE; SOLO + Markdown subagents | IDE sandbox / permission modes | IDE permission modes | Host with subagents; not path leases |
 | Zed Agent Panel | [zed.dev Agent Panel](https://zed.dev/docs/ai/agent-panel) | Editor-native agent; optional parallel threads | Editor project | Tool permissions allow / deny / confirm | Complementary editor; no HISTORY |
 | CodeRabbit | [coderabbit.ai](https://www.coderabbit.ai/) | PR / IDE / CLI review agent | Git host / local CLI | Humans merge; “Learnings” from replies | Review layer beside Continuity, not a substitute |
+| Copilot cloud agent | [docs.github.com cloud-agent](https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent) | Ephemeral GitHub Actions env; ~59-minute cap | Actions VM | You iterate then merge a PR | Honest hosted Task; skip Continuity sqlite if this is the fleet |
+| Linear coding sessions | [linear.app coding-sessions](https://linear.app/docs/coding-sessions) | Issue → Claude Code or Codex in a Linear sandbox | Cloud sandbox | Human reviews the diff in Linear | Host wrapping other hosts |
+| Antigravity | [antigravity.google](https://antigravity.google/docs/artifacts) | Google agent harness (desktop + CLI); async subagents | Vendor sandbox/desktop | Artifacts for HITL (plans/diffs) | Complementary Google host; artifacts ≠ observed exit 0 |
 
 **Closest cousins, not clones:** Factory Missions (validators), Claude Code worktrees, Cursor Cloud VMs, OpenClaw fan-out, OpenHands canvas, Temporal durable history, Plandex plan/apply, Warp Oz.
 
@@ -115,16 +123,23 @@ Continuity **does not replace** these products. They write code; Continuity reco
 | Factory Droid | [factory.ai](https://factory.ai) | CLI / cloud Missions | Complementary host |
 | Goose | [github.com/aaif-goose/goose](https://github.com/aaif-goose/goose) | Local CLI/desktop | Complementary host |
 | Kiro | [kiro.dev](https://kiro.dev) | AWS spec-driven IDE + CLI | Complementary host |
-| Gemini CLI | [github.com/google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) | Local Google CLI | Complementary host |
+| Gemini CLI | [github.com/google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) | Local Google CLI | Complementary **enterprise** host; consumer traffic moved to Antigravity (2026-06-18) |
+| Antigravity | [antigravity.google](https://antigravity.google/docs/artifacts) | Google agent-first CLI/desktop | Complementary host |
 | Jules | [jules.google](https://jules.google/) | Async cloud VM + GitHub PR | Complementary hosted agent |
 | Tabnine | [tabnine.com](https://www.tabnine.com/) | Enterprise IDE + CLI (Tricentis) | Complementary host; context engine ≠ journal |
 | OpenCode | [opencode.ai](https://opencode.ai/) | OSS terminal / desktop / IDE agent | Complementary host |
+| Qwen Code | [qwenlm.github.io/qwen-code-docs](https://qwenlm.github.io/qwen-code-docs/en/users/overview/) | Apache-2.0 CLI (Gemini CLI lineage) | Complementary host with a local memory story |
 | Warp Agent | [warp.dev/agent-cli](https://www.warp.dev/agent-cli) | Terminal-native agent + Oz | Complementary host |
 | Zed | [zed.dev](https://zed.dev) | Editor + Agent Panel | Complementary host |
 | Augment Code | [augmentcode.com](https://www.augmentcode.com) | IDE agent + Context Engine | Complementary host |
 | Trae | [trae.ai](https://www.trae.ai/) | ByteDance AI IDE | Complementary host |
-| Plandex | [plandex.ai](https://plandex.ai/) | Local plan/execute CLI | Complementary host |
+| Plandex | [plandex.ai](https://plandex.ai/) | Local plan/execute CLI | Complementary host (OSS; Cloud shut) |
+| GitHub Copilot CLI | [docs.github.com Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-copilot-cli) | Local terminal agent; session store | Complementary host; transcripts ≠ HISTORY |
+| Linear Agent | [linear.app/docs/linear-agent](https://linear.app/docs/linear-agent) | Issues + coding sandboxes | Complementary issue host wrapping other hosts |
+| Graphite Agent | [graphite.com](https://graphite.com/) | PR review/stacking; Cursor Cloud Agents in-product | Complementary review/merge host; Cursor acquisition, still sold |
 | CodeRabbit | [coderabbit.ai](https://www.coderabbit.ai/) | Review agent | Complementary review, not a control plane |
+| Claude Cowork | [anthropic.com/claude-cowork](https://www.anthropic.com/product/claude-cowork) | Knowledge-work agent | Complementary; not a coding product |
+| Manus | [manus.im](https://manus.im/) | General cloud agent | Adjacent; not a coding-agent host in Continuity’s sense |
 
 This snapshot is not every LLM wrapper. It covers first-party pages that sell a coding agent, agent memory, or multi-agent coding runtime as of 2026-08-25.
 
@@ -134,10 +149,13 @@ Dead or pivoted in this snapshot:
 - **Continue** as a standalone product — Cursor acquisition; repo read-only.
 - **Cody Free/Pro**, **Copilot Workspace** (sunset 2025), **Codeium** brand, Sweep-as-GitHub-bot.
 - **Amazon Q Developer** IDE plugins — AWS [end-of-support](https://aws.amazon.com/blogs/devops/amazon-q-developer-end-of-support-announcement/): new signups blocked 2026-05-15; plugins EOS 2027-04-30; successor is Kiro.
-- **Plandex Cloud** — winding down (local/self-host remains).
+- **Gemini CLI (consumer)** — Google [stopped serving](https://developers.googleblog.com/en/an-important-update-transitioning-gemini-cli-to-antigravity-cli/) individual/Pro/Ultra on 2026-06-18; successor is Antigravity. Enterprise Gemini CLI continues.
+- **Plandex Cloud** — shut (local/self-host remains).
+- **Mentat CLI** — archived. The mentat.ai bot is **unverified** without a logged-in first-party confirmation.
+- **Graphite** — Cursor acquisition; still sold at graphite.com.
 
-Teams already standardized on Devin Cloud, Copilot cloud agent, Jules, Amp orbs, Factory Missions, Warp Oz, or OpenHands Canvas may skip Continuity’s swarm and still use only the journal — or skip Continuity entirely.
+Teams already standardized on Devin Cloud, Copilot cloud agent, Jules, Amp orbs, Factory Missions, Warp Oz, Linear coding sessions, Antigravity, or OpenHands Canvas may skip Continuity’s swarm and still use only the journal — or skip Continuity entirely.
 
 ## Sources
 
-Sub-agent reviews of vendor docs on 2026-08-25 plus this repository’s `README.md`, `ARCHITECTURE.md`, and `continuity/SKILL.md`. Unverified items (Cursor IDE chat Memories in current official docs, some cloud list prices, Factory `--worktree` CLI page, whether Google Antigravity still ships under that name) are omitted from hard claims here. Issue-tracker agents (Linear), general agents (Manus), and CLI wrappers without a first-party coding-memory or swarm page are out of this snapshot.
+Sub-agent reviews of vendor docs on 2026-08-25 plus this repository’s `README.md`, `ARCHITECTURE.md`, and `continuity/SKILL.md`. Unverified items (Cursor IDE chat Memories in current official docs, some cloud list prices, Factory `--worktree` CLI page, Zed Delta beyond homepage teaser, Mentat bot liveness, Warp Agent Memory GA, OpenCode “does not store code”) are omitted from hard claims here.

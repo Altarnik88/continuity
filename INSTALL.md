@@ -25,7 +25,7 @@ node continuity/scripts/coordinator.mjs --version
 
 `npm start` starts `launch.mjs`: deterministic Node role-workers, the sqlite execution projection, and the HTTP control surface on `127.0.0.1:43147`. It does not start the Memory CLI, spawn host Task, or accept for the user. `launch.mjs` uses the **current working directory** as the swarm root. `cd` to the target Git repository first. `launch.mjs` has no `--root` flag; Memory CLI `--root` does not apply to it.
 
-In Cursor or Grok, `/continuity` makes the host agent the Conductor: it recovers memory and fills the task database; the host LLM then dispatches isolated Task sub-agents. Node does not spawn host Task.
+In Cursor or Grok, `/continuity` makes the host agent the Conductor: it recovers memory and fills the task database from authorized journal work; the host LLM then dispatches isolated Task sub-agents. If `inspect ready` reports `plan.missing`, stop assigning. Node does not spawn host Task.
 
 From another Git repository:
 

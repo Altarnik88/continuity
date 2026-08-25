@@ -24,7 +24,7 @@ npm run check
 ## How to change the tree
 
 1. Open an issue or start from an existing one. Security issues go to [private advisories](https://github.com/Altarnik88/continuity/security/advisories/new), not public issues. See [SECURITY.md](../SECURITY.md).
-2. Keep diffs scoped. Inventory is strict: a new **root** tracked file must be listed in `scripts/package-inventory.mjs` (`REPO_METADATA_EXACT`) or it fails as `unclassified tracked path`. Files under `.github/` are already classified.
+2. Keep diffs scoped. Inventory is strict: a new **root** tracked file must be listed in `scripts/package-inventory.mjs` (`REPO_METADATA_EXACT`) or it fails as `unclassified tracked path`. Community files under `.github/` (CONTRIBUTING, Code of Conduct, issue/PR templates, Dependabot) are required metadata; deleting them fails validate.
 3. If you add a file that should ship in `npm pack` / release zips, update `DISTRIBUTABLE_FILES`, `package.json` `files`, `scripts/release-profiles.mjs`, and `scripts/test-validate-package.mjs` PKG-015 together. `COMPETITORS.md` and `COMPETITORS.ru.md` are required metadata and pack files; keep that pair in lockstep. Cyrillic is allowed only in `LOCALIZED_PUBLIC_FILES` (`README*.md` and `COMPETITORS*.md`).
 4. Do not record secrets, personal data, raw logs, raw diffs, command output, or private absolute paths in docs, tests, or the journal.
 5. Keep the truth axes distinct: an attempt or report is not evidence; execution is not independent verification; verification is not freshness; freshness is not user acceptance.

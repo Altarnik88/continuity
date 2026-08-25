@@ -44,7 +44,7 @@ node continuity/scripts/continuity.mjs --version
 
 ### B. Run the Memory CLI against a target Git repository
 
-`launch.mjs` / `npm start` use the **current working directory** as the swarm root. `cd` to the repository Continuity should remember first. Invoke the scripts by absolute path if that repository is not this clone:
+Run from the Git repository Continuity should remember, or pass that tree as `--root` to `continuity.mjs`. Invoke the scripts by absolute path if that repository is not this clone:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
@@ -54,7 +54,7 @@ If `doctor` reports `journal=uninitialized`, copy `continuity/assets/init-v3.tem
 
 ### C. Optional: Node swarm and control surface
 
-From the **target** repository:
+`launch.mjs` / `npm start` use the **current working directory** as the swarm root (`launch.mjs` has no `--root`). `cd` to the **target** repository first:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/launch.mjs"
@@ -67,7 +67,7 @@ node "/absolute/path/to/continuity/scripts/launch.mjs" --once
 Coordinator is optional. It never accepts for the user and never edits `HISTORY` files:
 
 ```bash
-node continuity/scripts/coordinator.mjs doctor --root .
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .
 ```
 
 Recipe flags, required `--exit-code` on `record verify`, and `--evidence` on succeeded `record result` are in the docs below. Do not copy incomplete command lines.

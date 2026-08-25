@@ -44,7 +44,7 @@ node continuity/scripts/continuity.mjs --version
 
 ### B. Запустить Memory CLI против целевого Git-репозитория
 
-`launch.mjs` / `npm start` берут **текущий рабочий каталог** как корень роя. Сначала `cd` в репозиторий, который Continuity должен помнить. Если это не данный клон, вызывайте скрипты по абсолютному пути:
+Запускайте из Git-репозитория, который Continuity должен помнить, или передайте это дерево как `--root` у `continuity.mjs`. Если это не данный клон, вызывайте скрипты по абсолютному пути:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
@@ -54,7 +54,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 
 ### C. По желанию: Node-рой и панель
 
-Из **целевого** репозитория:
+`launch.mjs` / `npm start` берут **текущий рабочий каталог** как корень роя (`launch.mjs` не имеет `--root`). Сначала `cd` в **целевой** репозиторий:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/launch.mjs"
@@ -67,7 +67,7 @@ node "/absolute/path/to/continuity/scripts/launch.mjs" --once
 Coordinator необязателен. Он никогда не принимает результат за пользователя и не правит файлы `HISTORY`:
 
 ```bash
-node continuity/scripts/coordinator.mjs doctor --root .
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .
 ```
 
 Флаги рецептов, обязательный `--exit-code` у `record verify` и `--evidence` у успешного `record result` — в документах ниже. Не копируйте неполные командные строки.
