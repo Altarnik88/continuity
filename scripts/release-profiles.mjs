@@ -39,8 +39,6 @@ const SHARED_DOCS = Object.freeze([
   'MIGRATION.md',
   'RELEASE.md',
   'CHANGELOG.md',
-  'COMPETITORS.md',
-  'COMPETITORS.ru.md',
   'package.json',
 ]);
 

@@ -18,8 +18,6 @@ Runtime: Node.js 22 or 24 (`package.json` engines: `>=22 <25`) and Git. MIT Lice
 
 Product version is `package.json` (`3.0.0`). `--version` prints that value. Store schema is **v3** and is not the product version.
 
-How Continuity sits next to Cursor, Claude Code, Copilot, Devin, CrewAI, and similar products: [COMPETITORS.md](COMPETITORS.md) ([Русский](COMPETITORS.ru.md)).
-
 ## Why
 
 Long agent work fails in two independent ways.
@@ -84,7 +82,6 @@ Developers running the repo test gate: `npm ci --ignore-scripts` then `npm run c
 | [INSTALL.md](INSTALL.md) | Clone, profiles, installer, first minutes |
 | [COORDINATOR.md](COORDINATOR.md) | Agent management CLI, packets, resume |
 | [SECURITY.md](SECURITY.md) | Secrets boundary, hash-chain limits, how to report |
-| [COMPETITORS.md](COMPETITORS.md) | Comparison with adjacent products (2026-08-25) |
 | [CHANGELOG.md](CHANGELOG.md) | Unreleased and shipped changes |
 | [RELEASE.md](RELEASE.md) | Profile zips and GitHub publication |
 | [CONTRIBUTING](.github/CONTRIBUTING.md) | How to change this repository |

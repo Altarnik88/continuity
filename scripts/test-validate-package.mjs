@@ -206,8 +206,6 @@ export const CASES = [
         'AGENTS.md',
         'ARCHITECTURE.md',
         'CHANGELOG.md',
-        'COMPETITORS.md',
-        'COMPETITORS.ru.md',
         'COORDINATOR.md',
         'INSTALL.md',
         'LICENSE',
@@ -338,8 +336,6 @@ export const CASES = [
         'ADAPTERS.md',
         'ARCHITECTURE.md',
         'CHANGELOG.md',
-        'COMPETITORS.md',
-        'COMPETITORS.ru.md',
         'COORDINATOR.md',
         'INSTALL.md',
         'LICENSE',
@@ -524,8 +520,6 @@ export const CASES = [
       assert.deepEqual([...LOCALIZED_PUBLIC_FILES], [
         'README.md',
         'README.ru.md',
-        'COMPETITORS.md',
-        'COMPETITORS.ru.md',
       ]);
       const root = makeBoundaryRoot('cyrillic');
       try {
@@ -533,8 +527,6 @@ export const CASES = [
         assert.throws(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)), /contains Cyrillic/);
         writeFileSync(path.join(root, 'SECURITY.md'), '# Security\n');
         writeFileSync(path.join(root, 'README.ru.md'), `# ${cyrillic}\n`);
-        writeFileSync(path.join(root, 'COMPETITORS.md'), '# Competitors\n');
-        writeFileSync(path.join(root, 'COMPETITORS.ru.md'), `# ${cyrillic}\n`);
         assert.doesNotThrow(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)));
       } finally {
         rmSync(root, { recursive: true, force: true });

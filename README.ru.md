@@ -18,8 +18,6 @@ Runtime: Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Ли�
 
 Версия продукта — `package.json` (`3.0.0`). `--version` печатает это значение. Схема хранилища — **v3**, это не версия продукта.
 
-Как Continuity соотносится с Cursor, Claude Code, Copilot, Devin, CrewAI и похожими продуктами: [COMPETITORS.ru.md](COMPETITORS.ru.md) ([English](COMPETITORS.md)).
-
 ## Зачем
 
 Долгая агентная работа ломается двумя независимыми способами.
@@ -84,7 +82,6 @@ node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .
 | [INSTALL.md](INSTALL.md) | Клон, профили, installer, первые минуты |
 | [COORDINATOR.md](COORDINATOR.md) | CLI управления агентами, пакеты, resume |
 | [SECURITY.md](SECURITY.md) | Граница секретов, пределы hash-chain, как сообщить |
-| [COMPETITORS.ru.md](COMPETITORS.ru.md) | Сравнение со смежными продуктами (2026-08-25) |
 | [CHANGELOG.md](CHANGELOG.md) | Невыпущенные и уже выпущенные изменения |
 | [RELEASE.md](RELEASE.md) | Zip-профили и публикация на GitHub |
 | [CONTRIBUTING](.github/CONTRIBUTING.md) | Как менять этот репозиторий |

@@ -40,8 +40,6 @@ export const REPO_METADATA_EXACT = Object.freeze([
   'AGENTS.md',
   'ARCHITECTURE.md',
   'CHANGELOG.md',
-  'COMPETITORS.md',
-  'COMPETITORS.ru.md',
   'COORDINATOR.md',
   'INSTALL.md',
   'LICENSE',
@@ -58,8 +56,6 @@ export const REPO_METADATA_EXACT = Object.freeze([
 export const LOCALIZED_PUBLIC_FILES = Object.freeze([
   'README.md',
   'README.ru.md',
-  'COMPETITORS.md',
-  'COMPETITORS.ru.md',
 ]);
 export const LOCALIZED_README_FILES = LOCALIZED_PUBLIC_FILES;
 export const REQUIRED_REPO_METADATA = Object.freeze([
@@ -81,8 +77,6 @@ export const REQUIRED_REPO_METADATA = Object.freeze([
   'AGENTS.md',
   'ARCHITECTURE.md',
   'CHANGELOG.md',
-  'COMPETITORS.md',
-  'COMPETITORS.ru.md',
   'COORDINATOR.md',
   'INSTALL.md',
   'LICENSE',
@@ -119,8 +113,6 @@ export const DISTRIBUTABLE_FILES = Object.freeze([
   'ADAPTERS.md',
   'ARCHITECTURE.md',
   'CHANGELOG.md',
-  'COMPETITORS.md',
-  'COMPETITORS.ru.md',
   'COORDINATOR.md',
   'INSTALL.md',
   'LICENSE',

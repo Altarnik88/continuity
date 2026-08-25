@@ -106,7 +106,6 @@ Ready-set scheduling is deterministic. Memory does not launch the scheduled acto
 ├── tests/ scripts/ examples/
 ├── AGENTS.md ARCHITECTURE.md PROTOCOL.md INSTALL.md
 ├── COORDINATOR.md ADAPTERS.md MIGRATION.md RELEASE.md CHANGELOG.md
-├── COMPETITORS.md COMPETITORS.ru.md
 ├── README.md README.ru.md SECURITY.md LICENSE
 └── package.json
 ```
