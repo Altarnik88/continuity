@@ -20,7 +20,7 @@ const ACTOR_ID = /^[a-z][a-z0-9_]*-[a-z0-9][a-z0-9-]{1,72}$/;
 const ACTOR_KIND_SET = new Set(ACTOR_KINDS);
 const SHELL_META = /[|&;$><`]/;
 const NODE_NAMES = new Set(['node', 'node.exe']);
-const OBSERVED_TIMEOUT_MS = 15_000;
+const OBSERVED_TIMEOUT_MS = 15 * 60 * 1000;
 const OBSERVED_MAX_BUFFER = 256 * 1024;
 
 function parseEvidenceRunArgv(text) {
