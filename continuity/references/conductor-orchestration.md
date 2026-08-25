@@ -2,13 +2,13 @@
 
 When `/continuity` is invoked, the host agent **is** the Conductor. Memory and the task database are in force immediately. This document is the dispatch protocol for host Task sub-agents.
 
-`scripts/launch.mjs` runs deterministic role-workers: SQLite execution projection, path leases, and a control surface. Node does not spawn host Task. The host LLM dispatches Task sub-agents. The Conductor may attach to that runtime and dispatch those Task sub-agents against the same database.
+`scripts/launch.mjs` runs deterministic role-workers: SQLite execution projection with journal task/event ids, path leases, and a control surface. Node does not spawn host Task. The host LLM dispatches Task sub-agents. The Conductor may attach to that runtime and dispatch those Task sub-agents against the same database.
 
-Core `HISTORY` is truth. Swarm sqlite is an execution projection. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store. `mission.accepted` is not user accept. Only `record accept --as user` accepts.
+Core `HISTORY` is truth. Swarm sqlite is an execution projection with journal task/event ids. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store. Clicking Accept on the HTTP control surface is not user accept. `mission.accepted` is not user accept. Only `record accept --as user` accepts. Coordinator does not accept for the user and does not edit `HISTORY` files.
 
 ## Standing order
 
-Develop the product. Do not wait for a new chat. Keep goals, failures, and playbooks. Persist journal-authorized work in `data/swarm.sqlite`. If `inspect ready` reports `plan.missing`, stop assigning; do not invent missing requirements. The host LLM may dispatch Task sub-agents in parallel. Never lease overlapping paths to two live agents. Cover analysis, implementation, independent verification, security, and review. An attempt is not evidence. Only `record accept --as user` accepts.
+Develop the product. Do not wait for a new chat. Keep goals, failures, and playbooks. Persist journal-authorized work in `data/swarm.sqlite`. If `inspect ready` reports `plan.missing`, stop assigning; do not invent missing requirements or slice a product. The host LLM may dispatch Task sub-agents in parallel. Never lease overlapping paths to two live agents. Cover analysis, implementation, independent verification, security, and review. An attempt is not evidence. Only `record accept --as user` accepts.
 
 ## Roles
 
@@ -26,7 +26,7 @@ Develop the product. Do not wait for a new chat. Keep goals, failures, and playb
 
 ## Parallel dispatch
 
-In **one** Conductor turn, launch every ready task whose paths do not overlap:
+In **one** Conductor turn, the host LLM dispatches every ready Task whose paths do not overlap:
 
 1. Read ready tasks and current leases (`GET /api/swarm` or `data/swarm.sqlite`).
 2. Take a maximal set of ready tasks with disjoint `paths`.
@@ -69,5 +69,6 @@ At size ≥ 10 the Conductor appoints one Manager. The Manager reads the task da
 - Do not start two agents on overlapping paths.
 - Do not let a writer verify their own task.
 - Do not skip security and review because implementation "looks done".
-- Do not invent requirements when `inspect ready` reports `plan.missing`. Stop assigning.
+- Do not invent requirements or slice a product when `inspect ready` reports `plan.missing`. Stop assigning.
 - Do not treat `launch.mjs` role-workers as host Task or MCP sub-agents.
+- Do not treat the HTTP control-surface Accept control as user accept.

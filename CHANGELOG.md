@@ -2,14 +2,14 @@
 
 ## Unreleased
 
-- `/continuity` makes the host agent the Conductor: recover memory, fill the task database, and dispatch 5–20 isolated sub-agents across analysis, implementation, blind verification, security, and review.
-- `dispatch.mjs` prints a disjoint spawn `wave[]` so the Conductor can launch isolated Task sub-agents without path collisions. Blind security/review workers read leased source files instead of trusting implementer notes.
+- `/continuity` makes the host agent the Conductor: recover memory, fill the task database from authorized journal work, and have the host LLM dispatch isolated Task sub-agents across analysis, implementation, blind verification, security, and review. `launch.mjs` is deterministic Node role-workers plus a sqlite execution projection and the control surface. Node does not spawn host Task.
+- `dispatch.mjs` prints a disjoint spawn `wave[]` so the host LLM can dispatch isolated Task sub-agents without path collisions. Blind security/review workers read leased source files instead of trusting implementer notes.
 - Swarm roster covers analyst, security, reviewer, and (at size 10+) a Manager who watches leases and does not edit product files. Conductor and Manager never take product leases.
-- `GET /api/swarm` includes dispatch `packets[]` so Cursor/Grok sub-agents can be spawned from the same task database. Blind packets omit implementer context.
-- `npm start` is an alias for `npm run launch`. After clone, memory and orchestration start without a second prompt.
-- Autonomous swarm: SQLite task database, 5–20 parallel sub-agents, path leases, standing order on launch, and a local control surface.
-- Swarm memory records lessons, failures, and playbooks. User acceptance stays pending until an explicit accept.
-- Default wave builds Pulse under `forge/` and writes `forge/HANDOFF.md` so the next session does not guess.
+- `GET /api/swarm` includes dispatch `packets[]` so the host LLM can dispatch Cursor/Grok Task sub-agents from the same sqlite execution projection. Blind packets omit implementer context.
+- `npm start` is an alias for `npm run launch`. After clone, `launch.mjs` starts the Node role-workers and control surface without a second prompt.
+- Autonomous swarm: SQLite execution projection with journal task/event ids, deterministic `launch.mjs` role-workers, path leases, standing order on launch, and a local control surface. The host LLM dispatches Task sub-agents.
+- Swarm memory records lessons, failures, and playbooks. User accept is only `record accept --as user`. The HTTP control-surface Accept control is not user accept. `mission.accepted` is not user accept.
+- Pulse is not the user product. `planPulse` is a test fixture. The default wave does not build Pulse under `forge/`. Markdown (`forge/MEMORY.md`, `forge/HANDOFF.md`) is a view, not a store.
 - Package validation inventories a Git worktree from `git ls-files --cached`, so ignored or untracked local notes (including `.superpowers/`) are not scanned as public product text.
 - `.superpowers/` is gitignored.
 - Coordinator closes only the completed packet's open attempt (`taskId` + `runId`), not every attempt that shares the executor run id.

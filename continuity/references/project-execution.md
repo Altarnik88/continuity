@@ -19,7 +19,9 @@ These states are independent:
 
 `--as` labels actor kind (`user`, `coordinator`, `subagent`, `tool`, `migration`). It does not launch a process. Omitting `--as` defaults to kind `coordinator`. That default is a label, not a running Coordinator.
 
-A Coordinator is optional and is not launched by Continuity. Continuity has no daemon, network client, interview mode, or top-level `coordinate` command.
+A Coordinator is optional and is not launched by Continuity. Coordinator does not accept for the user and does not edit `HISTORY` files. Continuity has no daemon, network client, interview mode, or top-level `coordinate` command.
+
+Do not equate host Task / Cursor-Grok sub-agents with `launch.mjs` Node role-workers. `launch.mjs` is deterministic workers, a sqlite execution projection with journal task/event ids, and the control surface. The host LLM dispatches Task sub-agents. Core `HISTORY` is truth. Swarm sqlite is an execution projection. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store. `mission.accepted` is not user accept. Only `record accept --as user` accepts. Clicking Accept on the HTTP control surface is not user accept.
 
 ## Resolve the CLI
 
@@ -41,7 +43,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect ready --json
 
 Treat the output as a map, then check relevant claims against current sources, Git, and the environment. Preserve unrelated work.
 
-`doctor` on an uninitialized store does not create one. `inspect`, `inspect ready`, and `inspect wave` are read-only even when `CURRENT.json` is missing, stale, or invalid. Use `rebuild` only for an intentional projection repair. If `plan.missing` is nonempty, stop assigning until authorized project, goal, criteria, and task data exist.
+`doctor` on an uninitialized store does not create one. `inspect`, `inspect ready`, and `inspect wave` are read-only even when `CURRENT.json` is missing, stale, or invalid. Use `rebuild` only for an intentional projection repair. If `plan.missing` is nonempty, stop assigning until authorized project, goal, criteria, and task data exist; do not invent missing requirements or slice a product.
 
 ## Initialize an empty store
 
@@ -107,7 +109,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record accept --as us
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record reject --as user --result <result-id> --next "Different next step"
 ```
 
-Neither an executor, verifier, nor Coordinator may accept work for the user. A rejected result records a linked next action. Fresh, independently verified work still remains pending until the user acts.
+Neither an executor, verifier, nor Coordinator may accept work for the user. Coordinator does not edit `HISTORY` files. A rejected result records a linked next action. Fresh, independently verified work still remains pending until `record accept --as user`. The HTTP control-surface Accept control is not user accept. `mission.accepted` is not user accept.
 
 ## Finish safely
 

@@ -6,9 +6,9 @@
 
 Continuity is a downloadable Node.js product for a Git repository. It does three jobs that coding sessions usually mix together and then lose:
 
-1. **Remember the project truth** — goals, failed attempts, lessons, playbooks, evidence, independent verification, freshness, and whether the *user* accepted the result.
-2. **Slice work into a database** — ready tasks, path leases, and a standing order that does not wait for a new chat.
-3. **Run 5–20 sub-agents in parallel** — isolated ownership, independent verification, restart, and stop. Words from an executor are never treated as proof. Only the user may accept.
+1. **Remember the project truth** — goals, failed attempts, lessons, playbooks, evidence, independent verification, freshness, and whether the *user* accepted the result. Core `HISTORY` is truth. Swarm sqlite is an execution projection with journal task/event ids. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store.
+2. **Slice authorized work into a database** — ready tasks, path leases, and a standing order that does not wait for a new chat. If `inspect ready` reports `plan.missing`, stop assigning; do not invent missing requirements.
+3. **Keep two runtimes distinct** — `launch.mjs` runs deterministic Node role-workers, a sqlite execution projection, and the HTTP control surface. The host LLM dispatches isolated Task / Cursor-Grok sub-agents. Node does not spawn host Task. Words from an executor are never treated as proof. Only `record accept --as user` accepts.
 
 You download it when a later chat, a different model, or a replacement executor must continue without guessing — and when more than one actor must work on the same repository without colliding or marking the work done for you.
 
@@ -39,7 +39,7 @@ npm start
 node continuity/scripts/launch.mjs --once
 ```
 
-`npm start` (same as `npm run launch`) opens the control surface on port 43147 and immediately starts memory plus orchestration. In Cursor or Grok, `/continuity` makes the host agent the **Conductor**: it recovers memory, fills the task database, and dispatches 5–20 isolated sub-agents across analysis, implementation, blind verification, security, and review. At size 10+ it appoints a Manager. `launch.mjs --once` runs that swarm headlessly until the current wave is idle. User acceptance stays pending until you click **Accept** or call accept yourself.
+`npm start` (same as `npm run launch`) starts `launch.mjs`: deterministic Node role-workers, a SQLite execution projection, and the HTTP control surface on port 43147. That process does not spawn host Task. In Cursor or Grok, `/continuity` makes the host agent the **Conductor**: it recovers memory, fills the task database from authorized journal work, and the host LLM dispatches isolated Task sub-agents across analysis, implementation, blind verification, security, and review. At size 10+ it appoints a Manager. `launch.mjs --once` runs the Node role-workers headlessly until the current wave is idle. Clicking **Accept** on the control surface is not user accept. `mission.accepted` is not user accept. Only `record accept --as user` accepts.
 
 From the Git repository Continuity should remember:
 
@@ -47,9 +47,9 @@ From the Git repository Continuity should remember:
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 ```
 
-If `doctor` reports `journal=uninitialized`, edit `continuity/assets/init-v3.template.json` so the goal and criterion are the user's, then `init --schema 3 --file` that template. Then `inspect` and `inspect ready --json`. If `plan.missing` is nonempty, stop assigning work.
+If `doctor` reports `journal=uninitialized`, edit `continuity/assets/init-v3.template.json` so the goal and criterion are the user's, then `init --schema 3 --file` that template. Then `inspect` and `inspect ready --json`. If `plan.missing` is nonempty, stop assigning work; do not invent a product slice.
 
-Coordinator is optional. It never accepts for the user:
+Coordinator is optional. It never accepts for the user and never edits `HISTORY` files:
 
 ```bash
 node continuity/scripts/coordinator.mjs doctor --root .

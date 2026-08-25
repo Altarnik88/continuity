@@ -11,14 +11,14 @@ Product version comes from `package.json` at runtime (`3.0.0`). Store schema is 
 | **Project Memory Core** | Own long-term recorded truth | Choose a model, launch a process, accept work for the user |
 | **Continuity** | Read/continuity plane for the next chat or actor | Become Coordinator or start executors |
 | **Coordinator** | Sequential execution plane: packets, adapters, waves, resume | Edit the journal, treat reports as proof, accept for the user |
-| **Swarm** | Parallel execution plane: sqlite execution projection, deterministic `launch.mjs` role-workers, path leases, standing order | Edit the journal, accept for the user, spawn host Task, overlap path ownership |
+| **Swarm** | Parallel execution plane: sqlite execution projection with journal task/event ids, deterministic `launch.mjs` role-workers, path leases, standing order | Edit the journal, accept for the user, spawn host Task, overlap path ownership |
 
-1. **Project Memory Core** owns the append-only journal `.continuity/HISTORY.ndjson`. Core `HISTORY` is truth. `.continuity/CURRENT.json` is a rebuildable projection, not a second source of truth. The journal fails closed at 8 MiB. Unknown fields and recognizable secret patterns are rejected. A rejected write leaves the store unchanged.
-2. **Continuity** orients a new chat (`doctor`, `inspect`), emits bounded handoff, and recomputes freshness from live Git. The Memory CLI does not launch actors. The Skill `/continuity` makes the host coding agent the Conductor: it recovers memory, and the host LLM dispatches Task sub-agents. If `inspect ready` reports `plan.missing`, stop assigning; do not invent missing requirements.
+1. **Project Memory Core** owns the append-only journal `.continuity/HISTORY.ndjson`. Core `HISTORY` is truth. `.continuity/CURRENT.json` is a rebuildable projection, not a second source of truth. The journal fails closed at 8 MiB and hash-chains events. Unknown fields are rejected. Secret-pattern text guards live in the protocol (`continuity/scripts/lib/protocol/secrets.mjs`), not Core. A rejected write leaves the store unchanged.
+2. **Continuity** orients a new chat (`doctor`, `inspect`), emits bounded handoff, and recomputes freshness from live Git. The Memory CLI does not launch actors. The Skill `/continuity` makes the host coding agent the Conductor: it recovers memory, and the host LLM dispatches Task sub-agents. If `inspect ready` reports `plan.missing`, stop assigning; do not invent missing requirements or slice a product. `history --tail N` is last N journal event summaries.
 3. **Coordinator** consumes ready work through the protocol, launches adapters, and writes back only through the Continuity CLI.
-4. **Swarm** is the parallel runtime. `launch.mjs` runs deterministic role-workers. Node does not spawn host Task. The host LLM dispatches Task sub-agents. Swarm owns `data/swarm.sqlite` (an execution projection) and `forge/` views, not the journal. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store. It never accepts for the user. `mission.accepted` is not user accept. Only `record accept --as user` accepts. Role coverage is analysis, implementation, independent verification, security, and review on disjoint path leases. A Manager appears at size 10+.
+4. **Swarm** is the parallel runtime. `launch.mjs` runs deterministic role-workers plus sqlite and the control surface. Node does not spawn host Task. The host LLM dispatches Task sub-agents. Swarm owns `data/swarm.sqlite` (an execution projection with journal task/event ids) and `forge/` views, not the journal. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store. It never accepts for the user. `mission.accepted` is not user accept. Only `record accept --as user` accepts. Role coverage is analysis, implementation, independent verification, security, and review on disjoint path leases. A Manager appears at size 10+.
 
-Core never selects a model, launches a process, or accepts work for the user. Coordinator never edits the journal or projection files. Swarm never edits the journal. Core `HISTORY` is truth. Swarm sqlite is an execution projection. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store.
+Core never selects a model, launches a process, or accepts work for the user. Coordinator never edits `HISTORY` files or projection files and never accepts for the user. Swarm never edits the journal. Core `HISTORY` is truth. Swarm sqlite is an execution projection with journal task/event ids. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store.
 
 You talk to Core and Continuity through `continuity.mjs`. You talk to agent management through a separate foreground CLI, `coordinator.mjs`. Memory never starts Coordinator. Coordinator never starts as a daemon, watcher, login task, or network service.
 
@@ -116,7 +116,7 @@ Memory remembers. It does not launch executors, isolate overlapping ownership at
 No. Coordinator is useless without a Memory/Continuity endpoint or local CLI. It has no duplicate journal.
 
 **Can Coordinator accept the work?**  
-No. `mission.accepted` is not user accept. Only `record accept --as user` accepts.
+No. Coordinator does not accept for the user and does not edit `HISTORY` files. Clicking Accept on the HTTP control surface is not user accept. `mission.accepted` is not user accept. Only `record accept --as user` accepts.
 
 **Which profile should I download?**  
 Full for both jobs. Memory for journal-only. Coordinator if Memory already exists elsewhere. Verify `SHA256SUMS`.
