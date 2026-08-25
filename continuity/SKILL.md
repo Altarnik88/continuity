@@ -57,10 +57,10 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect ready --json
 
 ## Initialize only an empty store
 
-Provide a ready goal, criteria, and plan from the user or from any planning tool that is acting on the user's intent. External planning tools are optional inputs, not dependencies. Review and edit the bundled v3 template so that input is represented accurately, then run:
+Provide a ready goal, criteria, and plan from the user or from any planning tool that is acting on the user's intent. External planning tools are optional inputs, not dependencies. Copy `assets/init-v3.template.json`, edit the copy so the goal and criterion are the user's, then run:
 
 ```bash
-node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/continuity/assets/init-v3.template.json"
+node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/your-copy-of-init-v3.template.json"
 ```
 
 `init` refuses an initialized store. This build supports schema v3 only; v1/v2 stores are frozen at git tag `legacy-v1v2-final` and are not imported automatically.

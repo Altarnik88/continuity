@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Public GitHub surface: contributing and code of conduct under `.github/`, issue and pull-request templates, Dependabot for npm and GitHub Actions, CI badge, and bilingual competitor notes (`COMPETITORS.md` / `COMPETITORS.ru.md`).
-- `package.json` description names an optional local Node swarm, not an “autonomous” LLM loop. `dispatch.mjs` tells the host LLM to dispatch Task; it does not say Node will spawn Task. `launch.mjs` has no `--root` (cwd is the swarm root). Full profile and `npm run check` include Swarm. Engines stay `>=22 <25` in INSTALL and Skill install notes.
+- `package.json` description names an optional local Node swarm, not an “autonomous” LLM loop. `dispatch.mjs` tells the host LLM to dispatch Task; it does not say Node will spawn Task. `launch.mjs` has no `--root` (cwd is the swarm root). Full profile and `npm run check` include Swarm. Engines stay `>=22 <25` in INSTALL and Skill install notes. Cyrillic public text is allowed only in `README*.md` and `COMPETITORS*.md`.
 - `actions/checkout` pinned at v7.0.1 and `actions/setup-node` at v7.0.0 (Node 24 action runtime) to drop the Node 20 deprecation warning on those actions.
 - README and INSTALL split clone-the-tooling from Memory CLI against a target repo. `--version` needs no `npm install`. `npm start` does not start the Memory CLI and does not spawn host Task.
 - Local swarm wording: Node role-workers plus `127.0.0.1:43147`; the host LLM still dispatches Task. Skill text no longer says the Memory CLI has “no network service” while documenting that port.

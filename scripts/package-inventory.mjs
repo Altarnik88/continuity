@@ -55,7 +55,13 @@ export const REPO_METADATA_EXACT = Object.freeze([
   'package-lock.json',
   'package.json',
 ]);
-export const LOCALIZED_README_FILES = Object.freeze(['README.md', 'README.ru.md']);
+export const LOCALIZED_PUBLIC_FILES = Object.freeze([
+  'README.md',
+  'README.ru.md',
+  'COMPETITORS.md',
+  'COMPETITORS.ru.md',
+]);
+export const LOCALIZED_README_FILES = LOCALIZED_PUBLIC_FILES;
 export const REQUIRED_REPO_METADATA = Object.freeze([
   '.cursor/rules/continuity.mdc',
   '.cursor/skills/continuity/SKILL.md',
@@ -477,7 +483,7 @@ export function assertRepositoryBoundaries(root, files = listRepositoryFiles(roo
     const absolute = path.join(resolvedRoot, ...file.split('/'));
     if (PUBLIC_TEXT_EXTENSIONS.has(extension) || PUBLIC_TEXT_EXACT.has(file)) {
       const text = readFileSync(absolute, 'utf8');
-      if (!LOCALIZED_README_FILES.includes(file) && /[\u0400-\u052f]/u.test(text)) {
+      if (!LOCALIZED_PUBLIC_FILES.includes(file) && /[\u0400-\u052f]/u.test(text)) {
         fail(`public repository text contains Cyrillic (${file})`);
       }
     }

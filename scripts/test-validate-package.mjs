@@ -37,6 +37,7 @@ import {
   inventoryFromGit,
   inventoryFromWorktree,
   isAllowedVendorSkillManifest,
+  LOCALIZED_PUBLIC_FILES,
   listGitIndex,
   listRepositoryFiles,
   matchesDistributableAllowlist,
@@ -512,11 +513,22 @@ export const CASES = [
   {
     id: 'PKG-026-reject-cyrillic-public-text',
     run() {
+      const cyrillic = String.fromCodePoint(0x41f, 0x430, 0x43c, 0x44f, 0x442, 0x44c);
+      assert.deepEqual([...LOCALIZED_PUBLIC_FILES], [
+        'README.md',
+        'README.ru.md',
+        'COMPETITORS.md',
+        'COMPETITORS.ru.md',
+      ]);
       const root = makeBoundaryRoot('cyrillic');
       try {
-        const cyrillic = String.fromCodePoint(0x41f, 0x430, 0x43c, 0x44f, 0x442, 0x44c);
         writeFileSync(path.join(root, 'SECURITY.md'), `# ${cyrillic}\n`);
         assert.throws(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)), /contains Cyrillic/);
+        writeFileSync(path.join(root, 'SECURITY.md'), '# Security\n');
+        writeFileSync(path.join(root, 'README.ru.md'), `# ${cyrillic}\n`);
+        writeFileSync(path.join(root, 'COMPETITORS.md'), '# Competitors\n');
+        writeFileSync(path.join(root, 'COMPETITORS.ru.md'), `# ${cyrillic}\n`);
+        assert.doesNotThrow(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)));
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
