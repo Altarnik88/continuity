@@ -12,8 +12,8 @@ import {
 import { appendV3, initializeV3, readV3Journal, rebuildV3, validateV3Append, validateV3Batch } from './journal-v3.mjs';
 import {
   applyRecipes, recipeAccept, recipeAssign, recipeAttemptReport, recipeBacklog, recipeContextHandoff,
-  recipeEvidence, recipeFail, recipePacket, recipeRelease, recipeResult, recipeStart, recipeTask,
-  recipeVerify,
+  recipeEvidence, recipeFail, recipeNextStatus, recipePacket, recipeRelease, recipeResult, recipeStart,
+  recipeTask, recipeVerify,
 } from './recipes-v3.mjs';
 
 const ACTOR_ID = /^[a-z][a-z0-9_]*-[a-z0-9][a-z0-9-]{1,72}$/;
@@ -138,6 +138,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
       skipped: options.skipped,
       kind: options.kind,
       evidence: options.evidence,
+      subject: options.subject,
       exitCode: options.exitCode,
     };
     if (recipe === 'evidence') {
@@ -178,6 +179,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
       report: (store) => [recipeAttemptReport(store, recipeOptions, { clock })],
       verify: (store) => [recipeVerify(store, recipeOptions, { clock })],
       context: (store) => [recipeContextHandoff(store, recipeOptions, { clock })],
+      next: (store) => [recipeNextStatus(store, recipeOptions, { clock })],
       backlog: (store) => [recipeBacklog(store, recipeOptions, { clock })],
     };
     const builder = builders[recipe];

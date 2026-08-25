@@ -661,6 +661,13 @@ function applyEvent(state, event) {
     case 'next_action.recorded':
       state.nextActions.push({ ...clone(payload.nextAction), derivedFromEventIds: [event.eventId] });
       break;
+    case 'next_action.status_changed': {
+      const nextAction = requireEntity(state, 'nextActions', 'nextActionId', event.subject.id, 'next_action');
+      enumOf(payload.execution, EXECUTION_SET, 'nextAction.execution');
+      nextAction.execution = payload.execution;
+      nextAction.derivedFromEventIds = [...(nextAction.derivedFromEventIds ?? []), event.eventId].slice(-MAX_ITEMS);
+      break;
+    }
     case 'feedback.recorded': {
       const feedback = { ...clone(payload.feedback), derivedFromEventIds: [event.eventId] };
       state.feedback.push(feedback);
@@ -976,6 +983,12 @@ export function validateDraftV3(draft, state = emptyProjectStateV3(), context = 
         + (draft.payload.nextAction.sourceLessonIds?.length ?? 0) < 1) {
         fail('nextAction requires a source failure, feedback, or lesson');
       }
+      break;
+    case 'next_action.status_changed':
+      exact(draft.payload, ['execution', 'reason'], ['execution'], 'payload');
+      requireEntity(state, 'nextActions', 'nextActionId', draft.subject.id, 'next_action');
+      enumOf(draft.payload.execution, EXECUTION_SET, 'execution');
+      if (draft.payload.reason !== undefined) text(draft.payload.reason, 'reason');
       break;
     case 'feedback.recorded':
       exact(draft.payload, ['feedback'], ['feedback'], 'payload');

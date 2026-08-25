@@ -260,7 +260,9 @@ function persistEvents(root, events, { existing } = {}) {
 }
 
 function nextActionText(state) {
-  const pending = (state?.nextActions ?? []).find((item) => item.status !== 'done' && item.status !== 'cancelled');
+  const pending = (state?.nextActions ?? []).find((item) => (
+    item.execution === 'planned' || item.execution === 'in_progress'
+  ));
   return pending?.action || pending?.next || 'Resume from the sealed epoch anchor; do not guess';
 }
 

@@ -27,6 +27,7 @@ All writes go through `record <recipe>` or `record --file`. All reads are `inspe
 | Start work | `record start` | `attempt.started` |
 | Executor report | `record report` | `attempt.reported` (not evidence) |
 | Partial/fail/block | `record fail` / `record result --execution partial` | existing v3 events |
+| Close a planned next action | `record next --subject <id> --execution succeeded` | `next_action.status_changed` |
 | Context rollover | `record context` | `context_handoff.recorded` |
 | Release assignment | `record release --assignment <id>` | `assignment.released` |
 | Independent verification | `record verify --as <verifier-kind>` | `verification.recorded` |

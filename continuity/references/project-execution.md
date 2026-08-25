@@ -67,7 +67,7 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" record packet --task 
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record assign --task <task-id> --assignee <executor-id> --as coordinator --actor-id <writer-id> --run-id <run>
 ```
 
-There is no `record register`. Persist actors with `record --file` as `agent.registered`, then `record packet`, `record assign`, and `record verify` with a different actor and run. v3 recipes: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `backlog`. `migrate` remains in usage and fails closed for this v3-only build.
+There is no `record register`. Persist actors with `record --file` as `agent.registered`, then `record packet`, `record assign`, and `record verify` with a different actor and run. v3 recipes: `task`, `start`, `evidence`, `result`, `fail`, `accept`, `reject`, `assign`, `packet`, `release`, `report`, `verify`, `context`, `next`, `backlog`. `migrate` remains in usage and fails closed for this v3-only build.
 
 A core task without `--class function` or `--class connector` remains unclassified and is not ready before the Build-First gate. The ready set also enforces dependencies, blockers, cycles, size, priority, capability, and path ownership. See [scheduling.md](scheduling.md).
 
@@ -95,10 +95,13 @@ The verifier actor and run must differ from the executor. Explicit counts preven
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record fail --why "what broke" --impact "what is stuck" --next "different next step"
+node "/absolute/path/to/continuity/scripts/continuity.mjs" record next --subject <next-action-id> --execution succeeded --why "why the planned next is done"
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record context --next "Exact next step"
 node "/absolute/path/to/continuity/scripts/continuity.mjs" handoff --task <id>
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record release --assignment <assignment-id>
 ```
+
+`record next` folds `next_action.status_changed`. Inspect NEXT and sealed-epoch `nextStep` keep only `planned` or `in_progress` next actions. Closing a next action does not delete the historical failure.
 
 A retry is a new Attempt with a changed approach or hypothesis. `handoff --task <id>` is read-only and fails closed without a task. A successor uses a new actor id, run id, and Attempt; it does not inherit or close the previous Attempt. Release only a still-held assignment. See [context-rollover.md](context-rollover.md).
 

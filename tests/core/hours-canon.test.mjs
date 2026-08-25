@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { startControlSurface } from '../../continuity/scripts/control-surface.mjs';
 import { MAX_JOURNAL_BYTES, MAX_PROJECTION_BYTES } from '../../continuity/scripts/lib/core/domain-v3.mjs';
+import { sealHotJournal } from '../../continuity/scripts/lib/core/journal-v3.mjs';
 import { createEngine } from '../../continuity/scripts/lib/swarm/engine.mjs';
 import { acquireEngineLock } from '../../continuity/scripts/lib/swarm/lock.mjs';
 import { buildRoster, pathsOverlap } from '../../continuity/scripts/lib/swarm/contract.mjs';
@@ -26,6 +27,7 @@ const archSrc = readFileSync(path.join(repoRoot, 'ARCHITECTURE.md'), 'utf8');
 
 export async function run() {
   assertC1Canon();
+  assertCloseableNext();
   assertC2EmptyDispatch();
   assertC3NoPulse();
   assertC4Lock();
@@ -72,6 +74,52 @@ function assertC1Canon() {
     } finally {
       restored.stop();
     }
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
+
+function assertCloseableNext() {
+  const repo = makeRepository('hours-next');
+  try {
+    assert.equal(runCli(continuityCli, repo, ['init', '--schema', '3', '--file', initTemplate]).status, 0);
+    const task = runCli(continuityCli, repo, [
+      'record', 'task', '--title', 'Closeable next action', '--priority', 'core',
+      '--class', 'function', '--as', 'coordinator', '--actor-id', 'actor-coord', '--run-id', 'run-coord-next',
+    ]);
+    assert.equal(task.status, 0, task.stderr);
+    assert.equal(runCli(continuityCli, repo, [
+      'record', 'start', '--approach', 'Record a failure that later needs a close',
+      '--as', 'subagent', '--actor-id', 'actor-exec-next', '--run-id', 'run-exec-next',
+    ]).status, 0);
+    const fail = runCli(continuityCli, repo, [
+      'record', 'fail', '--why', 'Second process deleted live leases',
+      '--impact', 'Hours-long swarm cannot resume',
+      '--next', 'Change recoverOrphans so a second process does not delete live leases',
+      '--as', 'subagent', '--actor-id', 'actor-exec-next', '--run-id', 'run-exec-next',
+    ]);
+    assert.equal(fail.status, 0, fail.stderr);
+    const inspectAfterFail = runCli(continuityCli, repo, ['inspect']);
+    assert.equal(inspectAfterFail.status, 0, inspectAfterFail.stderr);
+    const nextMatch = inspectAfterFail.stdout.match(/NEXT (next-[a-z0-9-]+):Change recoverOrphans/);
+    assert.ok(nextMatch, inspectAfterFail.stdout);
+    const unknown = runCli(continuityCli, repo, [
+      'record', 'next', '--subject', 'next-does-not-exist-xx', '--execution', 'succeeded',
+      '--as', 'coordinator', '--actor-id', 'actor-coord', '--run-id', 'run-coord-next',
+    ]);
+    assert.notEqual(unknown.status, 0, 'unknown next subject must fail closed');
+    const closed = runCli(continuityCli, repo, [
+      'record', 'next', '--subject', nextMatch[1], '--execution', 'succeeded',
+      '--why', 'Live lock pid keeps recoverOrphans from deleting leases',
+      '--as', 'coordinator', '--actor-id', 'actor-coord', '--run-id', 'run-coord-next',
+    ]);
+    assert.equal(closed.status, 0, closed.stderr);
+    const inspectAfterClose = runCli(continuityCli, repo, ['inspect']);
+    assert.equal(inspectAfterClose.status, 0, inspectAfterClose.stderr);
+    assert.match(inspectAfterClose.stdout, /NEXT none/);
+    assert.match(inspectAfterClose.stdout, /FAILURES failure-/);
+    const anchor = sealHotJournal(repo);
+    assert.equal(/recoverOrphans/.test(anchor.nextStep), false, 'sealed epoch must not resume a closed next action');
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }

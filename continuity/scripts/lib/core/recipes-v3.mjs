@@ -633,6 +633,31 @@ export function recipeContextHandoff(store, options, { clock } = {}) {
   });
 }
 
+export function recipeNextStatus(store, options, { clock } = {}) {
+  const nextAction = options.subject
+    ? store.state.nextActions.find((item) => item.nextActionId === options.subject)
+    : [...store.state.nextActions].reverse().find((item) => (
+      item.execution === 'planned' || item.execution === 'in_progress'
+    ));
+  if (options.subject && !nextAction) throw new MemoryError('next action is unknown', 2);
+  if (!nextAction) throw new MemoryError('record next requires a planned next action', 2);
+  const execution = options.execution || 'succeeded';
+  return draftJson({
+    eventType: 'next_action.status_changed',
+    occurredAt: iso(clock),
+    actor: options.actor,
+    subject: { type: 'next_action', id: nextAction.nextActionId },
+    supersedes: [],
+    contradicts: [],
+    evidenceRefs: listedEvidenceIds(options.evidence),
+    sensitivity: 'internal',
+    payload: {
+      execution,
+      ...(options.why ? { reason: options.why } : {}),
+    },
+  });
+}
+
 export function recipeBacklog(store, options, { clock } = {}) {
   const task = options.task
     ? store.state.tasks.find((item) => item.taskId === options.task)
