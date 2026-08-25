@@ -1,5 +1,5 @@
 /** Test fixture only. Do not call from live engine seed. */
-export function planPulse() {
+export function planPulse () {
   return [
     {
       id: 'task-scaffold',
