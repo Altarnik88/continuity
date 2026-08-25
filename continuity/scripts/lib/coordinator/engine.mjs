@@ -5,6 +5,7 @@ import {
   CONTEXT_ASSIGN_THRESHOLD,
   ProtocolError,
   ownershipOverlap,
+  parseRecordedEvent,
   validateWorkPacket,
 } from '../protocol/index.mjs';
 import { createAdapter } from './adapters/index.mjs';
@@ -20,6 +21,86 @@ const ROLLOVER_CONTRACT = 'continuity/references/context-rollover.md';
 
 function fail(message, exitCode = 2) {
   throw new ProtocolError(message, exitCode);
+}
+
+function firstFiniteNumber(values) {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function hostContextRatio(runtimeContext = {}, callContext = {}) {
+  return firstFiniteNumber([
+    callContext.contextUsedRatio,
+    callContext.contextUsed,
+    runtimeContext.contextUsedRatio,
+    runtimeContext.contextUsed,
+  ]);
+}
+
+function formatObservedRun(command) {
+  if (!Array.isArray(command) || command.length < 1) return null;
+  if (!command.every((part) => typeof part === 'string' && part.length > 0)) return null;
+  if (command.some((part) => SHELL_META.test(part))) return null;
+  const head = command[0];
+  const base = path.basename(head).toLowerCase();
+  const argv = (head === process.execPath || NODE_NAMES.has(base))
+    ? command.slice(1)
+    : command;
+  if (!argv.length) return null;
+  return argv.join(' ');
+}
+
+function recordAuthorizingEvidence(client, {
+  root, actorId, runId, taskId, expected, actual, kind, command, exitCode,
+}) {
+  const run = formatObservedRun(command);
+  if (run) {
+    const recorded = typeof client.record === 'function'
+      ? client.record('evidence', {
+        task: taskId,
+        expected: expected || 'focused check exits 0',
+        kind: kind || 'command',
+        run,
+      }, {
+        root,
+        as: 'subagent',
+        actorId,
+        runId,
+      })
+      : client.recordEvidence({
+        root,
+        actorId,
+        runId,
+        taskId,
+        expected: expected || 'focused check exits 0',
+        kind: kind || 'command',
+        run,
+      });
+    if (recorded?.evidenceId) return recorded;
+    const parsed = parseRecordedEvent(recorded?.stdout);
+    const evidenceId = parsed?.evidenceId || parsed?.subjectId || null;
+    if (!evidenceId) fail('record evidence did not echo evidenceId', 3);
+    return { ...recorded, evidenceId, document: parsed };
+  }
+  return client.recordEvidence({
+    root,
+    actorId,
+    runId,
+    taskId,
+    expected: expected || 'focused check exits 0',
+    actual: actual || 'exit 0',
+    kind: kind || 'command',
+    exitCode,
+  });
+}
+
+function explicitRollover(options = {}) {
+  if (!options.rollover) return null;
+  return typeof options.rollover === 'object' && !Array.isArray(options.rollover)
+    ? options.rollover
+    : {};
 }
 
 function adapterClassOf(adapter, config) {
@@ -276,7 +357,7 @@ function executePacket({
       });
       return { report, resultId: null, verified: false, assignmentId };
     }
-    const recordedEvidence = client.recordEvidence({
+    const recordedEvidence = recordAuthorizingEvidence(client, {
       root,
       actorId,
       runId,
@@ -284,6 +365,7 @@ function executePacket({
       expected: authorizing.expected || 'focused check exits 0',
       actual: authorizing.actual || 'exit 0',
       kind: authorizing.kind || 'command',
+      command: assignment.command || built.command,
       exitCode: authorizing.exitCode,
     });
     const evidenceId = recordedEvidence.evidenceId;
@@ -326,9 +408,15 @@ export function createCoordinatorRuntime({
   client,
   adapter,
   clock,
+  contextUsed: runtimeContextUsed,
+  contextUsedRatio: runtimeContextUsedRatio,
 } = {}) {
   if (!root) fail('coordinator requires --root');
   const config = configInput || loadCoordinatorConfig(configFile);
+  const hostContext = {
+    contextUsed: runtimeContextUsed,
+    contextUsedRatio: runtimeContextUsedRatio,
+  };
   const memoryClient = client || createCliClient({
     continuityCli: config.memoryCli || undefined,
     timeoutMs: config.timeoutMs,
@@ -385,12 +473,26 @@ export function createCoordinatorRuntime({
     return { state, ready, wave, execution: 'sequential' };
   }
 
-  function run({ runId } = {}) {
+  function requireExistingRun(runId) {
+    let existing;
+    try {
+      existing = loadRunState(root, runId);
+    } catch (error) {
+      if (error instanceof ProtocolError) throw error;
+      fail('coordinator run is missing or invalid', 2);
+    }
+    return existing;
+  }
+
+  function executePreparedRun(state, {
+    contextUsed,
+    contextUsedRatio,
+    executorActorId = config.executorActorId,
+    executorRunId = config.executorRunId,
+  } = {}) {
     assertLiveProof(config, runtimeAdapter);
-    const planned = plan({ runId });
-    let state = planned.state;
-    if (state.status === 'blocked') return { state, doctor: doctor(), execution: 'sequential' };
-    if (typeof config.contextUsedRatio === 'number' && config.contextUsedRatio >= CONTEXT_ASSIGN_THRESHOLD) {
+    const ratio = hostContextRatio(hostContext, { contextUsed, contextUsedRatio });
+    if (ratio != null && ratio >= CONTEXT_ASSIGN_THRESHOLD) {
       state = persist({
         ...state,
         status: 'paused',
@@ -398,8 +500,13 @@ export function createCoordinatorRuntime({
       });
       return { state, doctor: doctor(), execution: 'sequential' };
     }
+    const execConfig = {
+      ...config,
+      executorActorId,
+      executorRunId,
+    };
     const ready = asDocument(memoryClient.inspectReady({ root }));
-    ensureAgents(memoryClient, root, config, ready);
+    ensureAgents(memoryClient, root, execConfig, ready);
     state = persist({ ...state, status: 'running' });
     const waveId = state.waveId || newId('wave');
     const wave = asDocument(memoryClient.inspectWave({ root, slots: config.slots }));
@@ -411,10 +518,10 @@ export function createCoordinatorRuntime({
       if (state.completedPacketIds.includes(item.packetId)) continue;
       if (overlapsSibling(items, item)) continue;
       if (ownershipOverlap(claimed, item.allowedPaths || [])) continue;
-      const packet = packetFromWave(item, waveId, config.executorActorId, config.executorRunId);
+      const packet = packetFromWave(item, waveId, execConfig.executorActorId, execConfig.executorRunId);
       launched += 1;
       const executed = executePacket({
-        root, client: memoryClient, adapter: runtimeAdapter, config, packet, role: 'executor',
+        root, client: memoryClient, adapter: runtimeAdapter, config: execConfig, packet, role: 'executor',
       });
       claimed.push(...(packet.allowedPaths || []));
       state = persist({
@@ -423,30 +530,30 @@ export function createCoordinatorRuntime({
         assignments: [...state.assignments, {
           assignmentId: executed.assignmentId || newId('assignment'),
           packetId: packet.packetId,
-          actorId: config.executorActorId,
-          runId: config.executorRunId,
+          actorId: execConfig.executorActorId,
+          runId: execConfig.executorRunId,
           role: 'executor',
           state: 'held',
         }],
         openAttempts: [...state.openAttempts, {
           taskId: packet.taskIds[0],
-          actorId: config.executorActorId,
-          runId: config.executorRunId,
+          actorId: execConfig.executorActorId,
+          runId: execConfig.executorRunId,
         }],
       });
       if (executed.resultId) {
-        const verifyPacket = packetFromWave(item, waveId, config.verifierActorId, config.verifierRunId);
+        const verifyPacket = packetFromWave(item, waveId, execConfig.verifierActorId, execConfig.verifierRunId);
         const verified = executePacket({
-          root, client: memoryClient, adapter: runtimeAdapter, config, packet: verifyPacket, role: 'verifier',
+          root, client: memoryClient, adapter: runtimeAdapter, config: execConfig, packet: verifyPacket, role: 'verifier',
         });
         if (verified.report.status === 'done' && executed.resultId) {
           const observedExit = (verified.report.evidence || [])
-            .find((item) => Number.isInteger(item.exitCode))?.exitCode;
+            .find((row) => Number.isInteger(row.exitCode))?.exitCode;
           memoryClient.recordVerify({
             root,
             resultId: executed.resultId,
-            actorId: config.verifierActorId,
-            runId: config.verifierRunId,
+            actorId: execConfig.verifierActorId,
+            runId: execConfig.verifierRunId,
             found: verified.report.testCounts.found,
             executed: verified.report.testCounts.executed,
             passed: verified.report.testCounts.passed,
@@ -462,7 +569,7 @@ export function createCoordinatorRuntime({
         if (!assignmentId) fail('assignment release requires the assignmentId from the write', 3);
         memoryClient.recordRelease({ root, assignmentId, why: 'packet complete or failed' });
       } catch (error) {
-        persistReleaseFailure(memoryClient, { root, config, error });
+        persistReleaseFailure(memoryClient, { root, config: execConfig, error });
         packetReleaseFailed = true;
         releaseFailed = true;
       }
@@ -476,7 +583,7 @@ export function createCoordinatorRuntime({
         )),
         openAttempts: closeOpenAttempt(state.openAttempts, {
           taskId: packet.taskIds[0],
-          runId: config.executorRunId,
+          runId: execConfig.executorRunId,
         }),
       });
     }
@@ -507,35 +614,89 @@ export function createCoordinatorRuntime({
     return { state, ready: after, doctor: doctor(), execution: 'sequential' };
   }
 
-  function resume({ runId } = {}) {
+  function applyExplicitRollover(state, rollover) {
+    const nextActorId = rollover.actorId || newId('actor');
+    const nextRunId = rollover.runId || newId('run');
+    if (state.openAttempts.some((row) => row.actorId === nextActorId || row.runId === nextRunId)) {
+      fail('rollover must not inherit the previous attempt', 2);
+    }
+    const next = typeof rollover.next === 'string' && rollover.next
+      ? rollover.next
+      : 'Continue with a new actor, run, and Attempt';
+    for (const attempt of state.openAttempts) {
+      memoryClient.recordContext({
+        root,
+        taskId: attempt.taskId,
+        next,
+        actorId: attempt.actorId,
+        runId: attempt.runId,
+      });
+    }
+    return {
+      state: persist({
+        ...state,
+        openAttempts: [],
+        stopReason: null,
+      }),
+      executorActorId: nextActorId,
+      executorRunId: nextRunId,
+    };
+  }
+
+  function run({ runId, contextUsed, contextUsedRatio } = {}) {
+    assertLiveProof(config, runtimeAdapter);
+    const planned = plan({ runId });
+    const state = planned.state;
+    if (state.status === 'blocked') return { state, doctor: doctor(), execution: 'sequential' };
+    return executePreparedRun(state, { contextUsed, contextUsedRatio });
+  }
+
+  function resume({ runId, contextUsed, contextUsedRatio, rollover } = {}) {
     const id = runId || latestRunId(root);
     if (!id) fail('no coordinator run to resume', 2);
-    const existing = loadRunState(root, id);
+    const existing = requireExistingRun(id);
     if (existing.status === 'cancelled') return { state: existing };
     if (existing.openAttempts.length) {
+      const requested = explicitRollover({ rollover });
+      if (!requested) {
+        return {
+          state: persist({
+            ...existing,
+            status: 'blocked',
+            stopReason: 'open-attempts-require-rollover',
+          }),
+          resumed: true,
+          rollover: ROLLOVER_CONTRACT,
+        };
+      }
+      const rolled = applyExplicitRollover(existing, requested);
       return {
-        state: persist({
-          ...existing,
-          status: 'blocked',
-          stopReason: 'open-attempts-require-rollover',
+        ...executePreparedRun(rolled.state, {
+          contextUsed,
+          contextUsedRatio,
+          executorActorId: rolled.executorActorId,
+          executorRunId: rolled.executorRunId,
         }),
         resumed: true,
         rollover: ROLLOVER_CONTRACT,
       };
     }
-    return run({ runId: id });
+    return {
+      ...executePreparedRun(existing, { contextUsed, contextUsedRatio }),
+      resumed: true,
+    };
   }
 
   function status({ runId } = {}) {
     const id = runId || latestRunId(root);
     if (!id) fail('no coordinator run', 2);
-    return { state: loadRunState(root, id) };
+    return { state: requireExistingRun(id) };
   }
 
   function cancel({ runId } = {}) {
     const id = runId || latestRunId(root);
     if (!id) fail('no coordinator run to cancel', 2);
-    const existing = loadRunState(root, id);
+    const existing = requireExistingRun(id);
     return { state: persist({ ...existing, status: 'cancelled', stopReason: 'operator-cancel' }) };
   }
 
