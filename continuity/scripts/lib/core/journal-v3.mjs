@@ -7,16 +7,14 @@ import path from 'node:path';
 
 import { captureAuthoritativeInput, canonicalV3, isBrandedV3 } from './input-v3.mjs';
 import {
-  MAX_EVENT_BYTES, MAX_JOURNAL_BYTES, MemoryError, SCHEMA_VERSION, ZERO_HASH,
-  buildEnvelopeV3, foldV3,
+  MAX_EVENT_BYTES, MAX_JOURNAL_BYTES, MAX_PROJECTION_BYTES, MemoryError, SCHEMA_VERSION, ZERO_HASH,
+  buildEnvelopeV3, encodeProjection, foldV3, projectionFingerprint,
 } from './domain-v3.mjs';
 import {
   assertMutationAllowed, assertOwnedFile, assertPathSafe, assertStoreSafe, detectStoreVersion,
   gitAdminTopology, openStore, readOwnedFileBounded, storePaths,
 } from './store.mjs';
 import { observeWorkspace } from './workspace-v3.mjs';
-
-const MAX_PROJECTION_BYTES = 64 * 1024;
 
 function fail(message, exitCode = 3) {
   throw new MemoryError(message, exitCode);
@@ -60,9 +58,7 @@ function eventLine(event) {
 }
 
 function projectionBytes(state) {
-  const bytes = Buffer.from(`${canonicalV3(state)}\n`, 'utf8');
-  if (bytes.length > MAX_PROJECTION_BYTES) fail('CURRENT projection exceeds the size limit');
-  return bytes;
+  return encodeProjection(state);
 }
 
 function lockFile(root) {
@@ -152,7 +148,7 @@ export function readV3Journal(root, { allowEmpty = false } = {}) {
   if (existsSync(files.current)) {
     try {
       const parsed = JSON.parse(readOwnedFileBounded(files.current, MAX_PROJECTION_BYTES, 'CURRENT.json').toString('utf8'));
-      projection = canonicalV3(parsed) === canonicalV3(state) ? 'current' : 'stale';
+      projection = projectionFingerprint(parsed) === projectionFingerprint(state) ? 'current' : 'stale';
     } catch {
       projection = 'invalid';
     }
