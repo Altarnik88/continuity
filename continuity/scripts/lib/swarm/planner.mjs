@@ -345,27 +345,6 @@ export function planContinuations(state) {
       deps: ['task-handoff'],
       spec: { files: { 'forge/CHANGELOG.md': 'CHANGELOG.md' } },
     },
-    {
-      id: 'task-metrics',
-      title: 'Add Pulse risk metrics',
-      kind: 'write',
-      priority: 120,
-      paths: ['forge/src/metrics.mjs'],
-      deps: ['task-handoff'],
-      spec: { files: { 'forge/src/metrics.mjs': 'src/metrics.mjs' } },
-    },
-    {
-      id: 'task-metrics-test',
-      title: 'Verify Pulse risk metrics',
-      kind: 'test',
-      priority: 130,
-      paths: ['forge/test/metrics.test.mjs'],
-      deps: ['task-metrics'],
-      spec: {
-        files: { 'forge/test/metrics.test.mjs': 'test/metrics.test.mjs' },
-        run: ['--test', 'forge/test/metrics.test.mjs'],
-      },
-    },
   ];
   return next.filter((task) => !existing.has(task.id) && !isPulseFollowOn(task));
 }
