@@ -82,6 +82,7 @@ export function observeWorkspace(root, recordedAt) {
   let partial = Boolean(result.error) || result.status !== 0;
   const fields = partial ? [] : (result.stdout ?? '').split('\0').filter(Boolean);
   const entries = [];
+  let storeDirty = false;
   for (let index = 0; index < fields.length; index += 1) {
     const field = fields[index];
     if (field.length < 4) { entries.push({ status: 'rename-source', repoPath: field.replaceAll('\\', '/') }); continue; }
@@ -89,12 +90,16 @@ export function observeWorkspace(root, recordedAt) {
     const repoPath = field.slice(3).replaceAll('\\', '/');
     if (!isStoreRepoPath(root, repoPath)) {
       entries.push({ status, repoPath });
+    } else {
+      storeDirty = true;
     }
     if (/[RC]/.test(status) && index + 1 < fields.length) {
       index += 1;
       const source = fields[index].replaceAll('\\', '/');
       if (!isStoreRepoPath(root, source)) {
         entries.push({ status: 'rename-source', repoPath: source });
+      } else {
+        storeDirty = true;
       }
     }
   }
@@ -110,7 +115,7 @@ export function observeWorkspace(root, recordedAt) {
   return {
     head,
     branch,
-    dirty: entries.length > 0 || partial,
+    dirty: entries.length > 0 || partial || storeDirty,
     statusFingerprint: sha256(material.join('\0')),
     fingerprintPartial: partial,
     capturedAt: recordedAt,
@@ -119,7 +124,6 @@ export function observeWorkspace(root, recordedAt) {
 
 export function compareWorkspace(recorded, live) {
   if (!live || live.head === 'unavailable' || live.fingerprintPartial === true) return 'unknown';
-  if (live.dirty === true) return 'stale';
   if (!recorded || recorded.head === 'unavailable' || recorded.fingerprintPartial === true
     || typeof recorded.statusFingerprint !== 'string' || typeof live.statusFingerprint !== 'string') {
     return 'unknown';
