@@ -4,10 +4,15 @@ import path from 'node:path';
 import {
   COORDINATION_CONTRACT_ID,
   COORDINATION_CONTRACT_VERSION,
+  ProtocolError,
   validateCoordinatorRunState,
 } from '../protocol/index.mjs';
 
 export const RUN_STORE_DIR = ['.continuity', 'coordinator', 'runs'];
+
+function failClosed(message = 'coordinator run is missing or invalid', exitCode = 2) {
+  throw new ProtocolError(message, exitCode);
+}
 
 function runsDir(root) {
   return path.join(root, ...RUN_STORE_DIR);
@@ -15,6 +20,25 @@ function runsDir(root) {
 
 function runPath(root, runId) {
   return path.join(runsDir(root), `${runId}.json`);
+}
+
+function parseRunDocument(text) {
+  if (typeof text !== 'string' || !text.trim()) failClosed();
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    failClosed();
+  }
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).length === 0) {
+    failClosed();
+  }
+  try {
+    return validateCoordinatorRunState(raw);
+  } catch (error) {
+    if (error instanceof ProtocolError) failClosed();
+    throw error;
+  }
 }
 
 export function createRunState({
@@ -56,8 +80,14 @@ export function saveRunState(root, state, { clock = () => new Date() } = {}) {
 }
 
 export function loadRunState(root, runId) {
-  const raw = JSON.parse(readFileSync(runPath(root, runId), 'utf8'));
-  return validateCoordinatorRunState(raw);
+  if (typeof runId !== 'string' || !runId) failClosed();
+  let text;
+  try {
+    text = readFileSync(runPath(root, runId), 'utf8');
+  } catch {
+    failClosed();
+  }
+  return parseRunDocument(text);
 }
 
 export function listRunIds(root) {
