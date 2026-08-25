@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import { LEGACY_SCHEMA_UNSUPPORTED, MemoryError } from './errors.mjs';
@@ -86,6 +86,7 @@ function pathsAt(store) {
     store,
     history: path.join(store, 'HISTORY.ndjson'),
     current: path.join(store, 'CURRENT.json'),
+    epochs: path.join(store, 'epochs'),
     migrationMarker: path.join(store, 'MIGRATION.v1-to-v2.json'),
     historyV1: path.join(store, 'HISTORY.v1.ndjson'),
     currentV1: path.join(store, 'CURRENT.v1.json'),
@@ -178,7 +179,7 @@ export function assertStoreSafe(root) {
     if (details && !details.isDirectory()) throw new MemoryError('continuity directory component is invalid', 3);
   }
   for (const target of [
-    files.history, files.current,
+    files.history, files.current, files.epochs,
     files.migrationMarker, files.historyV1, files.currentV1,
   ]) assertPathSafe(root, target);
   assertOwnedFile(files.history, 'HISTORY.ndjson');
@@ -285,13 +286,24 @@ export function readOwnedFileBounded(file, max, label) {
   return value;
 }
 
+function firstJournalFile(files) {
+  if (lstatIfPresent(files.history, 'HISTORY.ndjson')) return files.history;
+  if (!existsSync(files.epochs)) return null;
+  const sealed = readdirSync(files.epochs)
+    .filter((name) => name.endsWith('.ndjson'))
+    .sort()
+    .map((name) => path.join(files.epochs, name));
+  return sealed[0] ?? null;
+}
+
 export function detectStoreVersion(root) {
   const files = assertStoreSafe(root);
   if (lstatIfPresent(files.migrationMarker, 'MIGRATION.v1-to-v2.json')) {
     throw new MemoryError(LEGACY_SCHEMA_UNSUPPORTED, 3);
   }
-  if (!lstatIfPresent(files.history, 'HISTORY.ndjson')) return 'uninitialized';
-  const raw = readOwnedFileBounded(files.history, MAX_JOURNAL_BYTES, 'HISTORY.ndjson total');
+  const firstFile = firstJournalFile(files);
+  if (!firstFile) return 'uninitialized';
+  const raw = readOwnedFileBounded(firstFile, MAX_JOURNAL_BYTES, 'HISTORY.ndjson total');
   const lf = raw.indexOf(0x0a);
   if (lf < 0) throw new MemoryError('journal has no committed event', 3);
   let first;

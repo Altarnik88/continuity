@@ -37,6 +37,7 @@ import {
   inventoryFromGit,
   inventoryFromWorktree,
   isAllowedVendorSkillManifest,
+  LOCALIZED_PUBLIC_FILES,
   listGitIndex,
   listRepositoryFiles,
   matchesDistributableAllowlist,
@@ -190,6 +191,13 @@ export const CASES = [
         '.cursor/rules/continuity.mdc',
         '.cursor/skills/continuity/SKILL.md',
         '.gitattributes',
+        '.github/CODE_OF_CONDUCT.md',
+        '.github/CONTRIBUTING.md',
+        '.github/ISSUE_TEMPLATE/bug_report.yml',
+        '.github/ISSUE_TEMPLATE/config.yml',
+        '.github/ISSUE_TEMPLATE/feature_request.yml',
+        '.github/PULL_REQUEST_TEMPLATE.md',
+        '.github/dependabot.yml',
         '.github/workflows/ci.yml',
         '.gitignore',
         '.grok/rules/continuity.md',
@@ -508,11 +516,18 @@ export const CASES = [
   {
     id: 'PKG-026-reject-cyrillic-public-text',
     run() {
+      const cyrillic = String.fromCodePoint(0x41f, 0x430, 0x43c, 0x44f, 0x442, 0x44c);
+      assert.deepEqual([...LOCALIZED_PUBLIC_FILES], [
+        'README.md',
+        'README.ru.md',
+      ]);
       const root = makeBoundaryRoot('cyrillic');
       try {
-        const cyrillic = String.fromCodePoint(0x41f, 0x430, 0x43c, 0x44f, 0x442, 0x44c);
         writeFileSync(path.join(root, 'SECURITY.md'), `# ${cyrillic}\n`);
         assert.throws(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)), /contains Cyrillic/);
+        writeFileSync(path.join(root, 'SECURITY.md'), '# Security\n');
+        writeFileSync(path.join(root, 'README.ru.md'), `# ${cyrillic}\n`);
+        assert.doesNotThrow(() => assertRepositoryBoundaries(root, listRepositoryFiles(root)));
       } finally {
         rmSync(root, { recursive: true, force: true });
       }

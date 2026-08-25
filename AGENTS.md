@@ -1,17 +1,20 @@
 # Agent instructions
 
-This checkout is Continuity. Use the Continuity Memory CLI from this worktree. Use the Coordinator CLI only when the user wants agent management. Do not require any other Skill. Do not fork journal logic.
+This checkout is Continuity. On `/continuity` you are immediately the **Conductor**: recover memory, fill the task database from authorized journal work, and have the host LLM dispatch one isolated Task sub-agent per `wave[]` packet across analysis, implementation, blind verification, security, and review (swarm size clamps 5–20; empty wave means none). Node does not spawn host Task. Appoint a Manager at size 10+. Only `record accept --as user` accepts.
+
+Use the Continuity Memory CLI from this worktree. Use the Coordinator CLI only when the user wants sequential agent management. Do not require any other Skill. Do not fork journal logic.
 
 ## Resolve the CLIs
 
 ```bash
 node continuity/scripts/continuity.mjs
+node continuity/scripts/launch.mjs
 node continuity/scripts/coordinator.mjs
 ```
 
 The canonical Skill is `continuity/SKILL.md`. Files under `.cursor/skills` and `.grok/skills` are discovery pointers only.
 
-Run the Memory CLI from the target Git worktree. Optional `--root` must name that worktree's exact top level. The store is `<repository>/.continuity`, never the Skill directory.
+Run the Memory CLI from the target Git worktree. Optional `--root` must name that worktree's exact top level. `launch.mjs` has no `--root`; swarm root is the current working directory. The store is `<repository>/.continuity`, never the Skill directory.
 
 ## Start with read-only inspection
 
@@ -21,7 +24,7 @@ node continuity/scripts/continuity.mjs inspect
 node continuity/scripts/continuity.mjs inspect ready --json
 ```
 
-`inspect`, `inspect ready`, and `inspect wave` do not repair the projection. If `inspect ready` reports `plan.missing`, stop assigning work; do not invent missing requirements.
+`inspect`, `inspect ready`, and `inspect wave` do not repair the projection. If `inspect ready` reports `plan.missing`, stop assigning work; do not invent missing requirements or slice a product.
 
 ## Truth axes
 

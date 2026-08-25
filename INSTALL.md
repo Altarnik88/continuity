@@ -1,12 +1,16 @@
 # Install
 
-Continuity is distributed from this repository. It is not published to a package registry. There is no runtime `npm install` step.
+Continuity is distributed from this repository. It is not published to a package registry.
+
+Requires Node.js 22 or 24 (`package.json` engines: `>=22 <25`) and Git.
+
+`--version` and the Memory CLI need no `npm install`. `devDependencies` (and `npm ci`) exist only for the test and validate gate. Do not run `npm install` for ordinary CLI or `npm start` use.
 
 Product version is `package.json`, currently `3.0.0`. `--version` prints that value (`continuity 3.0.0` / `continuity-coordinator 3.0.0`) without installing dependencies. Store schema is **v3** and is not that string.
 
 ## Choose a profile
 
-- **full** — Memory + Continuity + Coordinator
+- **full** — Memory + Coordinator + Swarm (`launch.mjs`, sqlite projection, local control surface)
 - **memory** — journal, inspect, handoff, and the Continuity CLI only
 - **coordinator** — execution runtime plus a protocol client; point it at a Memory CLI
 
@@ -18,6 +22,10 @@ cd continuity
 node continuity/scripts/continuity.mjs --version
 node continuity/scripts/coordinator.mjs --version
 ```
+
+`npm start` starts `launch.mjs`: deterministic Node role-workers, the sqlite execution projection, and the HTTP control surface on `127.0.0.1:43147`. It does not start the Memory CLI, spawn host Task, or accept for the user. `launch.mjs` uses the **current working directory** as the swarm root. `cd` to the target Git repository first. `launch.mjs` has no `--root` flag; Memory CLI `--root` does not apply to it.
+
+In Cursor or Grok, `/continuity` makes the host agent the Conductor: it recovers memory and fills the task database from authorized journal work; the host LLM then dispatches isolated Task sub-agents. If `inspect ready` reports `plan.missing`, stop assigning. Node does not spawn host Task.
 
 From another Git repository:
 
@@ -72,10 +80,10 @@ node "/absolute/path/to/continuity/scripts/continuity.mjs" --version
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 ```
 
-If `doctor` reports `journal=uninitialized`, edit `continuity/assets/init-v3.template.json` so the goal and criterion are the user's, then:
+If `doctor` reports `journal=uninitialized`, copy `continuity/assets/init-v3.template.json` so the goal and criterion are the user's, then:
 
 ```bash
-node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/continuity/assets/init-v3.template.json"
+node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/your-copy-of-init-v3.template.json"
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 node "/absolute/path/to/continuity/scripts/continuity.mjs" inspect
 node "/absolute/path/to/continuity/scripts/continuity.mjs" record task --title "Name the work" --priority core --size S --class function --as coordinator --actor-id actor-writer --run-id run-plan-01
@@ -107,4 +115,4 @@ node /absolute/path/to/continuity/scripts/continuity.mjs doctor
 node /absolute/path/to/continuity/scripts/coordinator.mjs doctor --root .
 ```
 
-Uninitialized stores report `journal=uninitialized` and are not created by `doctor`. Coordinator `doctor` is read-only. It never starts a daemon.
+Uninitialized stores report `journal=uninitialized` and are not created by `doctor`. Coordinator `doctor` is read-only. It never starts a daemon. Optional `launch.mjs` may listen on `127.0.0.1:43147` until that process exits.

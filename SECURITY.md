@@ -16,7 +16,7 @@ Continuity stores concise, sanitized project facts. Do not record credentials, p
 
 Structural validation and pattern guards are defense in depth. They are not a secret scanner, privacy classifier, data-loss-prevention system, access-control boundary, sanitizer, or proof that content is safe. A successful lint, dry run, checkpoint, or validation never replaces manual review. Repository access and filesystem permissions remain the operator's responsibility.
 
-Continuity is local and fail-closed. It is not a secret scanner, DLP, or tamper-proof audit database. Pattern guards miss encoded secrets. It hash-chains the journal, rejects path traversal, refuses silent journal edits, refuses automatic legacy import and journal merge, and does not start a daemon.
+Continuity is local and fail-closed. It is not a secret scanner, DLP, or tamper-proof audit database. Pattern guards miss encoded secrets. It hash-chains the journal, rejects path traversal, refuses silent journal edits, refuses automatic legacy import and journal merge, and does not start a daemon. Optional `launch.mjs` may listen on `127.0.0.1:43147` for the control surface until that process exits.
 
 Coordinator writes run state under `.continuity/coordinator/runs`, beside the journal, not into it. Deleting run state does not rewrite recorded Continuity events.
 

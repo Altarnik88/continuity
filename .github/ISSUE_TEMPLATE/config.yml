@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/Altarnik88/continuity/security/advisories/new
+    about: Private security advisories. Do not open a public issue with exploit details, secrets, or a real Continuity store.
+  - name: Code of Conduct (private)
+    url: https://github.com/Altarnik88/continuity/security/advisories/new
+    about: Private CoC reports. Title the advisory Code of Conduct. Do not include personal data beyond what maintainers need.

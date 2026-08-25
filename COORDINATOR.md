@@ -40,7 +40,7 @@ A report is stored. It is still not authorizing evidence. Coordinator must attac
 2. `coordinator.mjs plan --root <repo>` reads ready/wave and records run state.
 3. `coordinator.mjs run` registers executor and verifier, records packet and assignment through the Memory CLI, launches `local-process` (or another configured live adapter), waits for a structured report, records evidence/result, launches a **different** verifier, records `verify`.
 4. `status` / `resume` / `cancel` observe or continue that run.
-5. User acceptance stays `pending` until the user writes `--as user`.
+5. User acceptance stays `pending` until `record accept --as user`. Coordinator does not accept for the user and does not edit `HISTORY` files. `mission.accepted` is not user accept.
 
 ## What it does
 
@@ -51,12 +51,12 @@ A report is stored. It is still not authorizing evidence. Coordinator must attac
 - records attempts, reports, command/test evidence, and results through the Continuity CLI
 - launches a different verifier actor
 - persists CoordinatorRun state under `.continuity/coordinator/runs`
-- stops after the ready wave is complete; user acceptance stays pending
+- stops after the ready wave is complete; user acceptance stays pending until `record accept --as user`
 
 ## What it cannot do
 
-- edit `HISTORY.ndjson` or `CURRENT.json`
-- accept or reject work for the user
+- edit `HISTORY.ndjson`, other `HISTORY` files, or `CURRENT.json`
+- accept or reject work for the user (`record accept --as user` is the only accept; the HTTP control-surface Accept control is not user accept)
 - treat an executor report as proof
 - let an actor verify its own Result
 - hide a required Criterion in backlog

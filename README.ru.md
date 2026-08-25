@@ -2,16 +2,19 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-**Локальный control plane для долгой работы coding-агентов: память, которая переживает чаты, и явное управление исполнителями и verifier-ами.**
+[![CI](https://github.com/Altarnik88/continuity/actions/workflows/ci.yml/badge.svg)](https://github.com/Altarnik88/continuity/actions/workflows/ci.yml)
 
-Continuity — скачиваемый Node.js-продукт для Git-репозитория. Он делает две работы, которые сессии обычно смешивают и потом теряют:
+**Локальный control plane для долгой работы coding-агентов: журнал, который переживает чаты, уполномоченная ready-работа из этого журнала и необязательный Node-рой (role-workers, sqlite-проекция исполнения, локальная HTTP-панель), который запускается через `launch.mjs`. Host LLM по-прежнему рассылает Task-субагентов.**
 
-1. **Помнить истину проекта** — цели, неудачные попытки, evidence, независимую verification, freshness и то, принял ли *пользователь* результат.
-2. **Управлять агентами как swarm, а не как одним чатом** — ready-работа, изоляция ownership, WorkPackets, запуск исполнителя, независимая verification, restart и stop. Слова исполнителя никогда не считаются доказательством.
+Continuity — скачиваемый Node.js-продукт для Git-репозитория. Он делает три работы, которые сессии обычно смешивают и потом теряют:
+
+1. **Помнить истину проекта** — цели, неудачные попытки, уроки, плейбуки (зафиксированные рабочие рецепты), evidence, независимую verification, freshness и то, принял ли *пользователь* результат. Истина журнала — Core `HISTORY.ndjson`. `CURRENT.json` — пересобираемая проекция. Swarm sqlite — проекция исполнения с id задач/событий журнала. Markdown (forge `MEMORY.md` / `HANDOFF.md`) — недоверенный вид, не хранилище.
+2. **Нарезать только уполномоченную ready-работу из журнала** — ready-задачи из HISTORY. Если `inspect ready` сообщает `plan.missing`, не назначайте работу и не выдумывайте требования.
+3. **Не смешивать два runtime** — `launch.mjs` гоняет детерминированные Node role-workers, sqlite-проекцию и HTTP-панель на `127.0.0.1:43147`. Аренда путей и standing order живут здесь, чтобы Node-workers не ждали новый чат. Host LLM рассылает изолированные Task-субагенты (инструмент Task в Cursor или Grok). Node не порождает host Task. Слова исполнителя никогда не считаются доказательством. Принимает только `record accept --as user`.
 
 Скачивайте, когда следующий чат, другая модель или сменный исполнитель должны продолжить без догадок — и когда больше одного актора работают в одном репозитории без пересечения файлов и без права пометить работу принятой за вас.
 
-Runtime: Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Лицензия MIT. Распространяется с [Altarnik88/continuity](https://github.com/Altarnik88/continuity), не из package registry.
+Runtime: Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Лицензия MIT. Распространяется с [Altarnik88/continuity](https://github.com/Altarnik88/continuity), не из package registry. Это не native-листинг IDE marketplace.
 
 Версия продукта — `package.json` (`3.0.0`). `--version` печатает это значение. Схема хранилища — **v3**, это не версия продукта.
 
@@ -23,34 +26,51 @@ Runtime: Node.js 22 или 24 (`package.json` engines: `>=22 <25`) и Git. Ли�
 
 **Сбой управления.** Два агента правят одни файлы. Ready-работа угадывается, а не выводится. Процесс Coordinator подразумевается, но не запускается. Отчёт исполнителя принимают за результат теста. Сменный актор продолжает предыдущий Attempt. Обязательные критерии уходят в backlog.
 
-**Не** скачивайте это как замену Git, issue tracker, хранилище секретов, marketplace хостовых моделей, daemon или автоматическое доказательство корректности. Если правка одна и очевидная — просто сделайте её. Если следующего актора не было в комнате — используйте Continuity.
+**Не** скачивайте это как замену Git, issue tracker, хранилище секретов, marketplace хостовых моделей, фоновый daemon или автоматическое доказательство корректности. Если правка одна и очевидная — просто сделайте её. Если следующего актора не было в комнате — используйте Continuity.
 
 ## Быстрый старт
 
-`--version` работает без установки зависимостей:
+`--version` и Memory CLI не требуют `npm install`. `devDependencies` нужны только для test/validate.
+
+### A. Клонировать Continuity как инструмент
 
 ```bash
 git clone https://github.com/Altarnik88/continuity.git
 cd continuity
 node continuity/scripts/continuity.mjs --version
-node continuity/scripts/coordinator.mjs --version
 ```
 
-Из Git-репозитория, который Continuity должен помнить:
+### B. Запустить Memory CLI против целевого Git-репозитория
+
+Запускайте из Git-репозитория, который Continuity должен помнить, или передайте это дерево как `--root` у `continuity.mjs`. Если это не данный клон, вызывайте скрипты по абсолютному пути:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" doctor
 ```
 
-Если `doctor` сообщает `journal=uninitialized`, отредактируйте `continuity/assets/init-v3.template.json`, чтобы цель и критерий были пользовательскими, затем `init --schema 3 --file` этого шаблона. Потом `inspect` и `inspect ready --json`. Если `plan.missing` непустой, не назначайте работу.
+Если `doctor` сообщает `journal=uninitialized`, скопируйте `continuity/assets/init-v3.template.json`, отредактируйте копию так, чтобы цель и критерий были пользовательскими, затем `init --schema 3 --file` этой копии. Потом `inspect` и `inspect ready --json`. Если `plan.missing` непустой, не назначайте работу и не выдумывайте срез продукта.
 
-Coordinator необязателен. Он никогда не принимает результат за пользователя:
+### C. По желанию: Node-рой и панель
+
+`launch.mjs` / `npm start` берут **текущий рабочий каталог** как корень роя (`launch.mjs` не имеет `--root`). Сначала `cd` в **целевой** репозиторий:
 
 ```bash
-node continuity/scripts/coordinator.mjs doctor --root .
+node "/absolute/path/to/continuity/scripts/launch.mjs"
+# то же, что: npm start   (только если cwd — этот клон)
+node "/absolute/path/to/continuity/scripts/launch.mjs" --once
+```
+
+`npm start` (то же, что `npm run launch`) запускает `launch.mjs`: детерминированные Node role-workers, sqlite-проекцию исполнения и HTTP-панель на `127.0.0.1:43147`. Этот процесс не запускает Memory CLI, не порождает host Task и не принимает работу за пользователя. В Cursor или Grok `/continuity` делает главного агента **дирижёром**: он поднимает память и наполняет базу задач из журнала; host LLM затем рассылает изолированные Task-субагенты на анализ, разработку, слепую проверку, безопасность и ревью. С размера 10 назначается управляющий. `launch.mjs --once` гоняет Node role-workers без UI до конца текущей волны. Кнопка **Принять** на панели — не user accept. `mission.accepted` — не user accept. Принимает только `record accept --as user`.
+
+Coordinator необязателен. Он никогда не принимает результат за пользователя и не правит файлы `HISTORY`:
+
+```bash
+node "/absolute/path/to/continuity/scripts/coordinator.mjs" doctor --root .
 ```
 
 Флаги рецептов, обязательный `--exit-code` у `record verify` и `--evidence` у успешного `record result` — в документах ниже. Не копируйте неполные командные строки.
+
+Разработчикам, которые гоняют test gate репозитория: `npm ci --ignore-scripts`, затем `npm run check`. Для CLIs это не требуется.
 
 [Лицензия MIT](LICENSE). Copyright (c) 2026 Altarnik88.
 
@@ -61,4 +81,8 @@ node continuity/scripts/coordinator.mjs doctor --root .
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Слои, write/read path, раскладка, FAQ |
 | [INSTALL.md](INSTALL.md) | Клон, профили, installer, первые минуты |
 | [COORDINATOR.md](COORDINATOR.md) | CLI управления агентами, пакеты, resume |
-| [SECURITY.md](SECURITY.md) | Граница секретов, пределы hash-chain |
+| [SECURITY.md](SECURITY.md) | Граница секретов, пределы hash-chain, как сообщить |
+| [CHANGELOG.md](CHANGELOG.md) | Невыпущенные и уже выпущенные изменения |
+| [RELEASE.md](RELEASE.md) | Zip-профили и публикация на GitHub |
+| [CONTRIBUTING](.github/CONTRIBUTING.md) | Как менять этот репозиторий |
+| [Нормы сообщества](.github/CODE_OF_CONDUCT.md) | Code of conduct |

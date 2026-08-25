@@ -25,7 +25,10 @@ export const EXPECTED_PACKAGE_SCRIPTS = Object.freeze({
   'test:coordinator': 'node scripts/test-coordinator.mjs',
   'test:release': 'node scripts/test-release.mjs',
   'package:release': 'node scripts/package-release.mjs',
-  check: 'npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:protocol && npm run test:coordinator && npm run test:release',
+  start: 'node continuity/scripts/launch.mjs',
+  launch: 'node continuity/scripts/launch.mjs',
+  'test:swarm': 'node tests/swarm/run.mjs',
+  check: 'npm run validate && npm test && npm run test:package && npm run test:forward && npm run test:protocol && npm run test:coordinator && npm run test:release && npm run test:swarm',
   'audit:dev': 'npm audit --audit-level=high',
 });
 
@@ -222,7 +225,7 @@ export function validatePackage(repoRoot = root) {
 
   const ci = readText('.github/workflows/ci.yml');
   if (/uses:\s*[^\s]+@(?![a-f0-9]{40}(?:\s|$))/i.test(ci)) fail('CI actions must use full commit SHA pins');
-  if (!ci.includes('persist-credentials: false') || !ci.includes('timeout-minutes: 15')) fail('CI hardening settings are missing');
+  if (!ci.includes('persist-credentials: false') || !ci.includes('timeout-minutes: 25')) fail('CI hardening settings are missing');
   if (!ci.includes('npm ci --ignore-scripts') || !ci.includes('npm run audit:dev')) fail('CI install or audit boundary is missing');
   if (!/^\s+run:\s*npm run check\s*$/m.test(ci.replaceAll('\r\n', '\n'))
     || !ci.includes('windows-latest') || !ci.includes('ubuntu-latest')) {

@@ -5,19 +5,22 @@ import path from 'node:path';
 import { sanitizedSpawnEnv } from '../protocol/client.mjs';
 import { buildCoordinatorView } from './coordination/index.mjs';
 import { ACTOR_KINDS, MemoryError } from './domain-v3.mjs';
-import { buildHandoffV3, buildInspectV3, liveContextFromRoot, renderCoordinatorText, renderInspectJson, renderInspectText } from './inspect-v3.mjs';
+import {
+  buildHandoffV3, buildHistoryV3, buildInspectV3, liveContextFromRoot,
+  renderCoordinatorText, renderHistoryText, renderInspectJson, renderInspectText,
+} from './inspect-v3.mjs';
 import { appendV3, initializeV3, readV3Journal, rebuildV3, validateV3Append, validateV3Batch } from './journal-v3.mjs';
 import {
   applyRecipes, recipeAccept, recipeAssign, recipeAttemptReport, recipeBacklog, recipeContextHandoff,
-  recipeEvidence, recipeFail, recipePacket, recipeRelease, recipeResult, recipeStart, recipeTask,
-  recipeVerify,
+  recipeEvidence, recipeFail, recipeNextStatus, recipePacket, recipeRelease, recipeResult, recipeStart,
+  recipeTask, recipeVerify,
 } from './recipes-v3.mjs';
 
 const ACTOR_ID = /^[a-z][a-z0-9_]*-[a-z0-9][a-z0-9-]{1,72}$/;
 const ACTOR_KIND_SET = new Set(ACTOR_KINDS);
 const SHELL_META = /[|&;$><`]/;
 const NODE_NAMES = new Set(['node', 'node.exe']);
-const OBSERVED_TIMEOUT_MS = 15_000;
+const OBSERVED_TIMEOUT_MS = 15 * 60 * 1000;
 const OBSERVED_MAX_BUFFER = 256 * 1024;
 
 function parseEvidenceRunArgv(text) {
@@ -135,6 +138,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
       skipped: options.skipped,
       kind: options.kind,
       evidence: options.evidence,
+      subject: options.subject,
       exitCode: options.exitCode,
     };
     if (recipe === 'evidence') {
@@ -175,6 +179,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
       report: (store) => [recipeAttemptReport(store, recipeOptions, { clock })],
       verify: (store) => [recipeVerify(store, recipeOptions, { clock })],
       context: (store) => [recipeContextHandoff(store, recipeOptions, { clock })],
+      next: (store) => [recipeNextStatus(store, recipeOptions, { clock })],
       backlog: (store) => [recipeBacklog(store, recipeOptions, { clock })],
     };
     const builder = builders[recipe];
@@ -221,6 +226,11 @@ export async function handleV3Command({ command, subcommand, options, root, writ
   if (command === 'inspect' || command === 'handoff' || command === 'history') {
     const store = readV3Journal(root);
     const live = liveContextFromRoot(root, store.state.workspaceAtLastEvent);
+    if (command === 'history') {
+      const view = buildHistoryV3(store, { tail: options.tail });
+      writeOut(write, options.json ? renderInspectJson(view) : renderHistoryText(view));
+      return 0;
+    }
     if (command === 'inspect' && (subcommand === 'ready' || subcommand === 'wave')) {
       let agents = store.state.agents ?? [];
       let slots = options.slots ?? 1;
@@ -234,6 +244,7 @@ export async function handleV3Command({ command, subcommand, options, root, writ
         agents,
         slots,
         resourceLimit: options.resourceLimit,
+        bound: true,
       });
       writeOut(write, options.json || subcommand === 'wave' ? renderInspectJson(view) : renderCoordinatorText(view));
       return 0;

@@ -8,11 +8,13 @@ import {
 import { loadCoordinatorConfig } from './config.mjs';
 import { createCoordinatorRuntime } from './engine.mjs';
 
-const USAGE = 'usage: coordinator.mjs <doctor|plan|run|resume|status|cancel>';
+const USAGE = 'usage: coordinator.mjs <doctor|plan|run|resume|status|cancel> [--context-used 0.7]';
 const HELP = `${USAGE}
 
 Foreground Coordinator runtime. It never starts a daemon, watcher, or login task.
 Writes go only through the Continuity/Core CLI. User acceptance stays pending.
+Host must pass --context-used <0..1> when the context window is known.
+At 0.65 the runtime pauses assign and records context. It does not read a silent config field.
 
 Store: <repo>/.continuity/coordinator/runs
 Contract: ${COORDINATION_CONTRACT_ID}
@@ -31,6 +33,7 @@ function parse(argv) {
     run: null,
     adapter: null,
     slots: null,
+    contextUsed: null,
     json: false,
   };
   const args = [...argv];
@@ -51,6 +54,11 @@ function parse(argv) {
       if (!Number.isSafeInteger(options.slots) || options.slots < 1 || options.slots > 8) {
         fail('--slots must be 1..8');
       }
+    } else if (value === '--context-used') {
+      options.contextUsed = Number(take('--context-used requires a ratio'));
+      if (!Number.isFinite(options.contextUsed) || options.contextUsed < 0 || options.contextUsed > 1) {
+        fail('--context-used must be 0..1');
+      }
     } else if (value === '--json') options.json = true;
     else if (value === '--help' || value === '-h') options.help = true;
     else if (value === '--version') options.version = true;
@@ -69,6 +77,19 @@ function render(options, payload) {
   if (options.json) return `${JSON.stringify(payload, null, 2)}\n`;
   if (payload.help) return HELP;
   if (payload.version) return `continuity-coordinator ${COORDINATOR_RUNTIME_VERSION}\n`;
+  if (payload.state) {
+    const lines = [
+      `run=${payload.state.runId}`,
+      `status=${payload.state.status}`,
+      `adapter=${payload.state.adapter}`,
+      `user-acceptance=${payload.state.userAcceptance}`,
+      `stop=${payload.state.stopReason || 'none'}`,
+      `completed-packets=${payload.state.completedPacketIds.length}`,
+    ];
+    if (payload.execution) lines.push(`execution=${payload.execution}`);
+    if (payload.rollover) lines.push(`rollover=${payload.rollover}`);
+    return `${lines.join('\n')}\n`;
+  }
   if (payload.doctor) {
     const doctor = payload.doctor;
     return [
@@ -81,19 +102,6 @@ function render(options, payload) {
       `health=${doctor.adapter.health?.ok ? 'ok' : 'failed'}`,
       `memory=${doctor.memory}`,
     ].join('\n');
-  }
-  if (payload.state) {
-    const lines = [
-      `run=${payload.state.runId}`,
-      `status=${payload.state.status}`,
-      `adapter=${payload.state.adapter}`,
-      `user-acceptance=${payload.state.userAcceptance}`,
-      `stop=${payload.state.stopReason || 'none'}`,
-      `completed-packets=${payload.state.completedPacketIds.length}`,
-    ];
-    if (payload.execution) lines.push(`execution=${payload.execution}`);
-    if (payload.rollover) lines.push(`rollover=${payload.rollover}`);
-    return lines.join('\n');
   }
   return `${JSON.stringify(payload)}\n`;
 }
@@ -120,12 +128,13 @@ export async function main(argv = process.argv.slice(2), io = {
     const runtime = createCoordinatorRuntime({
       root: options.root,
       config,
+      contextUsed: options.contextUsed,
     });
     let payload;
     if (command === 'doctor') payload = { doctor: runtime.doctor() };
     else if (command === 'plan') payload = runtime.plan({ runId: options.run });
-    else if (command === 'run') payload = runtime.run({ runId: options.run });
-    else if (command === 'resume') payload = runtime.resume({ runId: options.run });
+    else if (command === 'run') payload = runtime.run({ runId: options.run, contextUsed: options.contextUsed });
+    else if (command === 'resume') payload = runtime.resume({ runId: options.run, contextUsed: options.contextUsed });
     else if (command === 'status') payload = runtime.status({ runId: options.run });
     else if (command === 'cancel') payload = runtime.cancel({ runId: options.run });
     else fail('unknown coordinator command');

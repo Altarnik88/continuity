@@ -20,6 +20,7 @@ export const PROJECTION_VERSION = 3;
 export const ZERO_HASH = '0'.repeat(64);
 export const MAX_EVENT_BYTES = 64 * 1024;
 export const MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
+export const MAX_PROJECTION_BYTES = 256 * 1024;
 export const MAX_STRING = 2_000;
 export const MAX_ITEMS = 50;
 export const HANDOFF_TEXT_BYTES = 16 * 1024;
@@ -632,9 +633,15 @@ function applyEvent(state, event) {
       attempt.summary = payload.summary;
       break;
     }
-    case 'evidence.recorded':
-      state.evidence.push({ ...clone(payload.evidence), derivedFromEventIds: [event.eventId] });
+    case 'evidence.recorded': {
+      const evidence = { ...clone(payload.evidence), derivedFromEventIds: [event.eventId] };
+      const head = event.workspaceAtRecord?.head;
+      if (evidence.commit == null && typeof head === 'string' && head !== 'unavailable') {
+        evidence.commit = head;
+      }
+      state.evidence.push(evidence);
       break;
+    }
     case 'result.recorded': {
       const result = { ...clone(payload.result), derivedFromEventIds: [event.eventId] };
       state.results.push(result);
@@ -660,6 +667,13 @@ function applyEvent(state, event) {
     case 'next_action.recorded':
       state.nextActions.push({ ...clone(payload.nextAction), derivedFromEventIds: [event.eventId] });
       break;
+    case 'next_action.status_changed': {
+      const nextAction = requireEntity(state, 'nextActions', 'nextActionId', event.subject.id, 'next_action');
+      enumOf(payload.execution, EXECUTION_SET, 'nextAction.execution');
+      nextAction.execution = payload.execution;
+      nextAction.derivedFromEventIds = [...(nextAction.derivedFromEventIds ?? []), event.eventId].slice(-MAX_ITEMS);
+      break;
+    }
     case 'feedback.recorded': {
       const feedback = { ...clone(payload.feedback), derivedFromEventIds: [event.eventId] };
       state.feedback.push(feedback);
@@ -740,6 +754,7 @@ function applyEvent(state, event) {
       const assignment = requireEntity(state, 'assignments', 'assignmentId', payload.assignmentId, 'assignment');
       assignment.state = 'released';
       assignment.releaseReason = payload.reason;
+      delete assignment.pathOwnership;
       assignment.derivedFromEventIds = [...assignment.derivedFromEventIds, event.eventId].slice(-MAX_ITEMS);
       for (const taskId of assignment.taskIds) {
         const task = find(state, 'tasks', 'taskId', taskId);
@@ -975,6 +990,12 @@ export function validateDraftV3(draft, state = emptyProjectStateV3(), context = 
         fail('nextAction requires a source failure, feedback, or lesson');
       }
       break;
+    case 'next_action.status_changed':
+      exact(draft.payload, ['execution', 'reason'], ['execution'], 'payload');
+      requireEntity(state, 'nextActions', 'nextActionId', draft.subject.id, 'next_action');
+      enumOf(draft.payload.execution, EXECUTION_SET, 'execution');
+      if (draft.payload.reason !== undefined) text(draft.payload.reason, 'reason');
+      break;
     case 'feedback.recorded':
       exact(draft.payload, ['feedback'], ['feedback'], 'payload');
       validateFeedback(draft.payload.feedback);
@@ -1202,6 +1223,45 @@ export function validateEnvelopeV3(event, index, previousHash) {
   if (event.previousEventHash !== previousHash) fail(`history event ${index + 1} hash-chain break`, 3);
   const { eventHash, ...material } = event;
   if (sha256(canonicalV3(material)) !== eventHash) fail(`history event ${index + 1} hash mismatch`, 3);
+}
+
+function sameStringList(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
+}
+
+export function slimProjection(state) {
+  const slim = clone(state);
+  for (const task of slim.tasks ?? []) {
+    if (sameStringList(task.pathOwnership, task.ownershipScope)) delete task.ownershipScope;
+    if (sameStringList(task.requiredCapabilities, task.capabilities)) delete task.capabilities;
+  }
+  for (const assignment of slim.assignments ?? []) {
+    if (assignment.state === 'released') delete assignment.pathOwnership;
+  }
+  return slim;
+}
+
+function canonicalProjection(value) {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'string' || typeof value === 'number') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalProjection).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalProjection(value[key])}`).join(',')}}`;
+  }
+  fail('CURRENT projection is not JSON');
+}
+
+export function encodeProjection(state) {
+  const bytes = Buffer.from(`${canonicalProjection(slimProjection(state))}\n`, 'utf8');
+  if (bytes.length > MAX_PROJECTION_BYTES) fail('CURRENT projection exceeds the size limit', 3);
+  return bytes;
+}
+
+export function projectionFingerprint(state) {
+  return canonicalProjection(slimProjection(state));
 }
 
 export function foldV3(events) {

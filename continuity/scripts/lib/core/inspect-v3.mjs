@@ -1,4 +1,5 @@
 import { evaluateFreshness, HANDOFF_JSON_BYTES, HANDOFF_TEXT_BYTES, MemoryError } from './domain-v3.mjs';
+import { criterionHasFreshAuthorizingResult } from './coordination/persist-policy.mjs';
 import { liveGitContext } from './workspace-v3.mjs';
 
 function fail(message, exitCode = 2) {
@@ -57,7 +58,11 @@ export function buildInspectV3(store, live, { subjectId } = {}) {
     },
     goal: goal && { goalId: goal.goalId, title: goal.title, outcome: goal.outcome, acceptance: goal.acceptance },
     criteria: take(state.criteria.map((item) => ({
-      criterionId: item.criterionId, condition: item.condition, verification: item.verification,
+      criterionId: item.criterionId,
+      condition: item.condition,
+      verification: criterionHasFreshAuthorizingResult(state, item, live)
+        ? 'passed'
+        : (item.verification === 'failed' ? 'failed' : 'unverified'),
     })), 20),
     confirmed: take(confirmed.map((item) => ({ resultId: item.resultId, taskId: item.taskId, actual: item.actual })), 20),
     unverified: take(unverified.map((item) => ({ resultId: item.resultId, taskId: item.taskId, verification: item.verification })), 20),
@@ -143,6 +148,43 @@ export function renderInspectText(view) {
 export function renderInspectJson(view) {
   const text = `${JSON.stringify(view)}\n`;
   if (Buffer.byteLength(text, 'utf8') > HANDOFF_JSON_BYTES) fail('handoff JSON exceeds the 32 KiB budget', 3);
+  return text;
+}
+
+export function buildHistoryV3(store, { tail = 10 } = {}) {
+  const limit = Number.isInteger(tail) ? Math.min(100, Math.max(1, tail)) : 10;
+  const recorded = store.events ?? [];
+  const events = recorded.slice(-limit).map((event) => ({
+    sequence: event.sequence,
+    eventType: event.eventType,
+    eventId: event.eventId,
+    subjectId: event.subject?.id ?? null,
+  }));
+  return {
+    schemaVersion: 3,
+    view: 'history',
+    store: {
+      schemaVersion: 3,
+      sequence: recorded.at(-1)?.sequence ?? 0,
+      eventHash: recorded.at(-1)?.eventHash ?? null,
+      journalState: 'valid',
+      projectionState: store.projection,
+    },
+    tail: limit,
+    events,
+  };
+}
+
+export function renderHistoryText(view) {
+  const rows = (view.events ?? []).map((item) => (
+    `${item.sequence} ${item.eventType} ${item.eventId}${item.subjectId ? ` ${item.subjectId}` : ''}`
+  ));
+  const lines = [
+    `HISTORY events=${rows.length} tail=${view.tail ?? rows.length} sequence=${view.store?.sequence ?? 0}`,
+    ...rows,
+  ];
+  const text = `${lines.join('\n')}\n`;
+  if (Buffer.byteLength(text, 'utf8') > HANDOFF_TEXT_BYTES) fail('handoff text exceeds the 16 KiB budget', 3);
   return text;
 }
 

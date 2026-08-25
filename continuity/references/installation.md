@@ -1,6 +1,6 @@
 # Installation
 
-Continuity requires Node.js 22+ and Git. The complete distributable unit is the single `continuity/` directory. It has no runtime package-install step and does not require another Skill, a background process, a network service, a model installation, or a global copy.
+Continuity requires Node.js 22 or 24 (`package.json` engines: `>=22 <25`) and Git. The complete distributable unit is the single `continuity/` directory. The Memory CLI has no runtime package-install step and does not require another Skill, a background process, a daemon, a model installation, or a global copy. Optional `launch.mjs` is a foreground process that may bind `127.0.0.1:43147` until it exits; that listener is not a daemon and is not the Memory CLI.
 
 The repository is [Altarnik88/continuity](https://github.com/Altarnik88/continuity). It is distributed under the repository [MIT License](../../LICENSE), not through a package registry.
 

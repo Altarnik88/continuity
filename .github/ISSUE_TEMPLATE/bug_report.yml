@@ -1,0 +1,55 @@
+name: Bug report
+description: A defect in Continuity CLIs, swarm, Coordinator, docs, or CI
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste secrets, tokens, `.env` files, private paths, real journal events, or exploit details.
+        Vulnerabilities go to [private advisories](https://github.com/Altarnik88/continuity/security/advisories/new).
+  - type: input
+    id: version
+    attributes:
+      label: Product version
+      description: Output of `node continuity/scripts/continuity.mjs --version`
+      placeholder: continuity 3.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: "22.x or 24.x"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Sanitize names, paths, hashes, and identifiers. Use clearly fake values.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Sanitized reproducer
+      description: Commands only. No raw logs, diffs, or store dumps.
+    validations:
+      required: true

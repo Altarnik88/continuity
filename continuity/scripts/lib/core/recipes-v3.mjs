@@ -193,14 +193,21 @@ function authorizingEvidenceForAttempt(store, taskId, attempt) {
   });
 }
 
+function listedEvidenceIds(value) {
+  if (Array.isArray(value)) return value.filter((item) => typeof item === 'string' && item);
+  if (typeof value !== 'string' || !value.trim()) return [];
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
 function resolveSucceededEvidenceIds(store, options, task, attempt) {
-  if (options.evidence) return [options.evidence];
+  const listed = listedEvidenceIds(options.evidence);
+  if (listed.length) return listed;
   const candidates = authorizingEvidenceForAttempt(store, task.taskId, attempt);
   if (candidates.length === 1) return [candidates[0].evidenceId];
-  const listed = candidates.map((item) => item.evidenceId).join(', ');
+  const candidateIds = candidates.map((item) => item.evidenceId).join(', ');
   throw new MemoryError(
     candidates.length > 1
-      ? `record result requires --evidence; current attempt has multiple authorizing evidence: ${listed}`
+      ? `record result requires --evidence; current attempt has multiple authorizing evidence: ${candidateIds}`
       : 'record result requires --evidence; succeeded execution has no authorizing evidence for the current attempt',
     2,
   );
@@ -622,6 +629,31 @@ export function recipeContextHandoff(store, options, { clock } = {}) {
         limitations: options.limitations || ['No raw diffs or secrets stored'],
         nextStep: options.next || 'continue with a new actor and a new attempt',
       },
+    },
+  });
+}
+
+export function recipeNextStatus(store, options, { clock } = {}) {
+  const nextAction = options.subject
+    ? store.state.nextActions.find((item) => item.nextActionId === options.subject)
+    : [...store.state.nextActions].reverse().find((item) => (
+      item.execution === 'planned' || item.execution === 'in_progress'
+    ));
+  if (options.subject && !nextAction) throw new MemoryError('next action is unknown', 2);
+  if (!nextAction) throw new MemoryError('record next requires a planned next action', 2);
+  const execution = options.execution || 'succeeded';
+  return draftJson({
+    eventType: 'next_action.status_changed',
+    occurredAt: iso(clock),
+    actor: options.actor,
+    subject: { type: 'next_action', id: nextAction.nextActionId },
+    supersedes: [],
+    contradicts: [],
+    evidenceRefs: listedEvidenceIds(options.evidence),
+    sensitivity: 'internal',
+    payload: {
+      execution,
+      ...(options.why ? { reason: options.why } : {}),
     },
   });
 }

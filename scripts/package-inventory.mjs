@@ -53,11 +53,22 @@ export const REPO_METADATA_EXACT = Object.freeze([
   'package-lock.json',
   'package.json',
 ]);
-export const LOCALIZED_README_FILES = Object.freeze(['README.md', 'README.ru.md']);
+export const LOCALIZED_PUBLIC_FILES = Object.freeze([
+  'README.md',
+  'README.ru.md',
+]);
+export const LOCALIZED_README_FILES = LOCALIZED_PUBLIC_FILES;
 export const REQUIRED_REPO_METADATA = Object.freeze([
   '.cursor/rules/continuity.mdc',
   '.cursor/skills/continuity/SKILL.md',
   '.gitattributes',
+  '.github/CODE_OF_CONDUCT.md',
+  '.github/CONTRIBUTING.md',
+  '.github/ISSUE_TEMPLATE/bug_report.yml',
+  '.github/ISSUE_TEMPLATE/config.yml',
+  '.github/ISSUE_TEMPLATE/feature_request.yml',
+  '.github/PULL_REQUEST_TEMPLATE.md',
+  '.github/dependabot.yml',
   '.github/workflows/ci.yml',
   '.gitignore',
   '.grok/rules/continuity.md',
@@ -167,6 +178,19 @@ export const EXPECTED_SKILL_FILES = Object.freeze([
   `${SKILL_PREFIX}scripts/smokes/coordinator.mjs`,
   `${SKILL_PREFIX}scripts/smokes/full.mjs`,
   `${SKILL_PREFIX}scripts/smokes/memory.mjs`,
+  `${SKILL_PREFIX}assets/control-surface.html`,
+  `${SKILL_PREFIX}references/autonomous-swarm.md`,
+  `${SKILL_PREFIX}references/conductor-orchestration.md`,
+  `${SKILL_PREFIX}scripts/control-surface.mjs`,
+  `${SKILL_PREFIX}scripts/dispatch.mjs`,
+  `${SKILL_PREFIX}scripts/launch.mjs`,
+  `${SKILL_PREFIX}scripts/supervisor.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/contract.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/lock.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/craft.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/engine.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/planner.mjs`,
+  `${SKILL_PREFIX}scripts/lib/swarm/store.mjs`,
 ]);
 export const REQUIRED_SKILL_FILES = EXPECTED_SKILL_FILES;
 export const ALLOWED_GIT_MODES = Object.freeze(new Set(['100644', '100755']));
@@ -458,7 +482,7 @@ export function assertRepositoryBoundaries(root, files = listRepositoryFiles(roo
     const absolute = path.join(resolvedRoot, ...file.split('/'));
     if (PUBLIC_TEXT_EXTENSIONS.has(extension) || PUBLIC_TEXT_EXACT.has(file)) {
       const text = readFileSync(absolute, 'utf8');
-      if (!LOCALIZED_README_FILES.includes(file) && /[\u0400-\u052f]/u.test(text)) {
+      if (!LOCALIZED_PUBLIC_FILES.includes(file) && /[\u0400-\u052f]/u.test(text)) {
         fail(`public repository text contains Cyrillic (${file})`);
       }
     }
