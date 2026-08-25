@@ -157,12 +157,25 @@ function isPulseNamed(task) {
   return /pulse/i.test(`${task?.id ?? ''}${task?.taskId ?? ''}${task?.title ?? ''}`);
 }
 
+function taskPaths(task) {
+  return [...asList(task?.paths), ...asList(task?.ownershipScope), ...asList(task?.pathOwnership)].join(' ');
+}
+
 function isPulseProductTask(task) {
   const id = String(task?.id ?? task?.taskId ?? '');
   const title = String(task?.title ?? '');
   if (/task-scaffold/i.test(id) || /scaffold the pulse/i.test(title)) return true;
-  const paths = [...asList(task?.paths), ...asList(task?.ownershipScope), ...asList(task?.pathOwnership)].join(' ');
-  return /pulse/i.test(`${id} ${title}`) && /(^|[ /])forge(\/|$)/.test(paths);
+  return /pulse/i.test(`${id} ${title}`) && /(^|[ /])forge(\/|$)/.test(taskPaths(task));
+}
+
+function isPulseFollowOn(task) {
+  if (isPulseNamed(task) || isPulseProductTask(task)) return true;
+  const id = String(task?.id ?? task?.taskId ?? '');
+  const title = String(task?.title ?? '');
+  const paths = taskPaths(task);
+  return /task-metrics(-test)?$/i.test(id)
+    || /\brisk metrics\b/i.test(title)
+    || /(^|[ /])forge\/(?:src|test)\/metrics(?:\.|$)/.test(paths);
 }
 
 function readGoal(input) {
@@ -354,7 +367,5 @@ export function planContinuations(state) {
       },
     },
   ];
-  const queued = next.filter((task) => !existing.has(task.id));
-  if (readGoal(state)) return queued;
-  return queued.filter((task) => !isPulseNamed(task));
+  return next.filter((task) => !existing.has(task.id) && !isPulseFollowOn(task));
 }
