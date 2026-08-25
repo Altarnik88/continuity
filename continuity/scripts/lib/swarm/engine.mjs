@@ -28,7 +28,11 @@ import {
   run,
   sanitizeMemoryRecord,
   snapshot,
+  swarmDataDirectory,
 } from './store.mjs';
+
+const ENGINE_LOCK_NAME = 'engine.lock';
+const ENGINE_LOCK_TTL_MS = 30 * 60 * 1000;
 
 const REGISTRY = Symbol.for('continuity.swarm.engines');
 
@@ -65,7 +69,7 @@ export function createEngine(options = {}) {
   let maxInflight = 0;
 
   seed(db, { swarmSize, clock, root });
-  recoverOrphans(db, clock);
+  recoverOrphans(db, clock, root);
 
   const engine = {
     root,
@@ -418,11 +422,62 @@ export function createEngine(options = {}) {
   return engine;
 }
 
-function recoverOrphans(db, clock) {
+function recoverOrphans(db, clock, root) {
+  if (!shouldReclaimOrphans(root)) return;
   const ts = nowIso(clock);
   run(db, "UPDATE tasks SET status = 'queued', assignee = NULL, updated_at = ? WHERE status = 'running'", [ts]);
   run(db, 'DELETE FROM leases');
   run(db, "UPDATE agents SET status = 'idle', task_id = NULL, detail = '', updated_at = ?", [ts]);
+}
+
+function shouldReclaimOrphans(root) {
+  const file = path.join(swarmDataDirectory(root), ENGINE_LOCK_NAME);
+  if (!existsSync(file)) return false;
+  const record = readEngineLockRecord(file);
+  if (isLiveEnginePid(record?.pid)) return false;
+  return isDeadEnginePid(record?.pid) || isEngineLockExpired(record, file);
+}
+
+function readEngineLockRecord(file) {
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isLiveEnginePid(pid) {
+  const value = Number(pid);
+  if (!Number.isInteger(value) || value <= 0) return false;
+  try {
+    process.kill(value, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+function isDeadEnginePid(pid) {
+  const value = Number(pid);
+  if (!Number.isInteger(value) || value <= 0) return false;
+  try {
+    process.kill(value, 0);
+    return false;
+  } catch (error) {
+    return error?.code === 'ESRCH';
+  }
+}
+
+function isEngineLockExpired(record, file) {
+  const stamp = record?.acquiredAt ?? record?.ts;
+  const parsed = typeof stamp === 'number' ? stamp : Date.parse(stamp);
+  if (Number.isFinite(parsed)) return Date.now() - parsed > ENGINE_LOCK_TTL_MS;
+  try {
+    return Date.now() - statSync(file).mtimeMs > ENGINE_LOCK_TTL_MS;
+  } catch {
+    return false;
+  }
 }
 
 function seed(db, { swarmSize, clock, root }) {
