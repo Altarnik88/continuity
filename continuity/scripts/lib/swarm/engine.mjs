@@ -490,6 +490,7 @@ export function createEngine(options = {}) {
     }));
 
     for (const task of ready) {
+      if (requiresHostImplementation(task)) continue;
       if (leaseConflict(held, task.paths)) continue;
       const agent = pickAgent(idle, task);
       if (!agent) continue;
@@ -533,7 +534,17 @@ export function createEngine(options = {}) {
     }
   }
 
+  function releaseToReady(task, agent) {
+    const ts = nowIso(clock);
+    clearAssignment(task, agent, ts);
+    run(db, "UPDATE tasks SET status = 'ready', assignee = NULL, updated_at = ? WHERE id = ?", [ts, task.id]);
+  }
+
   async function writeProduct(task, agent) {
+    if (requiresHostImplementation(task)) {
+      releaseToReady(task, agent);
+      return;
+    }
     const files = selectFiles(task);
     const observed = observeSources(root, task.paths);
     for (const [relative, key] of Object.entries(files)) {
@@ -621,7 +632,7 @@ export function createEngine(options = {}) {
       '',
       STANDING_ORDER,
       '',
-      `Product: ${state.mission?.product_name ?? 'Pulse'}`,
+      `Product: ${state.mission?.product_name ?? 'unspecified'}`,
       `User acceptance: ${state.mission?.accepted ?? 'pending'}`,
       '',
       '## Memory',
@@ -805,7 +816,7 @@ function seedPlanFromGoal(db, { clock, root, client }) {
   let added = 0;
   for (const task of planned) {
     if (!task?.id || existing.has(task.id)) continue;
-    insertTask(db, task, clock);
+    insertTask(db, withJournalOrigin(task), clock);
     existing.add(task.id);
     added += 1;
   }
@@ -885,6 +896,50 @@ function selectFiles(task) {
     return task.spec.buggyFiles;
   }
   return task.spec.files ?? {};
+}
+
+function asIdList(value) {
+  if (value == null) return [];
+  return (Array.isArray(value) ? value : [value]).filter((item) => item != null && item !== '');
+}
+
+function taskSpec(task) {
+  const spec = task?.spec;
+  return spec && typeof spec === 'object' && !Array.isArray(spec) ? spec : {};
+}
+
+function hasCraftMapping(task) {
+  const files = taskSpec(task).files;
+  return Boolean(files && typeof files === 'object' && !Array.isArray(files) && Object.keys(files).length);
+}
+
+function isJournalSourced(task) {
+  const spec = taskSpec(task);
+  if (task?.goalId || spec.goalId) return true;
+  if (asIdList(task?.criterionIds).length || asIdList(spec.criterionIds).length) return true;
+  return Boolean(
+    spec.continuity_task_id
+    || spec.continuity_event_id
+    || spec.continuity_attempt_id
+    || spec.continuity_result_id
+    || spec.continuity_evidence_id
+    || task?.continuity_task_id
+  );
+}
+
+function isProductKind(task) {
+  return task?.kind === 'write' || task?.kind === 'analyze' || task?.kind === 'security' || task?.kind === 'review';
+}
+
+function requiresHostImplementation(task) {
+  return isProductKind(task) && (isJournalSourced(task) || !hasCraftMapping(task));
+}
+
+function withJournalOrigin(task) {
+  const spec = { ...taskSpec(task) };
+  if (task.goalId) spec.goalId = task.goalId;
+  if (asIdList(task.criterionIds).length) spec.criterionIds = asIdList(task.criterionIds);
+  return { ...task, spec };
 }
 
 function observeSources(root, paths = []) {
