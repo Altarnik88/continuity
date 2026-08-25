@@ -1,4 +1,6 @@
-# Autonomous swarm
+# Local swarm
+
+The file name `autonomous-swarm.md` is historical. This runtime is a local Node swarm (deterministic role-workers plus a sqlite projection), not an unsupervised LLM loop.
 
 Continuity has a second runtime next to Memory and the optional Coordinator: a **parallel swarm**.
 

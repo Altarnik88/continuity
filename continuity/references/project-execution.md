@@ -47,7 +47,7 @@ Treat the output as a map, then check relevant claims against current sources, G
 
 ## Initialize an empty store
 
-Node.js 22+ and Git are required. Review the template and replace its example goal and criterion with explicit user-backed values:
+Node.js 22 or 24 (`>=22 <25`) and Git are required. Review the template and replace its example goal and criterion with explicit user-backed values:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/continuity.mjs" init --schema 3 --file "/absolute/path/to/continuity/assets/init-v3.template.json"

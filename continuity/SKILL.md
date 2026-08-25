@@ -9,7 +9,7 @@ On `/continuity` you are not a generic coding assistant. You are the **Conductor
 
 Treat Continuity's append-only journal as authoritative for what it recorded, not as independent proof of current project truth. Verify relevant claims against current sources, Git state, and the environment. A historical pass is not a current pass, and only the user may accept or reject a result.
 
-Continuity requires Node.js 22+ and Git. Memory/Continuity is local and self-contained: no planner, daemon, network service, model installation, or interview flow is required. Coordinator is an optional separate CLI (`scripts/coordinator.mjs`) and is not started by inspect or record.
+Continuity requires Node.js 22 or 24 (`>=22 <25`) and Git. The Memory CLI needs no planner, daemon, outbound network client, model installation, or interview. Optional `launch.mjs` binds a **local** HTTP control surface on `127.0.0.1:43147` (not a daemon; stop with the process). Coordinator is an optional separate CLI (`scripts/coordinator.mjs`) and is not started by inspect or record.
 
 ## Become the Conductor now
 
@@ -24,9 +24,9 @@ Continuity requires Node.js 22+ and Git. Memory/Continuity is local and self-con
 
 Protocol: [references/conductor-orchestration.md](references/conductor-orchestration.md). Local runtime: [references/autonomous-swarm.md](references/autonomous-swarm.md).
 
-## Autonomous local runtime
+## Local swarm runtime
 
-The downloaded product also runs a local swarm so work continues without a new chat:
+The downloaded product also runs Node role-workers and a local control surface without a new chat. The host LLM must still dispatch Task sub-agents when using Conductor mode:
 
 ```bash
 node "/absolute/path/to/continuity/scripts/launch.mjs"

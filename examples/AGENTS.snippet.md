@@ -2,7 +2,7 @@
 
 Adapt this section to the repository-level instruction format supported by your coding agent. It assumes the single `continuity/` directory is already installed or cloned and that the agent can resolve its `scripts/continuity.mjs` path.
 
-- On `/continuity`, the host agent is the Conductor. Recover memory, run `dispatch.mjs`, and spawn 5–20 isolated sub-agents in one turn. Repeat waves until empty.
+- On `/continuity`, the host agent is the Conductor. Recover memory, run `dispatch.mjs`, and have the host LLM dispatch 5–20 isolated Task sub-agents in one turn. Node does not spawn host Task. Repeat waves until empty.
 - Cover analysis, implementation, independent verification, security, and review. Paths must not overlap. Blind roles receive no implementer context.
 - At swarm size 10 or more, appoint a Manager who watches the task database and does not edit product files.
 - At the start of nontrivial repository work, run read-only `doctor`, `inspect`, and `inspect ready --json` from the target worktree.
@@ -13,6 +13,6 @@ Adapt this section to the repository-level instruction format supported by your 
 - Independent verification requires a different actor and run with explicit counts. Only `--as user` may accept or reject a result.
 - Read-only, trivial, no-op, and inconclusive work should not write continuity data.
 - After a write, run `validate` and `inspect`. Never edit the store or delete a lock silently.
-- The local swarm is `node continuity/scripts/launch.mjs` (or `npm start`). It does not accept for the user.
+- The local swarm is `node continuity/scripts/launch.mjs` (or `npm start`). User accept is only `record accept --as user`. The HTTP control-surface Accept control is not user accept; `mission.accepted` is not user accept.
 - The Coordinator is optional. It is not required for ordinary Continuity use and is not authorized to establish truth.
 - Follow `continuity/references/project-execution.md` and `continuity/references/security-workflow.md` for the complete protocol.

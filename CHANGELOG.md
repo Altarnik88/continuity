@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Public GitHub surface: contributing and code of conduct under `.github/`, issue and pull-request templates, Dependabot for npm and GitHub Actions, CI badge, and bilingual competitor notes (`COMPETITORS.md` / `COMPETITORS.ru.md`).
+- `package.json` description names an optional local Node swarm, not an “autonomous” LLM loop. `dispatch.mjs` tells the host LLM to dispatch Task; it does not say Node will spawn Task. `launch.mjs` has no `--root` (cwd is the swarm root). Full profile and `npm run check` include Swarm. Engines stay `>=22 <25` in INSTALL and Skill install notes.
+- `actions/checkout` pinned at v7.0.1 and `actions/setup-node` at v7.0.0 (Node 24 action runtime) to drop the Node 20 deprecation warning on those actions.
+- README and INSTALL split clone-the-tooling from Memory CLI against a target repo. `--version` needs no `npm install`. `npm start` does not start the Memory CLI and does not spawn host Task.
+- Local swarm wording: Node role-workers plus `127.0.0.1:43147`; the host LLM still dispatches Task. Skill text no longer says the Memory CLI has “no network service” while documenting that port.
 - `record next` folds `next_action.status_changed`. Inspect NEXT and sealed-epoch resume text keep only planned or in-progress next actions; a closed next action does not delete the historical failure.
 - Folded evidence keeps the Git HEAD from `workspaceAtRecord`. A later journal write on a clean tree does not revive authorizing evidence from a previous commit.
 - Swarm path leases are case-folded (`Forge/` overlaps `forge/`). The Integrator roster role is gone; there is no merge queue.
@@ -13,11 +18,11 @@
 - Live swarm repair stops after 2 hypothesis failures or 3 no-progress attempts. `repairTaskId` is not reopened forever.
 - Hot HISTORY seals into `.continuity/epochs/` when a write would exceed 8 MiB. Fold still reads sealed segments plus hot HISTORY. Next-step stays on the anchor.
 - `/continuity` makes the host agent the Conductor: recover memory, fill the task database from authorized journal work, and have the host LLM dispatch isolated Task sub-agents across analysis, implementation, blind verification, security, and review. `launch.mjs` is deterministic Node role-workers plus a sqlite execution projection and the control surface. Node does not spawn host Task.
-- `dispatch.mjs` prints a disjoint spawn `wave[]` so the host LLM can dispatch isolated Task sub-agents without path collisions. Blind security/review workers read leased source files instead of trusting implementer notes.
+- `dispatch.mjs` prints a path-disjoint `wave[]` so the host LLM can dispatch isolated Task sub-agents without path collisions. Blind security/review workers read leased source files instead of trusting implementer notes.
 - Swarm roster covers analyst, security, reviewer, and (at size 10+) a Manager who watches leases and does not edit product files. Conductor and Manager never take product leases.
 - `GET /api/swarm` includes dispatch `packets[]` so the host LLM can dispatch Cursor/Grok Task sub-agents from the same sqlite execution projection. Blind packets omit implementer context.
 - `npm start` is an alias for `npm run launch`. After clone, `launch.mjs` starts the Node role-workers and control surface without a second prompt.
-- Autonomous swarm: SQLite execution projection with journal task/event ids, deterministic `launch.mjs` role-workers, path leases, standing order on launch, and a local control surface. The host LLM dispatches Task sub-agents.
+- Local swarm: SQLite execution projection with journal task/event ids, deterministic `launch.mjs` role-workers, path leases, standing order on launch, and a local control surface. The host LLM dispatches Task sub-agents; Node does not spawn host Task.
 - Swarm memory records lessons, failures, and playbooks. User accept is only `record accept --as user`. The HTTP control-surface Accept control is not user accept. `mission.accepted` is not user accept.
 - Pulse is not the user product. `planPulse` is a test fixture. The default wave does not build Pulse under `forge/`. Markdown (`forge/MEMORY.md`, `forge/HANDOFF.md`) is a view, not a store.
 - Package validation inventories a Git worktree from `git ls-files --cached`, so ignored or untracked local notes (including `.superpowers/`) are not scanned as public product text.
