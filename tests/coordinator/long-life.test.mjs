@@ -15,7 +15,8 @@ const initTemplate = path.join(repoRoot, 'continuity', 'assets', 'init-v3.templa
 const CASES = [
   ['coordinator-planner-is-not-pulse', assertCoordinatorPlannerIsNotPulse],
   ['coordinator-exhausted-no-eval', assertCoordinatorExhaustedHasNoEval],
-  ['coordinator-freshness-not-user-accept', assertCoordinatorFreshnessIsNotUserAccept],
+  ['coordinator-freshness-stale-after-commit', assertCoordinatorFreshnessStaleAfterCommit],
+  ['coordinator-freshness-not-user-accept', assertCoordinatorDoesNotAccept],
 ];
 
 export async function run() {
@@ -109,16 +110,14 @@ async function assertCoordinatorExhaustedHasNoEval() {
   }
 }
 
-async function assertCoordinatorFreshnessIsNotUserAccept() {
-  const repo = makeRepository('coord-long-life-fresh');
+async function assertCoordinatorFreshnessStaleAfterCommit() {
+  const repo = makeRepository('coord-long-life-stale');
   try {
     assert.equal(runCli(continuityCli, repo, ['init', '--schema', '3', '--file', initTemplate]).status, 0);
     recordAuthorizingResult(repo);
-
     writeFileSync(path.join(repo, 'AFTER.md'), 'commit after authorizing result\n');
     execFileSync('git', ['-C', repo, 'add', 'AFTER.md'], { stdio: 'ignore' });
     execFileSync('git', ['-C', repo, 'commit', '-qm', 'stale the authorizing result'], { stdio: 'ignore' });
-
     const inspect = runCli(continuityCli, repo, ['inspect']);
     assert.equal(inspect.status, 0, inspect.stderr);
     const inspectView = JSON.parse(runCli(continuityCli, repo, ['inspect', '--json']).stdout);
@@ -128,8 +127,21 @@ async function assertCoordinatorFreshnessIsNotUserAccept() {
       || freshnessValues.includes('stale')
       || /STALE (?!none\b)/.test(inspect.stdout);
     assert.ok(staleReported, 'coordinator inspect freshness must be stale after a new commit');
-    assert.equal(readyView.userAcceptance, 'pending');
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
 
+async function assertCoordinatorDoesNotAccept() {
+  const repo = makeRepository('coord-long-life-accept');
+  try {
+    assert.equal(runCli(continuityCli, repo, ['init', '--schema', '3', '--file', initTemplate]).status, 0);
+    recordAuthorizingResult(repo);
+    writeFileSync(path.join(repo, 'AFTER.md'), 'commit after authorizing result\n');
+    execFileSync('git', ['-C', repo, 'add', 'AFTER.md'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repo, 'commit', '-qm', 'stale the authorizing result'], { stdio: 'ignore' });
+    const readyView = JSON.parse(runCli(continuityCli, repo, ['inspect', 'ready', '--json']).stdout);
+    assert.equal(readyView.userAcceptance, 'pending');
     const runtime = createCoordinatorRuntime({
       root: repo,
       config: {
