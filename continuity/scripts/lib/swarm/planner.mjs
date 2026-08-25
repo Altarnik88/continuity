@@ -144,6 +144,171 @@ export function planPulse() {
   ];
 }
 
+function asList(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function uniqueIds(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function isPulseNamed(task) {
+  return /pulse/i.test(`${task?.id ?? ''}${task?.taskId ?? ''}${task?.title ?? ''}`);
+}
+
+function isPulseProductTask(task) {
+  const id = String(task?.id ?? task?.taskId ?? '');
+  const title = String(task?.title ?? '');
+  if (/task-scaffold/i.test(id) || /scaffold the pulse/i.test(title)) return true;
+  const paths = [...asList(task?.paths), ...asList(task?.ownershipScope), ...asList(task?.pathOwnership)].join(' ');
+  return /pulse/i.test(`${id} ${title}`) && /(^|[ /])forge(\/|$)/.test(paths);
+}
+
+function readGoal(input) {
+  if (!input || typeof input !== 'object') return null;
+  const fromList = asList(input.goals);
+  const listed = input.finalGoalId
+    ? fromList.find((item) => (item?.goalId ?? item?.id) === input.finalGoalId)
+    : fromList.find((item) => item?.isFinal) ?? fromList[0];
+  const goal = input.goal ?? input.finalGoal ?? listed ?? null;
+  if (!goal || typeof goal !== 'object') return null;
+  const goalId = goal.goalId ?? goal.id;
+  if (!goalId || goalId === 'none') return null;
+  return { ...goal, goalId };
+}
+
+function readCriteria(input, goal) {
+  if (!input || typeof input !== 'object') return [];
+  const listed = [...asList(input.criteria), ...asList(input.criterion)]
+    .map((item) => (typeof item === 'string' ? { criterionId: item } : item))
+    .filter((item) => item && (item.criterionId ?? item.id))
+    .map((item) => ({ ...item, criterionId: item.criterionId ?? item.id }));
+  if (listed.length) return uniqueByCriterion(listed);
+  return uniqueIds(asList(goal?.criterionIds)).map((criterionId) => ({ criterionId }));
+}
+
+function uniqueByCriterion(items) {
+  const seen = new Set();
+  const out = [];
+  for (const item of items) {
+    if (seen.has(item.criterionId)) continue;
+    seen.add(item.criterionId);
+    out.push(item);
+  }
+  return out;
+}
+
+function readJournalTasks(input) {
+  if (!input || typeof input !== 'object') return [];
+  const accumulator = input.taskAccumulator;
+  const seen = new Set();
+  const out = [];
+  for (const task of [
+    ...asList(accumulator?.tasks),
+    ...asList(input.tasks),
+    ...asList(input.availableTasks),
+    ...asList(input.activeTasks),
+  ]) {
+    if (!task || typeof task !== 'object') continue;
+    const id = task.id ?? task.taskId;
+    if (!id || seen.has(id) || isPulseProductTask(task)) continue;
+    seen.add(id);
+    out.push(task);
+  }
+  return out;
+}
+
+function ownershipScopeOf(task, criterion) {
+  const claims = uniqueIds([
+    ...asList(task?.ownershipScope),
+    ...asList(task?.pathOwnership),
+    ...asList(task?.paths),
+  ]);
+  if (claims.length) return claims;
+  const scope = criterion?.scope;
+  if (typeof scope === 'string' && scope.trim()) return [scope.trim()];
+  return ['continuity'];
+}
+
+function focusedVerificationOf(task, criterion) {
+  const fromTask = asList(task?.focusedVerification).filter((item) => typeof item === 'string' && item);
+  if (fromTask.length) return fromTask;
+  const verification = criterion?.verification;
+  if (typeof verification === 'string' && verification.trim() && verification !== 'unverified') {
+    return [verification.trim()];
+  }
+  return [];
+}
+
+function kindFromClass(value) {
+  if (value === 'tests' || value === 'test') return 'test';
+  if (value === 'security' || value === 'review' || value === 'handoff' || value === 'analyze') return value;
+  return 'write';
+}
+
+function priorityNumber(value) {
+  if (Number.isFinite(value)) return value;
+  if (value === 'blocker') return 1;
+  if (value === 'verification') return 20;
+  if (value === 'backlog') return 90;
+  return 10;
+}
+
+function projectJournalTask(task, goal, criteria) {
+  const id = task.id ?? task.taskId;
+  const criterionIds = uniqueIds(asList(task.criterionIds).length
+    ? asList(task.criterionIds)
+    : criteria.map((item) => item.criterionId));
+  const criterion = criteria.find((item) => criterionIds.includes(item.criterionId)) ?? criteria[0];
+  const ownershipScope = ownershipScopeOf(task, criterion);
+  return {
+    id,
+    taskId: id,
+    title: task.title ?? id,
+    kind: task.kind ?? kindFromClass(task.class),
+    priority: priorityNumber(task.priority),
+    paths: asList(task.paths).length ? asList(task.paths) : ownershipScope,
+    deps: asList(task.deps).length ? asList(task.deps) : asList(task.dependencyIds),
+    spec: task.spec && typeof task.spec === 'object' ? task.spec : {},
+    goalId: task.goalId ?? goal.goalId,
+    criterionIds,
+    ownershipScope,
+    focusedVerification: focusedVerificationOf(task, criterion),
+  };
+}
+
+function cutCriterionTask(goal, criterion, index) {
+  const criterionId = criterion.criterionId;
+  const id = `task-${criterionId}`;
+  const ownershipScope = ownershipScopeOf(null, criterion);
+  return {
+    id,
+    taskId: id,
+    title: `Cover ${criterionId}`,
+    kind: 'write',
+    priority: 10 + index,
+    paths: ownershipScope,
+    deps: [],
+    spec: {},
+    goalId: goal.goalId,
+    criterionIds: [criterionId],
+    ownershipScope,
+    focusedVerification: focusedVerificationOf(null, criterion),
+  };
+}
+
+export function planFromGoal(inspectOrInit) {
+  const goal = readGoal(inspectOrInit);
+  const criteria = readCriteria(inspectOrInit, goal);
+  if (!goal || !criteria.length) return [];
+  const existing = readJournalTasks(inspectOrInit)
+    .filter((task) => !task.goalId || task.goalId === goal.goalId)
+    .map((task) => projectJournalTask(task, goal, criteria));
+  if (existing.length) return existing;
+  return criteria.map((criterion, index) => cutCriterionTask(goal, criterion, index));
+}
+
 export function planContinuations(state) {
   const existing = new Set((state.tasks ?? []).map((task) => task.id));
   const succeeded = new Set((state.tasks ?? []).filter((task) => task.status === 'succeeded').map((task) => task.id));
@@ -189,5 +354,7 @@ export function planContinuations(state) {
       },
     },
   ];
-  return next.filter((task) => !existing.has(task.id));
+  const queued = next.filter((task) => !existing.has(task.id));
+  if (readGoal(state)) return queued;
+  return queued.filter((task) => !isPulseNamed(task));
 }
