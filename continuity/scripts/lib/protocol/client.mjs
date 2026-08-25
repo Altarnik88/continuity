@@ -197,13 +197,18 @@ export function createCliClient({
       });
     },
     recordEvidence(options) {
-      const recorded = record('evidence', {
+      const fields = {
         task: options.taskId,
         expected: options.expected,
-        actual: options.actual,
         kind: options.kind || 'command',
-        'exit-code': options.exitCode,
-      }, {
+      };
+      if (options.run) {
+        fields.run = Array.isArray(options.run) ? options.run.join(' ') : options.run;
+      } else {
+        fields.actual = options.actual;
+        fields['exit-code'] = options.exitCode;
+      }
+      const recorded = record('evidence', fields, {
         root: options.root,
         as: options.as || 'subagent',
         actorId: options.actorId,

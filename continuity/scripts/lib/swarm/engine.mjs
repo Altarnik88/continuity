@@ -304,15 +304,20 @@ export function createEngine(options = {}) {
       });
       return;
     }
+    const runArgv = Array.isArray(evidence?.run) && evidence.run.length
+      ? evidence.run
+      : Array.isArray(taskSpec(live).run) && taskSpec(live).run.length
+        ? taskSpec(live).run
+        : null;
+    if (!runArgv) return;
     const recordedEvidence = safeRecord(() => client.recordEvidence({
       root,
       actorId,
       runId,
       taskId: continuityTaskId,
       expected: evidence?.expected || 'focused check exits 0',
-      actual: evidence?.actual || 'exit 0',
       kind: evidence?.kind || 'command',
-      exitCode: Number.isInteger(evidence?.exitCode) ? evidence.exitCode : 0,
+      run: runArgv,
     }));
     const evidenceId = recordedEvidence?.evidenceId;
     if (!evidenceId) return;
@@ -586,7 +591,12 @@ export function createEngine(options = {}) {
       mkdirSync(path.dirname(target), { recursive: true });
       writeFileSync(target, fileContents(key));
     }
-    const result = await runNode(task.spec.run ?? ['--test'], root);
+    const runArgv = Array.isArray(task.spec.run) && task.spec.run.length ? task.spec.run : null;
+    if (!runArgv) {
+      finish(task, agent, { ok: false, message: 'authorizing evidence requires an observed --run command' });
+      return;
+    }
+    const result = await runNode(runArgv, root);
     if (result.code !== 0) {
       const rawOutput = String(result.stderr || result.stdout || 'verification failed');
       const safe = sanitizeMemoryRecord({
@@ -636,9 +646,8 @@ export function createEngine(options = {}) {
       message: 'Verification passed',
       evidence: {
         expected: 'focused check exits 0',
-        actual: 'exit 0',
         kind: 'test',
-        exitCode: 0,
+        run: runArgv,
       },
     });
   }

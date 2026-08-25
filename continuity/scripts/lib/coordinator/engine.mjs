@@ -84,16 +84,7 @@ function recordAuthorizingEvidence(client, {
     if (!evidenceId) fail('record evidence did not echo evidenceId', 3);
     return { ...recorded, evidenceId, document: parsed };
   }
-  return client.recordEvidence({
-    root,
-    actorId,
-    runId,
-    taskId,
-    expected: expected || 'focused check exits 0',
-    actual: actual || 'exit 0',
-    kind: kind || 'command',
-    exitCode,
-  });
+  fail('authorizing evidence requires an observed --run command', 2);
 }
 
 function explicitRollover(options = {}) {
