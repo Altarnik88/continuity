@@ -10,6 +10,8 @@ In Cursor or Grok, `/continuity` is the same standing order with a live host Con
 npm start
 node continuity/scripts/launch.mjs
 node continuity/scripts/launch.mjs --once --swarm-size 8
+node continuity/scripts/supervisor.mjs --once
+node continuity/scripts/dispatch.mjs
 ```
 
 `npm start` / `npm run launch` starts the standing order and the control surface. That process is Node role-workers plus sqlite and the control surface, not host Task. The host LLM dispatches Task sub-agents.
@@ -18,7 +20,9 @@ node continuity/scripts/launch.mjs --once --swarm-size 8
 
 - `data/swarm.sqlite` — execution projection with journal task/event ids: mission, agents, tasks, path leases, lessons, failures, playbooks
 - `data/memory.ndjson` — append-only copy of the same lessons so a killed process is not the last copy
-- `forge/` — workspace views; `MEMORY.md` and `HANDOFF.md` are views, not stores. Pulse is not the user product; `planPulse` is a test fixture
+- `forge/` — workspace views; `MEMORY.md` and `HANDOFF.md` are untrusted views, not stores. Pulse is not the user product; `planPulse` is a test fixture
+- `data/host-packet.json` — supervisor packet for a host outside chat. It does not accept.
+- `data/waves.ndjson` — replayable wave journal (`waveId`, taken, rejected, `stopReason`)
 - `.continuity/` — Core journal. `HISTORY` is truth
 
 When authorized journal work is done, status may be `waiting_accept`. That is not acceptance. `mission.accepted` is not user accept. Only `record accept --as user` accepts. Relaunching the same root reloads sqlite and the memory log; it does not invent a new standing order. At swarm size 10 or more the roster includes a Manager.

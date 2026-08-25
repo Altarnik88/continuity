@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { makeRepository, runCli } from '../helpers/repository.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const continuityCli = path.join(repoRoot, 'continuity', 'scripts', 'continuity.mjs');
+const coordinatorCli = path.join(repoRoot, 'continuity', 'scripts', 'coordinator.mjs');
 const initTemplate = path.join(repoRoot, 'continuity', 'assets', 'init-v3.template.json');
 
 const CASES = [
@@ -17,6 +18,7 @@ const CASES = [
   ['coordinator-exhausted-no-eval', assertCoordinatorExhaustedHasNoEval],
   ['coordinator-freshness-stale-after-commit', assertCoordinatorFreshnessStaleAfterCommit],
   ['coordinator-freshness-not-user-accept', assertCoordinatorDoesNotAccept],
+  ['coordinator-context-used-stops-assign', assertCoordinatorContextUsedStopsAssign],
 ];
 
 export async function run() {
@@ -165,6 +167,50 @@ async function assertCoordinatorDoesNotAccept() {
       false,
       'coordinator must not turn mission.accepted into user accept',
     );
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
+
+async function assertCoordinatorContextUsedStopsAssign() {
+  const repo = makeRepository('coord-context-used');
+  try {
+    assert.equal(runCli(continuityCli, repo, ['init', '--schema', '3', '--file', initTemplate]).status, 0);
+    const task = runCli(continuityCli, repo, [
+      'record', 'task', '--title', 'Context threshold task',
+      '--priority', 'core', '--size', 'S', '--class', 'function',
+      '--as', 'coordinator', '--actor-id', 'actor-coord', '--run-id', 'run-coord-01',
+    ]);
+    assert.equal(task.status, 0, task.stderr);
+    const runtime = createCoordinatorRuntime({
+      root: repo,
+      config: {
+        adapter: 'local-process',
+        slots: 1,
+        timeoutMs: 15_000,
+        memoryCli: continuityCli,
+        executorActorId: 'actor-exec-ctx',
+        verifierActorId: 'actor-verify-ctx',
+        executorRunId: 'run-exec-ctx',
+        verifierRunId: 'run-verify-ctx',
+        liveProofRequired: true,
+      },
+    });
+    const planned = runtime.plan({ runId: 'run-coord-context' });
+    assert.notEqual(planned.state?.status, 'blocked');
+    const ran = runtime.run({ runId: 'run-coord-context-run', contextUsed: 0.7 });
+    assert.equal(ran.state.status, 'paused');
+    assert.equal(ran.state.stopReason, 'context-threshold');
+    const history = readFileSync(path.join(repo, '.continuity', 'HISTORY.ndjson'), 'utf8');
+    assert.match(history, /context_handoff\.recorded/);
+    const cli = spawnSync(process.execPath, [
+      coordinatorCli, 'run', '--root', repo, '--run', 'run-coord-context-cli', '--context-used', '0.7',
+    ], {
+      encoding: 'utf8',
+      env: { ...process.env, NO_COLOR: '1' },
+    });
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.match(cli.stdout, /context-threshold|paused/);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }

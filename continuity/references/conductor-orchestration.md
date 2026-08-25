@@ -22,7 +22,6 @@ Develop the product. Do not wait for a new chat. Keep goals, failures, and playb
 | Security | size ≥ 7 | security notes for leased paths | rewrite features |
 | Reviewer | size ≥ 8 | independent review artifact | reuse writer context |
 | Archivist | always | handoff and memory files | accept |
-| Integrator | size ≥ 12 | merge conflicts across finished leases | start work that still has an active lease |
 
 ## Parallel dispatch
 

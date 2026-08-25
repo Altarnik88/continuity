@@ -322,7 +322,23 @@ export function planFromGoal(inspectOrInit) {
   return criteria.map((criterion, index) => cutCriterionTask(goal, criterion, index));
 }
 
+function isVerificationKind(task) {
+  return task?.kind === 'test' || task?.kind === 'security' || task?.kind === 'review';
+}
+
+function isNewFunctionTask(task) {
+  return task?.kind === 'write' || task?.kind === 'analyze' || task?.class === 'function';
+}
+
+export function planAfterWaitingAccept(state = {}) {
+  return (state.authorizedContinuations ?? [])
+    .filter((task) => isVerificationKind(task) && !isNewFunctionTask(task) && !isPulseFollowOn(task));
+}
+
 export function planContinuations(state) {
+  if (state?.mission?.status === 'waiting_accept') {
+    return planAfterWaitingAccept(state);
+  }
   const existing = new Set((state.tasks ?? []).map((task) => task.id));
   const succeeded = new Set((state.tasks ?? []).filter((task) => task.status === 'succeeded').map((task) => task.id));
   if (!succeeded.has('task-handoff')) return [];
@@ -335,15 +351,6 @@ export function planContinuations(state) {
       paths: ['forge/MEMORY.md'],
       deps: ['task-handoff'],
       spec: {},
-    },
-    {
-      id: 'task-changelog',
-      title: 'Record what the swarm learned in the changelog',
-      kind: 'write',
-      priority: 110,
-      paths: ['forge/CHANGELOG.md'],
-      deps: ['task-handoff'],
-      spec: { files: { 'forge/CHANGELOG.md': 'CHANGELOG.md' } },
     },
   ];
   return next.filter((task) => !existing.has(task.id) && !isPulseFollowOn(task));

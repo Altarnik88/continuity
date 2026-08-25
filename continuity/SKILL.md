@@ -31,6 +31,7 @@ The downloaded product also runs a local swarm so work continues without a new c
 ```bash
 node "/absolute/path/to/continuity/scripts/launch.mjs"
 node "/absolute/path/to/continuity/scripts/launch.mjs" --once --swarm-size 8
+node "/absolute/path/to/continuity/scripts/supervisor.mjs" --once
 node "/absolute/path/to/continuity/scripts/dispatch.mjs"
 ```
 

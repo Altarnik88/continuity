@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   closeSync, existsSync, fsyncSync, ftruncateSync, mkdirSync, openSync,
-  renameSync, rmSync, unlinkSync, writeFileSync, writeSync,
+  readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync, writeSync,
 } from 'node:fs';
 import path from 'node:path';
 
@@ -105,6 +105,12 @@ function writeOwned(file, bytes) {
   }
 }
 
+function replaceOwned(file, bytes) {
+  const temporary = `${file}.tmp-${process.pid}-${randomUUID()}`;
+  writeOwned(temporary, bytes);
+  renameSync(temporary, file);
+}
+
 function replaceProjection(root, state) {
   const files = assertStoreSafe(root);
   if (process.env.NODE_ENV === 'test' && process.env.PROJECT_MEMORY_TEST_FAIL_V3_CURRENT_REPLACE === '1') {
@@ -117,29 +123,63 @@ function replaceProjection(root, state) {
   renameSync(temporary, files.current);
 }
 
-export function readV3Journal(root, { allowEmpty = false } = {}) {
-  const files = assertStoreSafe(root);
-  if (!existsSync(files.history)) {
-    if (allowEmpty) return { files, events: [], committedBytes: 0, trailingBytes: 0, state: null, projection: 'missing' };
-    fail('history has no committed events');
-  }
-  const raw = readOwnedFileBounded(files.history, MAX_JOURNAL_BYTES, 'HISTORY.ndjson total');
+function parseCommittedJournal(raw, label) {
   const text = raw.toString('utf8');
   const lastLf = text.lastIndexOf('\n');
-  if (lastLf < 0) fail('journal has no committed event');
+  if (lastLf < 0) fail(`${label} has no committed event`);
   const committed = text.slice(0, lastLf + 1);
   const trailingBytes = raw.length - Buffer.byteLength(committed, 'utf8');
   const lines = committed.split('\n').filter(Boolean);
   const events = lines.map((line, index) => {
-    if (Buffer.byteLength(line, 'utf8') > MAX_EVENT_BYTES) fail(`history event ${index + 1} exceeds the size limit`);
+    if (Buffer.byteLength(line, 'utf8') > MAX_EVENT_BYTES) fail(`${label} event ${index + 1} exceeds the size limit`);
     try {
       return JSON.parse(line);
     } catch {
-      fail(`history event ${index + 1} is not valid JSON`);
+      fail(`${label} event ${index + 1} is not valid JSON`);
     }
   });
+  return {
+    events,
+    committedBytes: Buffer.byteLength(committed, 'utf8'),
+    trailingBytes,
+  };
+}
+
+function listSealedEpochFiles(files) {
+  if (!files.epochs || !existsSync(files.epochs)) return [];
+  const rows = readdirSync(files.epochs)
+    .filter((name) => name.endsWith('.ndjson'))
+    .map((name) => {
+      const file = path.join(files.epochs, name);
+      try {
+        const raw = readOwnedFileBounded(file, MAX_JOURNAL_BYTES, `sealed epoch ${name}`);
+        const parsed = parseCommittedJournal(raw, `sealed epoch ${name}`);
+        return { file, sequence: parsed.events[0]?.sequence ?? 0, events: parsed.events };
+      } catch {
+        fail(`sealed epoch ${name} is unreadable`);
+      }
+      return null;
+    })
+    .filter(Boolean);
+  rows.sort((left, right) => left.sequence - right.sequence);
+  return rows;
+}
+
+export function readV3Journal(root, { allowEmpty = false } = {}) {
+  const files = assertStoreSafe(root);
+  const sealed = listSealedEpochFiles(files);
+  const events = sealed.flatMap((row) => row.events);
+  let committedBytes = 0;
+  let trailingBytes = 0;
+  if (existsSync(files.history)) {
+    const raw = readOwnedFileBounded(files.history, MAX_JOURNAL_BYTES, 'HISTORY.ndjson total');
+    const hot = parseCommittedJournal(raw, 'HISTORY.ndjson');
+    events.push(...hot.events);
+    committedBytes = hot.committedBytes;
+    trailingBytes = hot.trailingBytes;
+  }
   if (!events.length) {
-    if (allowEmpty) return { files, events, committedBytes: 0, trailingBytes, state: null, projection: 'missing' };
+    if (allowEmpty) return { files, events, committedBytes, trailingBytes, state: null, projection: 'missing', sealedEpochs: sealed.length };
     fail('history has no committed events');
   }
   if (events[0]?.schemaVersion !== SCHEMA_VERSION) fail('store is not a v3 journal', 5);
@@ -154,7 +194,13 @@ export function readV3Journal(root, { allowEmpty = false } = {}) {
     }
   }
   return {
-    files, events, committedBytes: Buffer.byteLength(committed, 'utf8'), trailingBytes, state, projection,
+    files,
+    events,
+    committedBytes,
+    trailingBytes,
+    state,
+    projection,
+    sealedEpochs: sealed.length,
   };
 }
 
@@ -186,15 +232,20 @@ export function rebuildV3(root, { dryRun = false } = {}) {
 function persistEvents(root, events, { existing } = {}) {
   const files = storePaths(root);
   const historyBytes = Buffer.concat(events.map(eventLine));
-  if (existing) {
+  if (historyBytes.length > MAX_JOURNAL_BYTES) fail('HISTORY.ndjson would exceed the total size limit');
+  if (existing && existsSync(files.history)) {
+    const start = existing.committedBytes;
+    if (start + historyBytes.length > MAX_JOURNAL_BYTES) {
+      sealHotJournalUnlocked(root, existing, { keepHot: true });
+      replaceOwned(files.history, historyBytes);
+      return;
+    }
     const fd = openSync(files.history, 'r+');
     try {
       if (existing.trailingBytes) {
         ftruncateSync(fd, existing.committedBytes);
         fsyncSync(fd);
       }
-      const start = existing.committedBytes;
-      if (start + historyBytes.length > MAX_JOURNAL_BYTES) fail('HISTORY.ndjson would exceed the total size limit');
       let offset = 0;
       while (offset < historyBytes.length) {
         offset += writeSync(fd, historyBytes, offset, historyBytes.length - offset, start + offset);
@@ -206,6 +257,49 @@ function persistEvents(root, events, { existing } = {}) {
     return;
   }
   writeOwned(files.history, historyBytes);
+}
+
+function nextActionText(state) {
+  const pending = (state?.nextActions ?? []).find((item) => item.status !== 'done' && item.status !== 'cancelled');
+  return pending?.action || pending?.next || 'Resume from the sealed epoch anchor; do not guess';
+}
+
+export function sealHotJournal(root) {
+  assertMutationAllowed(root);
+  const release = acquireLock(root);
+  try {
+    const store = readV3Journal(root);
+    return sealHotJournalUnlocked(root, store);
+  } finally {
+    release();
+  }
+}
+
+function sealHotJournalUnlocked(root, store, { keepHot = false } = {}) {
+  const files = storePaths(root);
+  if (!existsSync(files.history)) fail('hot HISTORY is missing');
+  const raw = readFileSync(files.history);
+  if (!raw.length) fail('hot HISTORY is empty');
+  const last = store.events.at(-1);
+  const epochId = last?.epochId || `epoch-${randomUUID()}`;
+  mkdirSync(files.epochs, { recursive: true });
+  const dest = path.join(files.epochs, `${epochId}-${last.sequence}.ndjson`);
+  if (existsSync(dest)) fail('sealed epoch already exists');
+  writeOwned(dest, raw);
+  const anchor = {
+    epochId,
+    lastEventHash: last.eventHash,
+    lastSequence: last.sequence,
+    sealedAt: new Date().toISOString(),
+    nextStep: nextActionText(store.state),
+    evidenceIds: (store.state?.evidence ?? []).slice(-8).map((item) => item.evidenceId),
+    goalId: store.state?.finalGoalId || null,
+    historySha256: createHash('sha256').update(raw).digest('hex'),
+    historyBytes: raw.length,
+  };
+  writeOwned(path.join(files.epochs, `${epochId}-${last.sequence}.anchor.json`), Buffer.from(`${JSON.stringify(anchor)}\n`));
+  if (!keepHot) unlinkSync(files.history);
+  return anchor;
 }
 
 export function initializeV3(root, jsonTextOrBytes, options = {}) {

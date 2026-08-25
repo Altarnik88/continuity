@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Swarm path leases are case-folded (`Forge/` overlaps `forge/`). The Integrator roster role is gone; there is no merge queue.
+- `mission.title` copies the journal `goalId` or stays empty. `mission.accepted` is an inspect copy, not user accept.
+- After `waiting_accept`, dispatch does not invent function work. Ready verification/security on an existing scope may remain; empty ready stays `wave: []`.
+- Coordinator CLI takes host `--context-used 0..1`. At 0.65 it pauses assign and records context.
+- `supervisor.mjs` writes `data/host-packet.json` from inspect ready and read-only leases. It does not accept.
+- Swarm handoff writes machine `ContextHandoff` fields first. `MEMORY.md` is marked `untrusted-view`.
+- Live swarm repair stops after 2 hypothesis failures or 3 no-progress attempts. `repairTaskId` is not reopened forever.
+- Hot HISTORY seals into `.continuity/epochs/` when a write would exceed 8 MiB. Fold still reads sealed segments plus hot HISTORY. Next-step stays on the anchor.
 - `/continuity` makes the host agent the Conductor: recover memory, fill the task database from authorized journal work, and have the host LLM dispatch isolated Task sub-agents across analysis, implementation, blind verification, security, and review. `launch.mjs` is deterministic Node role-workers plus a sqlite execution projection and the control surface. Node does not spawn host Task.
 - `dispatch.mjs` prints a disjoint spawn `wave[]` so the host LLM can dispatch isolated Task sub-agents without path collisions. Blind security/review workers read leased source files instead of trusting implementer notes.
 - Swarm roster covers analyst, security, reviewer, and (at size 10+) a Manager who watches leases and does not edit product files. Conductor and Manager never take product leases.

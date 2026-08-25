@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createEngine } from '../../continuity/scripts/lib/swarm/engine.mjs';
+import { readV3Journal, sealHotJournal } from '../../continuity/scripts/lib/core/journal-v3.mjs';
 import { parseRecordedEvent } from '../../continuity/scripts/lib/protocol/index.mjs';
 import { makeRepository, runCli } from '../helpers/repository.mjs';
 
@@ -35,6 +36,14 @@ export async function run() {
     } catch (error) {
       failed.push('mission-accepted-not-user-accept');
       console.log(`long-life core mission-accepted-not-user-accept: FAIL ${error.message}`);
+    }
+
+    try {
+      assertJournalSealKeepsGoal(repo);
+      console.log('long-life core journal-seal-keeps-goal: PASS');
+    } catch (error) {
+      failed.push('journal-seal-keeps-goal');
+      console.log(`long-life core journal-seal-keeps-goal: FAIL ${error.message}`);
     }
   } finally {
     rmSync(repo, { recursive: true, force: true });
@@ -104,4 +113,27 @@ async function assertMissionAcceptedIsNotUserAccept(repo) {
   } finally {
     engine.stop();
   }
+}
+
+function assertJournalSealKeepsGoal(repo) {
+  const before = JSON.parse(runCli(continuityCli, repo, ['inspect', 'ready', '--json']).stdout);
+  assert.ok(before.goal?.goalId, 'journal goal must exist before seal');
+  const anchor = sealHotJournal(repo);
+  assert.ok(anchor.epochId);
+  assert.ok(anchor.nextStep);
+  const sealed = readdirSync(path.join(repo, '.continuity', 'epochs'))
+    .filter((name) => name.endsWith('.ndjson'));
+  assert.ok(sealed.length >= 1, 'sealed epoch file must exist');
+  assert.equal(existsSync(path.join(repo, '.continuity', 'HISTORY.ndjson')), false);
+  const task = runCli(continuityCli, repo, [
+    'record', 'task', '--title', 'After sealed epoch',
+    '--priority', 'core', '--size', 'S', '--class', 'function',
+    '--as', 'coordinator', '--actor-id', 'actor-coord', '--run-id', 'run-after-seal',
+  ]);
+  assert.equal(task.status, 0, task.stderr);
+  const store = readV3Journal(repo);
+  assert.ok(store.sealedEpochs >= 1);
+  assert.ok(store.state.finalGoalId || store.state.goals.length);
+  const after = JSON.parse(runCli(continuityCli, repo, ['inspect', 'ready', '--json']).stdout);
+  assert.equal(after.goal?.goalId, before.goal.goalId);
 }

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createEngine } from '../../continuity/scripts/lib/swarm/engine.mjs';
 import { acquireEngineLock } from '../../continuity/scripts/lib/swarm/lock.mjs';
+import { pathsOverlap } from '../../continuity/scripts/lib/swarm/contract.mjs';
 import { planContinuations, planFromGoal } from '../../continuity/scripts/lib/swarm/planner.mjs';
 import { insertTask } from '../../continuity/scripts/lib/swarm/store.mjs';
 import { makeRepository, runCli } from '../helpers/repository.mjs';
@@ -22,6 +23,10 @@ const CASES = [
   ['dispatch-exhausted-no-eval', assertExhaustedDispatchHasNoEval],
   ['empty-write-not-auto-succeeded', assertEmptyWriteIsNotSucceeded],
   ['planner-is-not-pulse', assertPlannerIsNotPulse],
+  ['case-fold-leases', assertCaseFoldLeases],
+  ['waiting-accept-no-new-function', assertWaitingAcceptAddsNoFunction],
+  ['http-accept-does-not-write-core', assertHttpAcceptDoesNotWriteCore],
+  ['supervisor-host-packet', assertSupervisorHostPacket],
 ];
 
 export async function run() {
@@ -189,6 +194,92 @@ async function assertPlannerIsNotPulse() {
     'planContinuations must not enqueue Pulse-named tasks when a dummy journal goal is present',
   );
   assert.equal(hasEvalToken(withDummyGoal), false);
+}
+
+async function assertCaseFoldLeases() {
+  assert.equal(pathsOverlap(['Forge/src.mjs'], ['forge/src.mjs']), true);
+  const root = mkdtempSync(path.join(os.tmpdir(), 'long-life-casefold-'));
+  const engine = createEngine({ root, autoStart: false, paceMs: 0 });
+  try {
+    insertHeldLease(engine, 'task-held', 'Forge/src.mjs');
+    insertTask(engine.db, {
+      id: 'task-fold-other',
+      title: 'Overlapping folded path',
+      kind: 'write',
+      priority: 1,
+      paths: ['forge/src.mjs'],
+      deps: [],
+      spec: { files: { 'forge/src.mjs': 'src/domain.mjs' } },
+    }, () => new Date());
+    engine.db.prepare("UPDATE tasks SET status = 'ready' WHERE id = ?").run('task-fold-other');
+    engine.start();
+    await sleep(200);
+    const other = engine.getSnapshot().tasks.find((task) => task.id === 'task-fold-other');
+    assert.notEqual(other?.status, 'running', 'case-folded lease must block the second owner');
+    assert.notEqual(other?.status, 'succeeded');
+  } finally {
+    try { engine.stop(); } catch { /* closed */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+async function assertWaitingAcceptAddsNoFunction() {
+  const next = planContinuations({
+    mission: { status: 'waiting_accept' },
+    tasks: [{ id: 'task-handoff', title: 'Write the session handoff', status: 'succeeded', kind: 'handoff' }],
+  });
+  assert.equal(next.some((task) => task.kind === 'write' || task.class === 'function'), false);
+  const result = spawnSync(process.execPath, [dispatchJs, '--port', '1'], {
+    cwd: mkdtempSync(path.join(os.tmpdir(), 'long-life-waiting-dispatch-')),
+    encoding: 'utf8',
+    env: { ...process.env, NO_COLOR: '1' },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.deepEqual(report.wave, []);
+  assert.equal(report.fallback, false);
+}
+
+async function assertHttpAcceptDoesNotWriteCore() {
+  const repo = makeRepository('long-life-http-accept');
+  try {
+    assert.equal(runCli(continuityCli, repo, ['init', '--schema', '3', '--file', initTemplate]).status, 0);
+    const engine = createEngine({ root: repo, autoStart: false, paceMs: 0 });
+    try {
+      const before = readFileSync(path.join(repo, '.continuity', 'HISTORY.ndjson'), 'utf8');
+      if (typeof engine.accept === 'function') engine.accept();
+      const after = readFileSync(path.join(repo, '.continuity', 'HISTORY.ndjson'), 'utf8');
+      assert.equal(after, before, 'engine.accept must not write Core accept');
+      const ready = JSON.parse(runCli(continuityCli, repo, ['inspect', 'ready', '--json']).stdout);
+      assert.equal(ready.userAcceptance, 'pending');
+    } finally {
+      engine.stop();
+    }
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
+
+async function assertSupervisorHostPacket() {
+  const repo = makeRepository('long-life-supervisor');
+  const supervisorJs = path.join(repoRoot, 'continuity', 'scripts', 'supervisor.mjs');
+  try {
+    assert.equal(runCli(continuityCli, repo, ['init', '--schema', '3', '--file', initTemplate]).status, 0);
+    const result = spawnSync(process.execPath, [supervisorJs, '--once'], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: { ...process.env, NO_COLOR: '1' },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const packetPath = path.join(repo, 'data', 'host-packet.json');
+    assert.equal(existsSync(packetPath), true);
+    const packet = JSON.parse(readFileSync(packetPath, 'utf8'));
+    assert.equal(packet.accept, false);
+    assert.equal(packet.hostAbsent, true);
+    assert.ok(Array.isArray(packet.wave));
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 }
 
 function insertHeldLease(engine, taskId, filePath) {

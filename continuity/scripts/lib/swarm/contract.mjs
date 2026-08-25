@@ -8,17 +8,34 @@ export const STANDING_ORDER = [
   'An attempt is not evidence. A report is not verification. Only the user may accept.',
 ].join(' ');
 
+export const FORBIDDEN_VIEW_PATHS = Object.freeze([
+  'forge/HANDOFF.md',
+  'forge/HANDOFF.json',
+  'forge/MEMORY.md',
+  'data/memory.ndjson',
+]);
+
+export const REPAIR_HYPOTHESIS_LIMIT = 2;
+export const NO_PROGRESS_REPLAN_LIMIT = 3;
+
 export function clampSwarmSize(value) {
   const size = Number(value);
   if (!Number.isInteger(size)) return 8;
   return Math.min(20, Math.max(5, size));
 }
 
+function foldPath(value) {
+  return String(value ?? '').replaceAll('\\', '/').toLowerCase();
+}
+
 export function pathsOverlap(left = [], right = []) {
   for (const a of left) {
     for (const b of right) {
-      if (a === b) return true;
-      if (a.startsWith(`${b}/`) || b.startsWith(`${a}/`)) return true;
+      const foldedLeft = foldPath(a);
+      const foldedRight = foldPath(b);
+      if (!foldedLeft || !foldedRight) continue;
+      if (foldedLeft === foldedRight) return true;
+      if (foldedLeft.startsWith(`${foldedRight}/`) || foldedRight.startsWith(`${foldedLeft}/`)) return true;
     }
   }
   return false;
@@ -32,18 +49,30 @@ export function leaseConflict(held, candidatePaths, exceptTaskId) {
 }
 
 export function selectDispatchWave(tasks = []) {
+  return selectDispatchWaveReport(tasks).wave;
+}
+
+export function selectDispatchWaveReport(tasks = [], held = []) {
   const sorted = [...tasks].sort((left, right) => {
     const priority = (left.priority ?? 100) - (right.priority ?? 100);
     if (priority !== 0) return priority;
     return String(left.id).localeCompare(String(right.id));
   });
   const wave = [];
+  const rejected = [];
   for (const task of sorted) {
     const paths = task.paths ?? [];
-    if (wave.some((item) => pathsOverlap(item.paths ?? [], paths))) continue;
+    if (leaseConflict(held, paths, task.id)) {
+      rejected.push({ id: task.id, reason: 'lease-conflict' });
+      continue;
+    }
+    if (wave.some((item) => pathsOverlap(item.paths ?? [], paths))) {
+      rejected.push({ id: task.id, reason: 'path-overlap' });
+      continue;
+    }
     wave.push(task);
   }
-  return wave;
+  return { wave, rejected };
 }
 
 const EXECUTOR_NAMES = [
@@ -74,9 +103,6 @@ export function buildRoster(size) {
   if (swarmSize >= 10) {
     roster.push({ id: 'agent-manager', role: 'manager', name: 'Manager' });
   }
-  if (swarmSize >= 12) {
-    roster.push({ id: 'agent-integrator', role: 'integrator', name: 'Integrator' });
-  }
   let index = 0;
   while (roster.length < swarmSize) {
     const name = EXECUTOR_NAMES[index % EXECUTOR_NAMES.length];
@@ -95,23 +121,50 @@ export function isBlindKind(kind) {
   return kind === 'test' || kind === 'security' || kind === 'review';
 }
 
+export function isViewPath(value) {
+  const folded = foldPath(value);
+  return FORBIDDEN_VIEW_PATHS.some((item) => folded === item || folded.endsWith(`/${item}`));
+}
+
+export function allowedBlindPaths(paths = []) {
+  return paths.filter((item) => !isViewPath(item));
+}
+
 export function buildDispatchPacket(task) {
-  const paths = (task.paths ?? []).join(', ');
+  const rawPaths = task.paths ?? [];
+  const forbidden = [...new Set([
+    ...FORBIDDEN_VIEW_PATHS,
+    ...(task.forbiddenPaths ?? []),
+  ])];
+  const paths = isBlindKind(task.kind) ? allowedBlindPaths(rawPaths) : rawPaths;
+  const pathText = paths.join(', ');
   const blind = isBlindKind(task.kind);
   return {
     id: task.id,
     title: task.title,
     kind: task.kind,
-    paths: task.paths ?? [],
+    paths,
+    allowedPaths: paths,
+    forbiddenPaths: forbidden,
     deps: task.deps ?? [],
     blind,
     brief: blind
-      ? `${task.title}. Read only ${paths}. Do not read implementer notes, chat history, or other agents' reasoning. Use tests, the listed files, and available skills, MCP, and plugins.`
-      : `${task.title}. Own only ${paths}. Use available skills, MCP, and plugins. Do not edit paths you do not own.`,
+      ? `${task.title}. Read only ${pathText || 'the leased source paths'}. Do not read implementer notes, chat history, other agents' reasoning, forge/HANDOFF.md, forge/MEMORY.md, or data/memory.ndjson. Use tests, the listed files, and available skills, MCP, and plugins.`
+      : `${task.title}. Own only ${pathText}. Use available skills, MCP, and plugins. Do not edit paths you do not own.`,
   };
 }
 
 export function nowIso(clock = () => new Date()) {
   const value = clock();
   return (value instanceof Date ? value : new Date(value)).toISOString();
+}
+
+export function swarmRepairDecision({ attempts = 0, failureCount = 0 } = {}) {
+  if (Number(attempts) >= NO_PROGRESS_REPLAN_LIMIT) {
+    return { poison: true, reason: 'no-progress', replan: true };
+  }
+  if (Number(failureCount) >= REPAIR_HYPOTHESIS_LIMIT) {
+    return { poison: true, reason: 'hypothesis-exhausted', changeApproach: true };
+  }
+  return { poison: false, reason: null, replan: false, changeApproach: false };
 }

@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
 import { createCliClient, parseRecordedEvent, sanitizedSpawnEnv } from '../protocol/client.mjs';
+import { observeWorkspace } from '../core/workspace-v3.mjs';
 import { fileContents } from './craft.mjs';
 import {
   STANDING_ORDER,
@@ -12,7 +13,8 @@ import {
   clampSwarmSize,
   leaseConflict,
   nowIso,
-  selectDispatchWave,
+  selectDispatchWaveReport,
+  swarmRepairDecision,
 } from './contract.mjs';
 import { planContinuations, planFromGoal } from './planner.mjs';
 import {
@@ -370,20 +372,27 @@ export function createEngine(options = {}) {
       }));
       const ready = state.tasks.filter((task) => task.status === 'ready');
       const spawnable = ready.filter((task) => !leaseConflict(held, task.paths));
+      const report = selectDispatchWaveReport(spawnable, held);
       const packets = state.tasks
         .filter((task) => task.status === 'ready' || task.status === 'running')
         .map(buildDispatchPacket);
+      const inspect = readJournalInspect(root, client);
+      const mission = overlayMissionFromInspect(state.mission, inspect);
       return {
         ...state,
+        mission,
         standingOrder: STANDING_ORDER,
         files: listForge(root),
         inflight: inflight.size,
         maxInflight,
         packets,
-        wave: selectDispatchWave(spawnable).map(buildDispatchPacket),
+        wave: report.wave.map(buildDispatchPacket),
+        rejected: report.rejected,
+        freshness: viewFreshness(root),
       };
     },
     start() {
+      syncMissionFromInspect(db, { clock, root, client });
       const added = seedPlanFromGoal(db, { clock, root, client }) + enqueueContinuations();
       const pending = Number(get(db, "SELECT COUNT(*) AS n FROM tasks WHERE status NOT IN ('succeeded', 'failed')")?.n ?? 0);
       const status = pending > 0 ? 'running' : 'waiting_accept';
@@ -593,6 +602,17 @@ export function createEngine(options = {}) {
         taskId: task.id,
       });
       if (task.spec.repairTaskId) {
+        const failureCount = Number(get(db, "SELECT COUNT(*) AS n FROM memory WHERE task_id = ? AND kind = 'failure'", [task.id])?.n ?? 0);
+        const decision = swarmRepairDecision({ attempts: task.attempts, failureCount });
+        if (decision.poison) {
+          finish(task, agent, { ok: false, message: `poisoned:${decision.reason}` });
+          logLine(db, {
+            agentId: agent.id,
+            level: 'warn',
+            message: `${task.id} poisoned (${decision.reason}). ${task.spec.repairTaskId} stays closed.`,
+          }, clock);
+          return;
+        }
         const ts = nowIso(clock);
         run(db, "UPDATE tasks SET status = 'queued', updated_at = ? WHERE id = ?", [ts, task.spec.repairTaskId]);
         run(db, "UPDATE tasks SET status = 'queued', error = ?, updated_at = ? WHERE id = ?", [safe.body.slice(0, 500), ts, task.id]);
@@ -626,35 +646,36 @@ export function createEngine(options = {}) {
   async function writeHandoff(agent) {
     finish({ id: 'task-handoff', kind: 'handoff' }, agent, { ok: true, message: 'Handoff written' });
     const state = snapshot(db);
-    const leftover = state.tasks.filter((task) => task.status === 'failed' || task.status === 'queued' || task.status === 'ready');
-    const lines = [
-      '# Continuity handoff',
-      '',
-      STANDING_ORDER,
-      '',
-      `Product: ${state.mission?.product_name ?? 'unspecified'}`,
-      `User acceptance: ${state.mission?.accepted ?? 'pending'}`,
-      '',
-      '## Memory',
-      ...state.memory.slice(0, 16).map((item) => `- (${item.kind}) ${item.title}`),
-      '',
-      leftover.length ? '## Remaining work' : '## Remaining work\n- none',
-      ...leftover.map((task) => `- ${task.id} ${task.status}: ${task.title}`),
-      '',
-      'Resume from this file and data/swarm.sqlite. Do not guess.',
-      '',
-    ];
-    const target = path.join(root, 'forge', 'HANDOFF.md');
-    mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(target, `${lines.join('\n')}\n`);
+    const inspect = readJournalInspect(root, client);
+    const machine = buildMachineHandoff(state, inspect, root);
+    const directory = path.join(root, 'forge');
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, 'HANDOFF.json'), `${JSON.stringify(machine, null, 2)}\n`);
+    let markdown = renderInspectHandoff(inspect, machine);
+    if (canRecordJournal()) {
+      const live = readLiveTask({ id: 'task-handoff' });
+      const taskId = live?.spec?.continuity_task_id;
+      if (taskId) {
+        const recorded = safeRecord(() => client.handoff({ root, taskId }));
+        if (recorded?.stdout) markdown = String(recorded.stdout);
+      }
+    }
+    writeFileSync(path.join(directory, 'HANDOFF.md'), markdown.endsWith('\n') ? markdown : `${markdown}\n`);
   }
 
   async function writeDigest(agent) {
     const state = snapshot(db);
+    const freshness = viewFreshness(root);
     const lines = [
       '# Product memory',
       '',
-      'Written by the Continuity swarm so the next session does not guess.',
+      'view: untrusted-view',
+      `freshness: ${freshness.freshness}`,
+      `HEAD: ${freshness.head}`,
+      `dirty: ${freshness.dirty}`,
+      '',
+      'This markdown is a view, not a store. Core HISTORY is truth.',
+      'A historical PASS is not current. Swarm succeeded is not user accept.',
       '',
       `Standing order: ${STANDING_ORDER}`,
       '',
@@ -687,7 +708,10 @@ export function createEngine(options = {}) {
   }
 
   function enqueueContinuations() {
-    const next = planContinuations(snapshot(db));
+    const state = snapshot(db);
+    const next = planContinuations(state).filter((task) => (
+      state.mission?.status !== 'waiting_accept' || task.kind === 'test' || task.kind === 'security' || task.kind === 'review'
+    ));
     for (const task of next) {
       insertTask(db, task, clock);
       ensureJournalTask(task);
@@ -796,6 +820,97 @@ function isEngineLockExpired(record, file) {
   }
 }
 
+function journalGoalId(root, client) {
+  const inspect = readJournalInspect(root, client);
+  return inspect?.goal?.goalId || inspect?.finalGoal?.goalId || '';
+}
+
+function overlayMissionFromInspect(mission, inspect) {
+  if (!mission) return mission;
+  const goalId = inspect?.goal?.goalId || inspect?.finalGoal?.goalId || '';
+  const acceptance = inspect?.goal?.acceptance || inspect?.userAcceptance || 'pending';
+  return {
+    ...mission,
+    title: goalId || mission.title || '',
+    accepted: acceptance,
+    acceptedSource: inspect ? 'inspect-copy' : 'sqlite-pending',
+  };
+}
+
+function syncMissionFromInspect(db, { clock, root, client }) {
+  const inspect = readJournalInspect(root, client);
+  const goalId = inspect?.goal?.goalId || inspect?.finalGoal?.goalId || '';
+  const acceptance = inspect?.goal?.acceptance || inspect?.userAcceptance || 'pending';
+  run(db, 'UPDATE mission SET title = ?, accepted = ?, updated_at = ? WHERE id = ?', [
+    goalId,
+    acceptance,
+    nowIso(clock),
+    'mission-primary',
+  ]);
+}
+
+function viewFreshness(root) {
+  const live = observeWorkspace(root, new Date().toISOString());
+  const dirty = Boolean(live?.dirty);
+  const head = live?.head || 'unavailable';
+  return {
+    view: 'untrusted-view',
+    head,
+    dirty,
+    freshness: dirty || head === 'unavailable' ? 'untrusted' : 'live-git',
+  };
+}
+
+function buildMachineHandoff(state, inspect, root) {
+  const leftover = (state.tasks ?? []).filter((task) => (
+    task.status === 'failed' || task.status === 'queued' || task.status === 'ready'
+  ));
+  const evidenceIds = uniqueText([
+    ...(inspect?.evidence ?? []).map((item) => item.evidenceId),
+    ...(state.tasks ?? []).map((task) => task.spec?.continuity_evidence_id),
+  ]);
+  const failedHypotheses = (state.memory ?? [])
+    .filter((item) => item.kind === 'failure')
+    .map((item) => item.title)
+    .filter(Boolean)
+    .slice(0, 8);
+  const lastCompleted = (state.tasks ?? []).filter((task) => task.status === 'succeeded').at(-1);
+  return {
+    taskId: lastCompleted?.id || leftover[0]?.id || 'task-handoff',
+    lastCompletedStep: lastCompleted ? `${lastCompleted.id} succeeded` : 'no succeeded swarm task',
+    actualState: leftover.length ? `remaining ${leftover.map((task) => task.id).join(',')}` : 'ready wave complete',
+    nextStep: leftover[0] ? `Continue ${leftover[0].id} with a new actor and run` : 'Wait for record accept --as user',
+    evidenceIds,
+    failedHypotheses,
+    freshness: viewFreshness(root),
+    userAcceptance: inspect?.goal?.acceptance || inspect?.userAcceptance || 'pending',
+  };
+}
+
+function renderInspectHandoff(inspect, machine) {
+  const goal = inspect?.goal;
+  return [
+    '# Continuity handoff',
+    '',
+    'view: untrusted-view',
+    `taskId: ${machine.taskId}`,
+    `lastCompletedStep: ${machine.lastCompletedStep}`,
+    `actualState: ${machine.actualState}`,
+    `nextStep: ${machine.nextStep}`,
+    `evidenceIds: ${machine.evidenceIds.join(',') || 'none'}`,
+    `failedHypotheses: ${machine.failedHypotheses.join(' | ') || 'none'}`,
+    `GOAL ${goal ? `${goal.goalId} ${goal.title ?? ''}` : 'none'}`,
+    `ACCEPTANCE ${machine.userAcceptance}`,
+    '',
+    'Rendered from inspect / machine ContextHandoff. Markdown is a view, not a store.',
+    '',
+  ].join('\n');
+}
+
+function uniqueText(values) {
+  return [...new Set(values.filter((item) => typeof item === 'string' && item))];
+}
+
 function readJournalInspect(root, client) {
   if (!client || !existsSync(path.join(root, '.continuity'))) return null;
   for (const method of ['inspectReady', 'inspect']) {
@@ -810,7 +925,11 @@ function readJournalInspect(root, client) {
 }
 
 function seedPlanFromGoal(db, { clock, root, client }) {
-  const planned = planFromGoal(readJournalInspect(root, client));
+  const mission = get(db, 'SELECT * FROM mission WHERE id = ?', ['mission-primary']);
+  let planned = planFromGoal(readJournalInspect(root, client));
+  if (mission?.status === 'waiting_accept') {
+    planned = planned.filter((task) => task.kind === 'test' || task.kind === 'security' || task.kind === 'review');
+  }
   if (!planned.length) return 0;
   const existing = new Set(all(db, 'SELECT id FROM tasks').map((row) => row.id));
   let added = 0;
@@ -833,7 +952,7 @@ function seed(db, { swarmSize, clock, root, client }) {
       ) VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, 'pending', NULL, ?)
     `, [
       'mission-primary',
-      'Awaiting journal goal',
+      journalGoalId(root, client) || '',
       STANDING_ORDER,
       STANDING_ORDER,
       'unspecified',
@@ -884,9 +1003,7 @@ function pickAgent(idle, task) {
       ?? null;
   }
   if (task.kind === 'handoff' || task.kind === 'digest') {
-    return workers.find((agent) => agent.role === 'archivist')
-      ?? workers.find((agent) => agent.role === 'integrator')
-      ?? null;
+    return workers.find((agent) => agent.role === 'archivist') ?? null;
   }
   return workers.find((agent) => agent.role === 'executor') ?? null;
 }
@@ -931,7 +1048,16 @@ function isProductKind(task) {
   return task?.kind === 'write' || task?.kind === 'analyze' || task?.kind === 'security' || task?.kind === 'review';
 }
 
+function hasFocusedCheck(task) {
+  return asIdList(task?.focusedVerification).length > 0
+    || asIdList(taskSpec(task).focusedVerification).length > 0
+    || asIdList(taskSpec(task).run).length > 0;
+}
+
 function requiresHostImplementation(task) {
+  if (task?.kind === 'review' || task?.kind === 'security' || task?.kind === 'analyze') {
+    if (!hasFocusedCheck(task)) return true;
+  }
   return isProductKind(task) && (isJournalSourced(task) || !hasCraftMapping(task));
 }
 

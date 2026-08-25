@@ -60,6 +60,9 @@ function assertContractHelpers() {
   assert.ok(buildRoster(10).some((agent) => agent.role === 'manager'));
   assert.equal(buildRoster(5).length, 5);
   assert.equal(buildRoster(20).length, 20);
+  assert.ok(!buildRoster(20).some((agent) => agent.role === 'integrator'));
+  assert.equal(pathsOverlap(['Forge/src.mjs'], ['forge/src.mjs']), true);
+  assert.equal(pathsOverlap(['src-old'], ['src']), false);
   assert.equal(isBlindKind('test'), true);
   assert.equal(isBlindKind('security'), true);
   assert.equal(isBlindKind('review'), true);
@@ -72,6 +75,8 @@ function assertContractHelpers() {
   });
   assert.equal(packet.blind, true);
   assert.match(packet.brief, /Do not read implementer notes/);
+  assert.match(packet.brief, /HANDOFF\.md/);
+  assert.ok(packet.forbiddenPaths.includes('forge/MEMORY.md'));
   assert.equal(pathsOverlap(['src'], ['src/store.mjs']), true);
   assert.equal(pathsOverlap(['src/cli.mjs'], ['src/http.mjs']), false);
   assert.equal(

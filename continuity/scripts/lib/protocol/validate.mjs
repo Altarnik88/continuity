@@ -54,7 +54,7 @@ const VERIFICATION_FIELDS = new Set([
 
 const HANDOFF_FIELDS = new Set([
   'taskId', 'packetId', 'lastCompletedStep', 'actualState', 'changedPaths',
-  'failedHypotheses', 'limitations', 'nextStep',
+  'failedHypotheses', 'limitations', 'nextStep', 'evidenceIds',
 ]);
 
 const RUN_STATE_FIELDS = new Set([
@@ -197,6 +197,13 @@ export function validateContextHandoff(input) {
   assertSafePayload(input, 'ContextHandoff');
   assertKnownFields(input, HANDOFF_FIELDS, 'ContextHandoff');
   if (!input.nextStep) fail('ContextHandoff requires nextStep');
+  if (!input.taskId) fail('ContextHandoff requires taskId');
+  if (input.lastCompletedStep == null || input.lastCompletedStep === '') {
+    fail('ContextHandoff requires lastCompletedStep');
+  }
+  if (input.actualState == null || input.actualState === '') {
+    fail('ContextHandoff requires actualState');
+  }
   return {
     taskId: requireId(input.taskId, 'taskId'),
     packetId: input.packetId ? requireId(input.packetId, 'packetId') : null,
@@ -204,6 +211,7 @@ export function validateContextHandoff(input) {
     actualState: typeof input.actualState === 'string' ? input.actualState : '',
     changedPaths: stringList(input.changedPaths, 'changedPaths', { paths: true }),
     failedHypotheses: stringList(input.failedHypotheses, 'failedHypotheses'),
+    evidenceIds: stringList(input.evidenceIds, 'evidenceIds'),
     limitations: stringList(input.limitations, 'limitations'),
     nextStep: input.nextStep,
   };

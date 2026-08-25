@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -8,7 +9,7 @@ import {
   STANDING_ORDER,
   buildDispatchPacket,
   leaseConflict,
-  selectDispatchWave,
+  selectDispatchWaveReport,
 } from './lib/swarm/contract.mjs';
 import { snapshot as readStoreSnapshot } from './lib/swarm/store.mjs';
 
@@ -17,11 +18,17 @@ const port = portFlag === -1 ? 43147 : Number(process.argv[portFlag + 1]);
 const root = process.cwd();
 
 const snapshot = await readSnapshot(root, port);
-const wave = Array.isArray(snapshot.wave) ? snapshot.wave : [];
+const rawWave = Array.isArray(snapshot.wave) ? snapshot.wave : [];
+const rejected = Array.isArray(snapshot.rejected) ? snapshot.rejected : [];
 const manager = (snapshot.agents ?? []).some((agent) => agent.role === 'manager');
+const waitingAccept = snapshot.mission?.status === 'waiting_accept';
+const wave = waitingAccept
+  ? rawWave.filter((item) => item.kind === 'test' || item.kind === 'security' || item.kind === 'review')
+  : rawWave;
 const stopReason = wave.length === 0
-  ? (snapshot.mission?.status === 'waiting_accept' ? 'waiting_accept' : 'no-ready-work')
+  ? (waitingAccept ? 'waiting_accept' : 'no-ready-work')
   : undefined;
+const waveId = `wave-${randomUUID().slice(0, 8)}`;
 
 const report = {
   standingOrder: snapshot.standingOrder ?? STANDING_ORDER,
@@ -30,7 +37,9 @@ const report = {
   swarmSize: snapshot.mission?.swarm_size ?? snapshot.agents?.length ?? 0,
   manager,
   fallback: false,
+  waveId,
   wave,
+  rejected,
   ...(stopReason ? { stopReason } : {}),
   instruction: [
     'You are the Conductor.',
@@ -42,6 +51,7 @@ const report = {
   ].filter(Boolean).join(' '),
 };
 
+persistWaveJournal(root, report);
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 
 function emptySnapshot() {
@@ -50,6 +60,7 @@ function emptySnapshot() {
     mission: null,
     agents: [],
     wave: [],
+    rejected: [],
   };
 }
 
@@ -80,14 +91,32 @@ function readSqliteSnapshot(cwd) {
     }));
     const ready = (state.tasks ?? []).filter((task) => task.status === 'ready');
     const spawnable = ready.filter((task) => !leaseConflict(held, task.paths));
+    const report = selectDispatchWaveReport(spawnable, held);
     return {
       ...state,
       standingOrder: STANDING_ORDER,
-      wave: selectDispatchWave(spawnable).map(buildDispatchPacket),
+      wave: report.wave.map(buildDispatchPacket),
+      rejected: report.rejected,
     };
   } catch {
     return emptySnapshot();
   } finally {
     db?.close();
+  }
+}
+
+function persistWaveJournal(cwd, document) {
+  try {
+    const directory = path.join(cwd, 'data');
+    mkdirSync(directory, { recursive: true });
+    appendFileSync(path.join(directory, 'waves.ndjson'), `${JSON.stringify({
+      waveId: document.waveId,
+      taken: (document.wave ?? []).map((item) => item.id),
+      rejected: document.rejected ?? [],
+      stopReason: document.stopReason ?? null,
+      status: document.status,
+    })}\n`);
+  } catch {
+    // Wave journal is best-effort; stdout remains the live report.
   }
 }

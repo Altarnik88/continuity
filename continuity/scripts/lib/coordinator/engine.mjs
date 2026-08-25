@@ -493,6 +493,23 @@ export function createCoordinatorRuntime({
     assertLiveProof(config, runtimeAdapter);
     const ratio = hostContextRatio(hostContext, { contextUsed, contextUsedRatio });
     if (ratio != null && ratio >= CONTEXT_ASSIGN_THRESHOLD) {
+      const ready = asDocument(memoryClient.inspectReady({ root }));
+      const taskId = ready.availableTasks?.[0]?.id
+        || ready.activeTasks?.[0]?.taskId
+        || ready.availableTasks?.[0]?.taskId;
+      if (taskId) {
+        try {
+          memoryClient.recordContext({
+            root,
+            taskId,
+            next: 'Host --context-used crossed 0.65; continue with a new actor, run, and Attempt',
+            actorId: config.executorActorId,
+            runId: config.executorRunId,
+          });
+        } catch {
+          /* still pause assign */
+        }
+      }
       state = persist({
         ...state,
         status: 'paused',

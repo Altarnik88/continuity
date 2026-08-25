@@ -40,6 +40,8 @@ flowchart TB
   projection["CURRENT.json<br/>rebuildable projection"]
   derived["TaskAccumulator, ready set, WorkPackets"]
   coord["Coordinator CLI<br/>plan / run / resume / status / cancel"]
+  swarm["Swarm sqlite<br/>execution projection"]
+  views["forge MEMORY / HANDOFF<br/>untrusted views"]
   adapter["Runtime adapter<br/>local-process"]
   exec["Executor actor"]
   ver["Independent verifier actor"]
@@ -51,6 +53,8 @@ flowchart TB
   core --> journal
   core --> projection
   core --> derived
+  derived --> swarm
+  swarm --> views
   user --> coord
   derived --> coord
   coord --> adapter
@@ -63,7 +67,9 @@ flowchart TB
 
 ## Write path and read path
 
-Every durable write goes through `continuity/scripts/continuity.mjs`. Coordinator may only spawn that CLI (or an equivalent validated Core API). It must not open `HISTORY.ndjson` or `CURRENT.json` itself. Rejected writes leave the journal unchanged. Executor prose is stored as a report and is not authorizing evidence.
+Every durable **journal** write goes through `continuity/scripts/continuity.mjs`. Coordinator may only spawn that CLI (or an equivalent validated Core API). It must not open `HISTORY.ndjson` or `CURRENT.json` itself. Rejected writes leave the journal unchanged. Executor prose is stored as a report and is not authorizing evidence.
+
+Core `HISTORY` is truth. Swarm `data/swarm.sqlite` is an execution projection with journal task/event ids, not a second canon. Markdown (`forge/MEMORY.md`, `forge/HANDOFF.md`) is an untrusted view. Those projection and view files are not journal writes and do not go through `continuity.mjs`.
 
 `inspect`, `inspect ready`, `inspect wave`, `handoff`, `doctor`, `validate`, and `history` do not repair the projection. `rebuild` is an explicit operator write.
 
