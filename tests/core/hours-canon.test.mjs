@@ -190,7 +190,7 @@ function assertC6Sanitize() {
   const clean = sanitizeMemoryRecord({
     kind: 'failure',
     title: 'tap',
-    body: 'TAP version 13\nnot ok 1 /tmp/secret/path\nPATH=/bin\nHOME=/home/x\nUSER=x',
+    body: 'TAP version 13\nnot ok 1 /tmp/secret/path\nPATH=/bin\nHOME=PLACEHOLDER\nUSER=x',
   });
   assert.equal(/TAP version|not ok|\/tmp\/secret/.test(clean.body), false);
   assert.ok(clean.sha256);
