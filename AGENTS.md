@@ -14,7 +14,7 @@ node continuity/scripts/coordinator.mjs
 
 The canonical Skill is `continuity/SKILL.md`. Files under `.cursor/skills` and `.grok/skills` are discovery pointers only.
 
-Run the Memory CLI from the target Git worktree. Optional `--root` must name that worktree's exact top level. The store is `<repository>/.continuity`, never the Skill directory.
+Run the Memory CLI from the target Git worktree. Optional `--root` must name that worktree's exact top level. `launch.mjs` has no `--root`; swarm root is the current working directory. The store is `<repository>/.continuity`, never the Skill directory.
 
 ## Start with read-only inspection
 

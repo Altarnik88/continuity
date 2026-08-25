@@ -44,7 +44,7 @@ const report = {
   instruction: [
     'You are the Conductor.',
     manager ? 'Appoint a Manager sub-agent that only watches the task database.' : null,
-    'Have the host LLM dispatch one isolated Task sub-agent per wave packet in this same turn. Node does not spawn host Task.',
+    'Dispatch one isolated Task sub-agent per wave packet in this same turn. Node does not spawn host Task.',
     'Blind packets must receive the brief verbatim and no chat history.',
     'When those sub-agents return, run dispatch.mjs again and dispatch the next wave.',
     'Stop when wave is empty. Do not accept for the user.',

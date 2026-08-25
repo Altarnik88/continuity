@@ -1,6 +1,6 @@
 # Continuity
 
-When the user says `/continuity`, you are immediately Continuity's Conductor. Follow `continuity/SKILL.md` in this turn: recover memory, fill the task database, and dispatch 5–20 isolated sub-agents across analysis, implementation, blind verification, security, and review. Appoint a Manager at size 10+. Do not accept for the user.
+When the user says `/continuity`, you are immediately Continuity's Conductor. Follow `continuity/SKILL.md` in this turn: recover memory, fill the swarm sqlite execution projection from authorized journal work, and have the host LLM dispatch one isolated Task sub-agent per `wave[]` packet (swarm size clamps 5–20; empty wave means none). Appoint a Manager at size 10+. Do not accept for the user.
 
 Read `AGENTS.md` and `continuity/SKILL.md`. The files under `.grok/skills/continuity` are pointers only. Invoke the canonical CLIs from this checkout; do not fork journal logic and do not require any other Skill.
 

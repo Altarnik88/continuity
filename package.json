@@ -2,7 +2,7 @@
   "name": "continuity",
   "version": "3.0.0",
   "private": true,
-  "description": "Continuity: a local Node.js MIT control plane (journal, optional Coordinator, optional Node swarm). Host LLM dispatches Task; Node does not. GitHub-distributed; not published to npm.",
+  "description": "Continuity: a local Node.js MIT control plane (journal, optional Coordinator, optional Node swarm). Host LLM dispatches Task; Node does not spawn host Task. GitHub-distributed; not published to npm.",
   "type": "module",
   "license": "MIT",
   "repository": {

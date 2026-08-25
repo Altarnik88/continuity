@@ -9,7 +9,7 @@ Product version comes from `package.json` at runtime (`3.0.0`). Store schema is 
 | Layer | Job | Not its job |
 | --- | --- | --- |
 | **Project Memory Core** | Own long-term recorded truth | Choose a model, launch a process, accept work for the user |
-| **Continuity** | Read/continuity plane for the next chat or actor | Become Coordinator or start executors |
+| **Continuity (read/handoff plane)** | Read/continuity plane for the next chat or actor | Become Coordinator. The Continuity CLI does not start executors; the host Conductor may open `launch.mjs`. |
 | **Coordinator** | Sequential execution plane: packets, adapters, waves, resume | Edit the journal, treat reports as proof, accept for the user |
 | **Swarm** | Parallel execution plane: sqlite execution projection with journal task/event ids, deterministic `launch.mjs` role-workers, path leases, standing order | Edit the journal, accept for the user, spawn host Task, overlap path ownership |
 
@@ -67,7 +67,7 @@ flowchart TB
 
 ## Write path and read path
 
-Every durable **journal** write goes through `continuity/scripts/continuity.mjs`. Coordinator may only spawn that CLI (or an equivalent validated Core API). It must not open `HISTORY.ndjson` or `CURRENT.json` itself. Rejected writes leave the journal unchanged. Executor prose is stored as a report and is not authorizing evidence.
+Every durable **journal** write goes through `continuity/scripts/continuity.mjs`. Coordinator may only invoke that CLI as a child process (or an equivalent validated Core API). It must not open `HISTORY.ndjson` or `CURRENT.json` itself. Rejected writes leave the journal unchanged. Executor prose is stored as a report and is not authorizing evidence.
 
 Core `HISTORY` is truth. Swarm `data/swarm.sqlite` is an execution projection with journal task/event ids, not a second canon. Markdown (`forge/MEMORY.md`, `forge/HANDOFF.md`) is an untrusted view. Those projection and view files are not journal writes and do not go through `continuity.mjs`.
 

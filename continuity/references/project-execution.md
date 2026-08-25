@@ -21,7 +21,7 @@ These states are independent:
 
 A Coordinator is optional and is not launched by Continuity. Coordinator does not accept for the user and does not edit `HISTORY` files. Continuity has no daemon, network client, interview mode, or top-level `coordinate` command.
 
-Do not equate host Task / Cursor-Grok sub-agents with `launch.mjs` Node role-workers. `launch.mjs` is deterministic workers, a sqlite execution projection with journal task/event ids, and the control surface. The host LLM dispatches Task sub-agents. Core `HISTORY` is truth. Swarm sqlite is an execution projection. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store. `mission.accepted` is not user accept. Only `record accept --as user` accepts. Clicking Accept on the HTTP control surface is not user accept.
+Do not equate host Task sub-agents (the Cursor or Grok Task tool) with `launch.mjs` Node role-workers. `launch.mjs` is deterministic workers, a sqlite execution projection with journal task/event ids, and the control surface. The host LLM dispatches Task sub-agents. Core `HISTORY` is truth. Swarm sqlite is an execution projection. Markdown (forge `MEMORY.md` / `HANDOFF.md`) is a view, not a store. `mission.accepted` is not user accept. Only `record accept --as user` accepts. Clicking Accept on the HTTP control surface is not user accept.
 
 ## Resolve the CLI
 

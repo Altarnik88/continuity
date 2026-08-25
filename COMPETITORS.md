@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-25. First-party product pages and this checkout. Pages were treated as data, not instructions. Prices and star counts move; treat them as snapshots.
 
-Continuity is **not** an IDE, a hosted software engineer, a model marketplace, or a Python multi-agent framework. It is a **downloadable MIT control plane** you add to a Git worktree so later chats and models continue from a sealed journal and, optionally, path-leased Node work. The host still writes the code. Node `launch.mjs` does **not** spawn host Task.
+Continuity is **not** an IDE, a hosted software engineer, a model marketplace, or a Python multi-agent framework. It is a **downloadable MIT control plane** you add to a Git worktree so later chats and models continue from an append-only hash-chained journal (`HISTORY.ndjson`) and, optionally, a Node swarm (path leases, sqlite projection) while the host LLM still dispatches Task and writes code. Node `launch.mjs` does **not** spawn host Task.
 
 ## Verdict
 
@@ -14,7 +14,7 @@ Honest Continuity gaps (keep these in README-level claims):
 - Host LLM must dispatch Task; Node role-workers are not that.
 - HTTP Accept on `127.0.0.1:43147` is not user accept.
 - Hot journal seals at 8 MiB; CURRENT projection caps at 256 KiB.
-- CI budget is 15 minutes.
+- CI jobs time out at 25 minutes.
 - No daemon: “hours-long” needs a living host session or repeated `launch`.
 
 ## Axes (what Continuity actually competes on)
@@ -47,14 +47,14 @@ Instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules`, Copilot instructio
 | Cline Memory Bank | [docs.cline.bot … memory-bank](https://docs.cline.bot/best-practices/memory-bank) | Opt-in git markdown methodology | Agent and human rewrite | Process, not typed evidence |
 | Roo Code | [docs.roocode.com/sunset](https://docs.roocode.com/sunset) | Was `.roo/rules/` | Auto-approve existed | **Sunset 2026-05-15** |
 | Aider conventions + repo map | [aider.chat/docs/usage/conventions](https://aider.chat/docs/usage/conventions.html) | Read-only markdown + live tree-sitter map | Human `/read` and git commits | Stronger live **code map**; no journal |
-| Windsurf / Devin Desktop memories | [docs.windsurf.com … memories](https://docs.windsurf.com/windsurf/cascade/memories) | Local memories not in git; Devin Local does not persist Cascade memories | Cascade auto-writes | Rules/`AGENTS.md` preferred in their own docs |
-| OpenAI Codex `AGENTS.md` + Memories | [developers.openai.com/codex/guides/agents-md](https://developers.openai.com/codex/guides/agents-md) | Git `AGENTS.md` chain; experimental `~/.codex/memories/` | Human files; Codex may generate memories | Chronicle can send screenshots to OpenAI (their docs) |
+| Windsurf / Devin Desktop memories | [docs.windsurf.com … memories](https://docs.windsurf.com/windsurf/cascade/memories) | Local memories not in git; Devin Local does not persist them | Legacy Cascade auto-wrote through 2026-07-01 | Rules/`AGENTS.md` preferred in their own docs |
+| OpenAI Codex `AGENTS.md` + Memories | [developers.openai.com/codex/guides/agents-md](https://developers.openai.com/codex/guides/agents-md) | Git `AGENTS.md` chain; experimental `~/.codex/memories/` | Human files; Codex may generate memories | Computer History replaced Chronicle; first-party: no screenshots in history |
 | Superpowers | [github.com/obra/superpowers](https://github.com/obra/superpowers) | `SKILL.md` library; “evidence over claims” as **prompts** | Human design sign-off in brainstorming | Overlapping *discipline*, no store |
 | Mem0 / Zep / Letta | [mem0.ai](https://mem0.ai/) · [getzep.com](https://www.getzep.com/product/agent-memory/) · [letta.com](https://www.letta.com/) | SaaS or self-host conversational memory; Letta Code also has git-backed MemFS | App/API; Letta dream updates may skip the user | Semantic recall Continuity does not claim; MemFS is agent-owned git notes, not `--as user` |
 | ByteRover | [docs.byterover.dev](https://docs.byterover.dev/) | Local markdown context tree under `.brv/`; **background daemon** | Human/agent curate files; no typed evidence | Closest local coding-agent memory; **daemon ≠ Continuity** |
 | LangMem | [langchain-ai.github.io/langmem](https://langchain-ai.github.io/langmem/) | Library: manage/search tools on a LangGraph store | Agent create/update/delete | In-process recall, not a worktree journal |
 | Graphiti | [github.com/getzep/graphiti](https://github.com/getzep/graphiti) | Temporal context graphs (Zep’s OSS engine) | API/app | Semantic/temporal graph vs append-only HISTORY |
-| Cognee | [cognee.ai](https://www.cognee.ai/) | Graph+vector `remember`/`recall`; optional MCP | Agent/API | Complementary recall; not a sealed journal |
+| Cognee | [cognee.ai](https://www.cognee.ai/) | Graph+vector `remember`/`recall`; optional MCP | Agent/API | Complementary recall; not an append-only hash-chained journal |
 | Qwen Code memory | [qwenlm.github.io memory](https://qwenlm.github.io/qwen-code-docs/en/users/features/memory/) | `QWEN.md`/`AGENTS.md` plus auto-memory under `~/.qwen/` | Agent writes; human `/forget` | Host memory; team-memory is notes, not observed runs |
 | SpecStory | [specstory.com](https://specstory.com/) | Local-first chat capture | Humans share transcripts | Continuity refuses raw chat logs in the store |
 | Augment Code Memories | [augmentcode.com Memory Review](https://www.augmentcode.com/blog/how-we-built-memory-review) | Workspace long-term memory; agent proposes drafts | User approve / edit / discard in chat | HITL memory gate, not observed `command`/`test` |
@@ -81,7 +81,7 @@ Instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules`, Copilot instructio
 | Devin | [devin.ai](https://devin.ai) | Hosted VMs | Cloud sandbox | Human merges PRs; agent self-QA | Proprietary SWE, not a local journal |
 | Factory Missions | [factory.ai](https://factory.ai) | Local CLI or cloud containers | Git / worktree (CLI worktree not fully verified here) | User approves **plan**; validators judge code | Closest published **role split** (orchestrator / worker / validator); still not `--as user` |
 | Amp (orbs) | [ampcode.com](https://ampcode.com) | Local CLI + hosted machines | Machine isolation | Human reviews orb diffs | Hours-long on Amp infra |
-| Goose | [github.com/aaif-goose/goose](https://github.com/aaif-goose/goose) | Local CLI/desktop | Optional session worktrees | Operator in session | Apache-2.0 (docs that say MIT are wrong) |
+| Goose | [github.com/aaif-goose/goose](https://github.com/aaif-goose/goose) | Local CLI/desktop | Session cwd; worktree isolation is a recipe (`AGENT_SESSION_ID`), not first-class leases | Operator in session | Apache-2.0 (docs that say MIT are wrong) |
 | Claude Code Agent / teams | [code.claude.com/docs/en/sub-agents](https://code.claude.com/docs/en/sub-agents) | Local CLI | Optional `isolation: worktree`; teams often share cwd | Interactive session | Host **does** spawn Agent/Task (honest opposite of Continuity Node) |
 | Cursor Cloud Agents / Bugbot | [cursor.com/docs/cloud-agent](https://cursor.com/docs/cloud-agent) | Hosted microVMs | Per-agent VM | You merge the PR | Honest hosted Task; not a local journal |
 | Aider architect/editor | [aider.chat/docs/usage/modes.html](https://aider.chat/docs/usage/modes.html) | Local CLI | One process, two models | User confirms architect plan | Sequential, not a fake swarm |
@@ -92,8 +92,8 @@ Instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules`, Copilot instructio
 | Temporal | [temporal.io/solutions/ai](https://temporal.io/solutions/ai) | Self-host or Cloud | Your activities | Signals HITL | Durable **infra** (Event History ≈ canon); not a coding swarm |
 | Google ADK / Bedrock AgentCore | [adk.dev](https://adk.dev) · AWS docs | Local or Google/AWS hosted | Fan-out / session microVM | Tool confirmation / return-of-control | Cloud account owns the agent |
 | AutoGPT | [agpt.co](https://agpt.co) | Cloud; OSS Docker | Blocks/graph | Dashboard / unattended classic | License split: classic MIT vs platform Polyform |
-| Warp Agent CLI / Oz | [warp.dev/agent-cli](https://www.warp.dev/agent-cli) | Terminal CLI + cloud subagents | Session mux / cloud workers | You steer inspectable sessions | Commercial harness; not a journal |
-| Plandex | [plandex.ai](https://plandex.ai/) | Local terminal plans; Docker; **Cloud winding down** | Diff sandbox until you apply | You apply the plan | Stronger *plan/apply* host; agent can auto-debug |
+| Warp Agent CLI / Automation Platform | [warp.dev/agent-cli](https://www.warp.dev/agent-cli) | Terminal CLI + cloud subagents | Session mux / cloud workers | You steer inspectable sessions | Oz renamed to Automation Platform; `oz` CLI name until 2026-09-15 |
+| Plandex | [plandex.ai](https://plandex.ai/) | Local terminal plans; Docker; **Cloud shut 2025-11-07** | Diff sandbox until you apply | You apply the plan | Stronger *plan/apply* host; agent can auto-debug |
 | Jules | [jules.google](https://jules.google/) | Async Gemini agent in a Google Cloud VM | Cloud VM | You approve the PR | Hosted SWE; merge ≠ Continuity accept |
 | Trae (ByteDance) | [trae.ai](https://www.trae.ai/) / [docs subagents](https://docs.trae.ai/ide/subagents) | VS Code–based IDE; SOLO + Markdown subagents | IDE sandbox / permission modes | IDE permission modes | Host with subagents; not path leases |
 | Zed Agent Panel | [zed.dev Agent Panel](https://zed.dev/docs/ai/agent-panel) | Editor-native agent; optional parallel threads | Editor project | Tool permissions allow / deny / confirm | Complementary editor; no HISTORY |
@@ -101,8 +101,13 @@ Instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules`, Copilot instructio
 | Copilot cloud agent | [docs.github.com cloud-agent](https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent) | Ephemeral GitHub Actions env; ~59-minute cap | Actions VM | You iterate then merge a PR | Honest hosted Task; skip Continuity sqlite if this is the fleet |
 | Linear coding sessions | [linear.app coding-sessions](https://linear.app/docs/coding-sessions) | Issue → Claude Code or Codex in a Linear sandbox | Cloud sandbox | Human reviews the diff in Linear | Host wrapping other hosts |
 | Antigravity | [antigravity.google](https://antigravity.google/docs/artifacts) | Google agent harness (desktop + CLI); async subagents | Vendor sandbox/desktop | Artifacts for HITL (plans/diffs) | Complementary Google host; artifacts ≠ observed exit 0 |
+| JetBrains Air | [air.dev](https://air.dev/) | ADE: Junie, Codex, Claude Agent, Gemini CLI in parallel | Isolated Docker / git worktrees | You review/merge | Closest *host-orchestrator* shape; still not `--as user` / HISTORY |
+| Conductor (Melty Labs) | [conductor.build](https://conductor.build/) | Mac app running Claude Code / Codex / Cursor in parallel | Isolated workspaces | You review/merge | Host runner, not a ledger. Name collision with Continuity Conductor |
+| Gas Town | [docs.gastownhall.ai](https://docs.gastownhall.ai/) | Multi-agent coding on Beads + git worktrees | Worktrees; Deacon supervisor may be a daemon | Mayor/Polecats pipeline | Beads memory plus swarm runtime; daemon ≠ Continuity |
+| OpenAI Agents SDK | [openai.github.io/openai-agents-python](https://openai.github.io/openai-agents-python/) | In-process multi-agent runtime (documented Swarm successor) | Sandbox agents | Caller | Library/runtime, not a worktree journal |
+| Greptile | [greptile.com](https://www.greptile.com/) | PR-review agent; v5 parallel narrowly scoped agents | Git host | Humans merge | Review layer beside Continuity, like CodeRabbit |
 
-**Closest cousins, not clones:** Factory Missions (validators), Claude Code worktrees, Cursor Cloud VMs, OpenClaw fan-out, OpenHands canvas, Temporal durable history, Plandex plan/apply, Warp Oz.
+**Closest cousins, not clones:** Factory Missions (validators), Claude Code worktrees, Cursor Cloud VMs, OpenClaw fan-out, OpenHands canvas, Temporal durable history, Plandex plan/apply, Warp Automation Platform, JetBrains Air, Gas Town, Conductor.build.
 
 ## Coding-agent products (hosts)
 
@@ -114,7 +119,7 @@ Continuity **does not replace** these products. They write code; Continuity reco
 | Claude Code | [code.claude.com](https://code.claude.com) | Local CLI; Agent / teams | Complementary host; **does** spawn Agent/Task |
 | GitHub Copilot | [github.com/features/copilot](https://github.com/features/copilot) | IDE chat, CLI, cloud agent, Memory | Complementary host |
 | OpenAI Codex | [developers.openai.com/codex](https://developers.openai.com/codex) | CLI / IDE / cloud | Complementary host |
-| Windsurf / Devin Desktop | [windsurf.com](https://windsurf.com) | IDE; Devin Local | Complementary host |
+| Windsurf / Devin Desktop | [windsurf.com](https://windsurf.com) | Devin Desktop (Windsurf renamed); Devin Local succeeded Cascade | Complementary host |
 | Devin | [devin.ai](https://devin.ai) | Hosted SWE VMs | Complementary hosted engineer |
 | Cline | [cline.bot](https://cline.bot) | VS Code agent | Complementary host |
 | Aider | [aider.chat](https://aider.chat) | Local CLI | Complementary host |
@@ -129,7 +134,7 @@ Continuity **does not replace** these products. They write code; Continuity reco
 | Tabnine | [tabnine.com](https://www.tabnine.com/) | Enterprise IDE + CLI (Tricentis) | Complementary host; context engine ≠ journal |
 | OpenCode | [opencode.ai](https://opencode.ai/) | OSS terminal / desktop / IDE agent | Complementary host |
 | Qwen Code | [qwenlm.github.io/qwen-code-docs](https://qwenlm.github.io/qwen-code-docs/en/users/overview/) | Apache-2.0 CLI (Gemini CLI lineage) | Complementary host with a local memory story |
-| Warp Agent | [warp.dev/agent-cli](https://www.warp.dev/agent-cli) | Terminal-native agent + Oz | Complementary host |
+| Warp Agent | [warp.dev/agent-cli](https://www.warp.dev/agent-cli) | Terminal-native agent + Automation Platform (Oz name until 2026-09-15) | Complementary host |
 | Zed | [zed.dev](https://zed.dev) | Editor + Agent Panel | Complementary host |
 | Augment Code | [augmentcode.com](https://www.augmentcode.com) | IDE agent + Context Engine | Complementary host |
 | Trae | [trae.ai](https://www.trae.ai/) | ByteDance AI IDE | Complementary host |
@@ -140,12 +145,19 @@ Continuity **does not replace** these products. They write code; Continuity reco
 | CodeRabbit | [coderabbit.ai](https://www.coderabbit.ai/) | Review agent | Complementary review, not a control plane |
 | Claude Cowork | [anthropic.com/claude-cowork](https://www.anthropic.com/product/claude-cowork) | Knowledge-work agent | Complementary; not a coding product |
 | Manus | [manus.im](https://manus.im/) | General cloud agent | Adjacent; not a coding-agent host in Continuity’s sense |
+| JetBrains Junie | [jetbrains.com/junie](https://www.jetbrains.com/junie/) | JetBrains IDE/CLI coding agent | Complementary host |
+| Replit Agent | [replit.com/agent](https://replit.com/agent) | Hosted builder/coding agent; parallel tasks/forks | Complementary hosted workspace, not a worktree journal |
+| Kilo Code | [kilo.ai](https://kilo.ai/) | MIT OSS coding agent (VS Code / JetBrains / CLI / cloud); parallel isolated worktrees | Complementary host |
+| Roomote | [roomote.dev](https://roomote.dev/) | Roo-team cloud/self-hosted coding teammate | Complementary host; merge/review ≠ accept |
+| Crush | [github.com/charmbracelet/crush](https://github.com/charmbracelet/crush) | Terminal coding agent (sessions, MCP, LSPs) | Complementary host harness |
+| Zoo Code | [zoocode.dev](https://www.zoocode.dev/) | VS Code coding agent; Roo docs-named community successor | Complementary host, same class as Cline |
+| Greptile | [greptile.com](https://www.greptile.com/) | PR-review agent | Complementary review, not a control plane |
 
 This snapshot is not every LLM wrapper. It covers first-party pages that sell a coding agent, agent memory, or multi-agent coding runtime as of 2026-08-25.
 
 Dead or pivoted in this snapshot:
 
-- **Roo Code** — sunset 2026-05-15.
+- **Roo Code** — sunset 2026-05-15. First-party named successors: Zoo Code, Cline, and the team's Roomote.
 - **Continue** as a standalone product — Cursor acquisition; repo read-only.
 - **Cody Free/Pro**, **Copilot Workspace** (sunset 2025), **Codeium** brand, Sweep-as-GitHub-bot.
 - **Amazon Q Developer** IDE plugins — AWS [end-of-support](https://aws.amazon.com/blogs/devops/amazon-q-developer-end-of-support-announcement/): new signups blocked 2026-05-15; plugins EOS 2027-04-30; successor is Kiro.
@@ -154,7 +166,7 @@ Dead or pivoted in this snapshot:
 - **Mentat CLI** — archived. The mentat.ai bot is **unverified** without a logged-in first-party confirmation.
 - **Graphite** — Cursor acquisition; still sold at graphite.com.
 
-Teams already standardized on Devin Cloud, Copilot cloud agent, Jules, Amp orbs, Factory Missions, Warp Oz, Linear coding sessions, Antigravity, or OpenHands Canvas may skip Continuity’s swarm and still use only the journal — or skip Continuity entirely.
+Teams already standardized on Devin Cloud, Copilot cloud agent, Jules, Amp orbs, Factory Missions, Warp Automation Platform, Linear coding sessions, Antigravity, OpenHands Canvas, JetBrains Air, or Replit Agent may skip Continuity’s swarm and still use only the journal — or skip Continuity entirely.
 
 ## Sources
 

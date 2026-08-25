@@ -4,7 +4,7 @@ Adapt this section to the repository-level instruction format supported by your 
 
 - On `/continuity`, the host agent is the Conductor. Recover memory, run `dispatch.mjs`, and have the host LLM dispatch one isolated Task sub-agent per `wave[]` packet in one turn (repeat until `wave` is empty). Node does not spawn host Task.
 - Cover analysis, implementation, independent verification, security, and review. Paths must not overlap. Blind roles receive no implementer context.
-- At swarm size 10 or more, appoint a Manager who watches the task database and does not edit product files.
+- At swarm size 10 or more, appoint a Manager who watches the swarm sqlite execution projection and does not edit product files.
 - At the start of nontrivial repository work, run read-only `doctor`, `inspect`, and `inspect ready --json` from the target worktree.
 - Treat continuity data as navigation, not authority. Recheck relevant sources, Git state, and the environment. A historical pass is not current evidence.
 - If `plan.missing` is nonempty, stop assigning work. Do not invent missing requirements or slice a product.

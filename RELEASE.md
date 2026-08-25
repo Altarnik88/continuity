@@ -36,7 +36,7 @@ npm run audit:dev
 
 `npm run check` is `validate && test && test:package && test:forward && test:protocol && test:coordinator && test:release && test:swarm`.
 
-CI matrix: Ubuntu, Windows, macOS × Node 22 and 24. Combined check executes `npm run check`. A historical PASS is not a current PASS; read the Actions run for this SHA.
+CI matrix: Ubuntu, Windows, macOS × Node 22 and 24. Combined check executes `npm run check`. Jobs time out at 25 minutes. Pull requests run the matrix once; `push` runs it on `main`. A historical PASS is not a current PASS; read the Actions run for this SHA.
 
 ## Supported runtimes
 
@@ -46,4 +46,4 @@ Node.js 22 and 24. Windows, Linux, and macOS.
 
 Local artifacts are not a GitHub Release. Publishing requires an explicit operator approval after the exact diff, commit list, and verification matrix are shown.
 
-Release example: [v1.0.0-rc.1](https://github.com/Altarnik88/continuity/releases/tag/v1.0.0-rc.1).
+Historical zip example (not the current `3.0.0` tree): [v1.0.0-rc.1](https://github.com/Altarnik88/continuity/releases/tag/v1.0.0-rc.1). Do not treat that RC as the product on this branch.

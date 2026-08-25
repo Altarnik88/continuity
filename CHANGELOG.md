@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- CI jobs time out at 25 minutes (Windows Node 24 sat on a 15-minute knife-edge). Pull requests run the matrix once; `push` runs it on `main`. Concurrent runs of the same ref cancel in progress.
+- Full install profile is Memory + Coordinator + Swarm (Memory already includes the Continuity CLI). Public copy splits journal ready-work from the swarm sqlite projection. `package.json` says Node does not spawn host Task.
+- Competitor notes: Junie, Air, Replit Agent, Kilo, Roomote, Crush, Zoo Code, Gas Town, OpenAI Agents SDK, Greptile, Conductor.build. Windsurf is Devin Desktop; Computer History replaced Chronicle; Plandex Cloud shut; Warp Oz renamed; Goose worktrees are a recipe.
 - Community files under `.github/` are required metadata (CONTRIBUTING, Code of Conduct, issue/PR templates, Dependabot). CoC reports go to private security advisories first.
 - `package.json` description names an optional local Node swarm, not an “autonomous” LLM loop. `dispatch.mjs` tells the host LLM to dispatch Task; it does not say Node will spawn Task. `launch.mjs` has no `--root` (cwd is the swarm root). Full profile and `npm run check` include Swarm. Engines stay `>=22 <25` in INSTALL and Skill install notes. Cyrillic public text is allowed only in `README*.md` and `COMPETITORS*.md`.
 - `actions/checkout` pinned at v7.0.1 and `actions/setup-node` at v7.0.0 (Node 24 action runtime) to drop the Node 20 deprecation warning on those actions.

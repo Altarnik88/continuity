@@ -10,7 +10,7 @@ Product version is `package.json`, currently `3.0.0`. `--version` prints that va
 
 ## Choose a profile
 
-- **full** — Memory + Continuity + Coordinator + Swarm (`launch.mjs`, sqlite projection, local control surface)
+- **full** — Memory + Coordinator + Swarm (`launch.mjs`, sqlite projection, local control surface)
 - **memory** — journal, inspect, handoff, and the Continuity CLI only
 - **coordinator** — execution runtime plus a protocol client; point it at a Memory CLI
 
