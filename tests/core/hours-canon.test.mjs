@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -206,19 +206,26 @@ function assertC9Invariants() {
       '--as', 'subagent', '--actor-id', 'actor-exec-c9', '--run-id', 'run-exec-c9',
     ]);
     assert.equal(claimed.status, 0, claimed.stderr);
-    const observed = runCli(continuityCli, repo, [
-      'record', 'evidence', '--run', '-e process.exit(0)', '--expected', 'observed check exits 0',
+    const observedCommand = runCli(continuityCli, repo, [
+      'record', 'evidence', '--run', '-e process.exit(0)', '--expected', 'observed command exits 0',
       '--kind', 'command', '--as', 'subagent', '--actor-id', 'actor-exec-c9', '--run-id', 'run-exec-c9',
     ]);
-    assert.equal(observed.status, 0, observed.stderr);
+    assert.equal(observedCommand.status, 0, observedCommand.stderr);
+    const observedTest = runCli(continuityCli, repo, [
+      'record', 'evidence', '--run', '-e process.exit(0)', '--expected', 'observed test exits 0',
+      '--kind', 'test', '--as', 'subagent', '--actor-id', 'actor-exec-c9', '--run-id', 'run-exec-c9',
+    ]);
+    assert.equal(observedTest.status, 0, observedTest.stderr);
     const inspect = runCli(continuityCli, repo, ['inspect']);
     assert.match(inspect.stdout, /observed/);
     assert.match(inspect.stdout, /claimed/);
-    const observedId = JSON.parse(observed.stdout.trim().split('\n').at(-1)).subjectId
-      || JSON.parse(observed.stdout.trim().split('\n').at(-1)).evidenceId;
+    const commandId = JSON.parse(observedCommand.stdout.trim().split('\n').at(-1)).evidenceId
+      || JSON.parse(observedCommand.stdout.trim().split('\n').at(-1)).subjectId;
+    const testId = JSON.parse(observedTest.stdout.trim().split('\n').at(-1)).evidenceId
+      || JSON.parse(observedTest.stdout.trim().split('\n').at(-1)).subjectId;
     const result = runCli(continuityCli, repo, [
-      'record', 'result', '--expected', 'observed check exits 0', '--actual', 'authorizing observed evidence',
-      '--execution', 'succeeded', '--evidence', observedId,
+      'record', 'result', '--expected', 'observed checks exit 0', '--actual', 'authorizing observed evidence',
+      '--execution', 'succeeded', '--evidence', `${commandId},${testId}`,
       '--as', 'subagent', '--actor-id', 'actor-exec-c9', '--run-id', 'run-exec-c9',
     ]);
     assert.equal(result.status, 0, result.stderr);
@@ -230,6 +237,40 @@ function assertC9Invariants() {
       '--as', 'subagent', '--actor-id', 'actor-exec-c9', '--run-id', 'run-exec-c9',
     ]);
     assert.notEqual(selfVerify.status, 0, 'same actor and run must not self-verify');
+    const agentDraft = path.join(repo, 'verifier.json');
+    writeFileSync(agentDraft, `${JSON.stringify({
+      eventType: 'agent.registered',
+      occurredAt: new Date().toISOString(),
+      actor: { kind: 'coordinator', id: 'actor-coord', role: 'coordinator', runId: 'run-coord-c9' },
+      subject: { type: 'agent', id: 'actor-verify-c9' },
+      supersedes: [],
+      contradicts: [],
+      evidenceRefs: [],
+      sensitivity: 'internal',
+      payload: {
+        agent: {
+          actorId: 'actor-verify-c9',
+          providerFamily: 'host',
+          modelFamily: 'large',
+          capabilityProfiles: ['implementation', 'integration'],
+          costTier: 'standard',
+          speedTier: 'standard',
+          trustTier: 'standard',
+          calibrationStatus: 'calibrated',
+          kind: 'subagent',
+        },
+      },
+    })}\n`);
+    const registered = runCli(continuityCli, repo, [
+      'record', '--file', agentDraft, '--as', 'coordinator', '--actor-id', 'actor-coord', '--run-id', 'run-coord-c9',
+    ]);
+    assert.equal(registered.status, 0, registered.stderr);
+    const independent = runCli(continuityCli, repo, [
+      'record', 'verify', '--result', resultId, '--found', '1', '--executed', '1', '--passed', '1',
+      '--failed', '0', '--exit-code', '0',
+      '--as', 'subagent', '--actor-id', 'actor-verify-c9', '--run-id', 'run-verify-c9',
+    ]);
+    assert.equal(independent.status, 0, independent.stderr);
     const attempt = runCli(continuityCli, repo, [
       'record', 'report', '--execution', 'partial', '--actual', 'attempt is not evidence',
       '--as', 'subagent', '--actor-id', 'actor-exec-c9', '--run-id', 'run-exec-c9',
@@ -237,6 +278,10 @@ function assertC9Invariants() {
     assert.equal(attempt.status, 0, attempt.stderr);
     const readyAfter = JSON.parse(runCli(continuityCli, repo, ['inspect', 'ready', '--json']).stdout);
     assert.equal(readyAfter.userAcceptance, 'pending');
+    assert.ok(
+      (readyAfter.criteria ?? []).every((item) => item.verification === 'passed'),
+      'fresh independently verified command+test evidence must mark required criteria passed',
+    );
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }

@@ -1,4 +1,5 @@
 import { evaluateFreshness, HANDOFF_JSON_BYTES, HANDOFF_TEXT_BYTES, MemoryError } from './domain-v3.mjs';
+import { criterionHasFreshAuthorizingResult } from './coordination/persist-policy.mjs';
 import { liveGitContext } from './workspace-v3.mjs';
 
 function fail(message, exitCode = 2) {
@@ -57,7 +58,11 @@ export function buildInspectV3(store, live, { subjectId } = {}) {
     },
     goal: goal && { goalId: goal.goalId, title: goal.title, outcome: goal.outcome, acceptance: goal.acceptance },
     criteria: take(state.criteria.map((item) => ({
-      criterionId: item.criterionId, condition: item.condition, verification: item.verification,
+      criterionId: item.criterionId,
+      condition: item.condition,
+      verification: criterionHasFreshAuthorizingResult(state, item, live)
+        ? 'passed'
+        : (item.verification === 'failed' ? 'failed' : 'unverified'),
     })), 20),
     confirmed: take(confirmed.map((item) => ({ resultId: item.resultId, taskId: item.taskId, actual: item.actual })), 20),
     unverified: take(unverified.map((item) => ({ resultId: item.resultId, taskId: item.taskId, verification: item.verification })), 20),

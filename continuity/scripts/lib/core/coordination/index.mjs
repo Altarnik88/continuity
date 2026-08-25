@@ -6,6 +6,7 @@ import {
   COORDINATION_OPERATIONS,
 } from './contract.mjs';
 import { loadAgentRegistry } from './registry.mjs';
+import { criterionHasFreshAuthorizingResult } from './persist-policy.mjs';
 import {
   buildFirstState,
   buildWorkPackets,
@@ -237,7 +238,9 @@ export function coordinatorSnapshot(store, live = {}, options = {}) {
       criterionId: item.criterionId,
       condition: item.condition,
       required: item.waivableByUser === false,
-      verification: item.verification,
+      verification: criterionHasFreshAuthorizingResult(state, item, live)
+        ? 'passed'
+        : (item.verification === 'failed' ? 'failed' : 'unverified'),
     })),
     taskAccumulator: accumulator,
     availableTasks: ready.ready,
