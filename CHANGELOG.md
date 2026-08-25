@@ -3,6 +3,7 @@
 ## Unreleased
 
 - `record next` folds `next_action.status_changed`. Inspect NEXT and sealed-epoch resume text keep only planned or in-progress next actions; a closed next action does not delete the historical failure.
+- Folded evidence keeps the Git HEAD from `workspaceAtRecord`. A later journal write on a clean tree does not revive authorizing evidence from a previous commit.
 - Swarm path leases are case-folded (`Forge/` overlaps `forge/`). The Integrator roster role is gone; there is no merge queue.
 - `mission.title` copies the journal `goalId` or stays empty. `mission.accepted` is an inspect copy, not user accept.
 - After `waiting_accept`, dispatch does not invent function work. Ready verification/security on an existing scope may remain; empty ready stays `wave: []`.

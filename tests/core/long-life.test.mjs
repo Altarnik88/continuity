@@ -24,6 +24,7 @@ export async function run() {
 
     try {
       assertInspectFreshnessStale(repo);
+      assertFreshnessStaysAfterJournalWrite(repo);
       console.log('long-life core freshness-stale-after-commit: PASS');
     } catch (error) {
       failed.push('freshness-stale-after-commit');
@@ -78,6 +79,15 @@ function seedAuthorizingResult(repo) {
     '--as', 'subagent', '--actor-id', 'actor-exec-01', '--run-id', 'run-exec-01',
   ]);
   assert.equal(recorded.status, 0, recorded.stderr);
+}
+
+function assertFreshnessStaysAfterJournalWrite(repo) {
+  const reported = runCli(continuityCli, repo, [
+    'record', 'report', '--execution', 'partial', '--actual', 'later journal write',
+    '--as', 'subagent', '--actor-id', 'actor-exec-01', '--run-id', 'run-exec-01',
+  ]);
+  assert.equal(reported.status, 0, reported.stderr);
+  assertInspectFreshnessStale(repo);
 }
 
 function assertInspectFreshnessStale(repo) {

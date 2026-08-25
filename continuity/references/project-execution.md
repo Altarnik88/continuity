@@ -14,7 +14,7 @@ These states are independent:
 | Evidence | A linked `command` or `test` observation with exit code `0` can authorize success. An `agent_report` cannot. |
 | Execution | A succeeded Result says the work executed successfully. It does not say the result was independently verified. |
 | Verification | `record verify` needs a different actor and run plus explicit found, executed, passed, and failed counts and `--exit-code`. |
-| Freshness | Inspect recomputes freshness from live Git state and evidence. A historical pass can become stale. |
+| Freshness | Inspect recomputes freshness from live Git state and evidence. Folded evidence keeps the Git HEAD from the record-time workspace. A later journal write does not revive authorizing evidence after HEAD moves. |
 | Acceptance | Only `record accept --as user` or `record reject --as user --next "…"` changes acceptance. |
 
 `--as` labels actor kind (`user`, `coordinator`, `subagent`, `tool`, `migration`). It does not launch a process. Omitting `--as` defaults to kind `coordinator`. That default is a label, not a running Coordinator.

@@ -633,9 +633,15 @@ function applyEvent(state, event) {
       attempt.summary = payload.summary;
       break;
     }
-    case 'evidence.recorded':
-      state.evidence.push({ ...clone(payload.evidence), derivedFromEventIds: [event.eventId] });
+    case 'evidence.recorded': {
+      const evidence = { ...clone(payload.evidence), derivedFromEventIds: [event.eventId] };
+      const head = event.workspaceAtRecord?.head;
+      if (evidence.commit == null && typeof head === 'string' && head !== 'unavailable') {
+        evidence.commit = head;
+      }
+      state.evidence.push(evidence);
       break;
+    }
     case 'result.recorded': {
       const result = { ...clone(payload.result), derivedFromEventIds: [event.eventId] };
       state.results.push(result);

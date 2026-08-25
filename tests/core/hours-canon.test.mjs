@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -329,6 +329,19 @@ function assertC9Invariants() {
     assert.ok(
       (readyAfter.criteria ?? []).every((item) => item.verification === 'passed'),
       'fresh independently verified command+test evidence must mark required criteria passed',
+    );
+    writeFileSync(path.join(repo, 'NOTE.md'), 'post-result head change\n');
+    execFileSync('git', ['-C', repo, 'add', 'NOTE.md'], { stdio: 'ignore' });
+    execFileSync('git', ['-C', repo, 'commit', '-qm', 'post-result head change'], { stdio: 'ignore' });
+    assert.equal(runCli(continuityCli, repo, [
+      'record', 'report', '--execution', 'partial', '--actual', 'later journal write',
+      '--as', 'subagent', '--actor-id', 'actor-exec-c9', '--run-id', 'run-exec-c9',
+    ]).status, 0);
+    const afterLaterWrite = JSON.parse(runCli(continuityCli, repo, ['inspect', 'ready', '--json']).stdout);
+    assert.equal(
+      (afterLaterWrite.criteria ?? []).every((item) => item.verification === 'passed'),
+      false,
+      'a later journal write must not revive authorizing evidence from a previous HEAD',
     );
   } finally {
     rmSync(repo, { recursive: true, force: true });
