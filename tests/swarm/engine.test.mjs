@@ -31,10 +31,21 @@ const LOCK_TTL_MS = 30 * 60 * 1000;
 
 export async function run() {
   assertContractHelpers();
-  await assertEmptyDispatchHasNoEvalFallback();
-  await assertLiveEngineLockDoesNotDropForeignLeases();
-  await assertAcceptIsNotUserAccept();
-  await assertCreateEngineDoesNotSeedPulseWithoutJournalGoal();
+  const failed = [];
+  const checks = [
+    ['empty-dispatch-no-eval', assertEmptyDispatchHasNoEvalFallback],
+    ['second-engine-preserves-live-leases', assertLiveEngineLockDoesNotDropForeignLeases],
+    ['accept-is-not-user-accept', assertAcceptIsNotUserAccept],
+    ['create-engine-no-pulse-without-journal-goal', assertCreateEngineDoesNotSeedPulseWithoutJournalGoal],
+  ];
+  for (const [name, check] of checks) {
+    try {
+      await check();
+    } catch {
+      failed.push(name);
+    }
+  }
+  assert.equal(failed.length, 0, failed.join(','));
 }
 
 function assertContractHelpers() {
