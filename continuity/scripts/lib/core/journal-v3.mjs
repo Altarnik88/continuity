@@ -14,7 +14,7 @@ import {
   assertMutationAllowed, assertOwnedFile, assertPathSafe, assertStoreSafe, detectStoreVersion,
   gitAdminTopology, openStore, readOwnedFileBounded, storePaths,
 } from './store.mjs';
-import { unavailableWorkspace } from './workspace-v3.mjs';
+import { observeWorkspace } from './workspace-v3.mjs';
 
 const MAX_PROJECTION_BYTES = 64 * 1024;
 
@@ -44,10 +44,6 @@ function testBarrier(point, details) {
 function nowIso(clock) {
   const value = typeof clock === 'function' ? clock() : new Date();
   return (value instanceof Date ? value : new Date(value)).toISOString();
-}
-
-function defaultWorkspace(recordedAt) {
-  return unavailableWorkspace(recordedAt);
 }
 
 function captureDraft(input) {
@@ -366,7 +362,7 @@ function buildProspectiveBatch(store, draftInputs, { recordedAt, workspaceAtReco
 }
 
 function workspaceForRecord(root, recordedAt, explicit) {
-  return explicit ?? defaultWorkspace(recordedAt);
+  return explicit ?? observeWorkspace(root, recordedAt);
 }
 
 export function appendV3(root, jsonTextOrBytes, options = {}) {
